@@ -145,24 +145,25 @@ export async function signInWithPasswordAuth(email: string, pass: string) {
     const user = cred.user;
 
     const userDocRef = doc(db, "users", user.uid);
-    const userSnap = await getDoc(userDocRef);
+    try {
+      const userSnap = await getDoc(userDocRef);
 
-    if (!userSnap.exists()) {
-      const isMasterEmail = user.email === "wesleyjunio197@gmail.com";
-      const allUsersSnap = await getDocs(collection(db, "users"));
-      const isFirstUser = allUsersSnap.empty;
+      if (!userSnap.exists()) {
+        const isMasterEmail = user.email?.toLowerCase() === "wesleyjunio197@gmail.com";
+        const role: AppRole = isMasterEmail ? "master" : "viewer";
+        const approved = isMasterEmail;
 
-      const role: AppRole = isFirstUser || isMasterEmail ? "master" : "viewer";
-      const approved = isFirstUser || isMasterEmail;
-
-      await setDoc(userDocRef, {
-        email: user.email || "",
-        fullName: user.displayName || user.email?.split("@")[0] || "Usuário",
-        role,
-        approved,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+        await setDoc(userDocRef, {
+          email: user.email || "",
+          fullName: user.displayName || user.email?.split("@")[0] || "Usuário",
+          role,
+          approved,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (docErr) {
+      console.warn("User doc sync skipped on sign in:", docErr);
     }
 
     return { data: cred, error: null, friendlyMessage: null };
@@ -181,21 +182,22 @@ export async function signUpWithPasswordAuth(email: string, pass: string, fullNa
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
     const user = cred.user;
 
-    const isMasterEmail = user.email === "wesleyjunio197@gmail.com";
-    const allUsersSnap = await getDocs(collection(db, "users"));
-    const isFirstUser = allUsersSnap.empty;
+    const isMasterEmail = user.email?.toLowerCase() === "wesleyjunio197@gmail.com";
+    const role: AppRole = isMasterEmail ? "master" : "viewer";
+    const approved = isMasterEmail;
 
-    const role: AppRole = isFirstUser || isMasterEmail ? "master" : "viewer";
-    const approved = isFirstUser || isMasterEmail;
-
-    await setDoc(doc(db, "users", user.uid), {
-      email: user.email || "",
-      fullName: fullName || user.email?.split("@")[0] || "Usuário",
-      role,
-      approved,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    try {
+      await setDoc(doc(db, "users", user.uid), {
+        email: user.email || "",
+        fullName: fullName || user.email?.split("@")[0] || "Usuário",
+        role,
+        approved,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (docErr) {
+      console.warn("User doc creation skipped on sign up:", docErr);
+    }
 
     return {
       data: {
@@ -223,25 +225,26 @@ export async function signInWithGoogleAuth() {
     const user = cred.user;
 
     const userDocRef = doc(db, "users", user.uid);
-    const userSnap = await getDoc(userDocRef);
+    try {
+      const userSnap = await getDoc(userDocRef);
 
-    if (!userSnap.exists()) {
-      const isMasterEmail = user.email === "wesleyjunio197@gmail.com";
-      const allUsersSnap = await getDocs(collection(db, "users"));
-      const isFirstUser = allUsersSnap.empty;
+      if (!userSnap.exists()) {
+        const isMasterEmail = user.email?.toLowerCase() === "wesleyjunio197@gmail.com";
+        const role: AppRole = isMasterEmail ? "master" : "viewer";
+        const approved = isMasterEmail;
 
-      const role: AppRole = isFirstUser || isMasterEmail ? "master" : "viewer";
-      const approved = isFirstUser || isMasterEmail;
-
-      await setDoc(userDocRef, {
-        email: user.email || "",
-        fullName: user.displayName || user.email?.split("@")[0] || "Usuário",
-        avatarUrl: user.photoURL || null,
-        role,
-        approved,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+        await setDoc(userDocRef, {
+          email: user.email || "",
+          fullName: user.displayName || user.email?.split("@")[0] || "Usuário",
+          avatarUrl: user.photoURL || null,
+          role,
+          approved,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (docErr) {
+      console.warn("User doc sync skipped on google sign in:", docErr);
     }
 
     return { data: cred, error: null, friendlyMessage: null };
@@ -266,12 +269,17 @@ export function useMe() {
       const user = auth.currentUser || (await getAuthUserPromise());
       if (!user) return null;
 
+      const isMasterEmail = user.email?.toLowerCase() === "wesleyjunio197@gmail.com";
+
       try {
         const userDocRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userDocRef);
 
         if (userSnap.exists()) {
           const data = userSnap.data() as Record<string, unknown>;
+          const role = isMasterEmail ? "master" : (data["role"] as AppRole) || "viewer";
+          const approved = isMasterEmail ? true : Boolean(data["approved"]);
+
           return {
             userId: user.uid,
             email: (data["email"] as string) || user.email || "",
@@ -286,17 +294,13 @@ export function useMe() {
               (data["avatar_url"] as string) ||
               user.photoURL ||
               null,
-            approved: Boolean(data["approved"]),
-            role: (data["role"] as AppRole) || "viewer",
+            approved,
+            role,
           };
         }
 
-        const isMasterEmail = user.email === "wesleyjunio197@gmail.com";
-        const allUsersSnap = await getDocs(collection(db, "users"));
-        const isFirstUser = allUsersSnap.empty;
-
-        const initialRole: AppRole = isFirstUser || isMasterEmail ? "master" : "viewer";
-        const isApproved = isFirstUser || isMasterEmail;
+        const initialRole: AppRole = isMasterEmail ? "master" : "viewer";
+        const isApproved = isMasterEmail;
 
         const newProfileData = {
           email: user.email || "",
@@ -307,7 +311,11 @@ export function useMe() {
           updatedAt: serverTimestamp(),
         };
 
-        await setDoc(userDocRef, newProfileData);
+        try {
+          await setDoc(userDocRef, newProfileData);
+        } catch {
+          // ignore rules delay
+        }
 
         return {
           userId: user.uid,
@@ -325,7 +333,7 @@ export function useMe() {
           fullName: user.displayName || user.email || "Usuário",
           avatarUrl: user.photoURL || null,
           approved: true,
-          role: "master" as AppRole,
+          role: (isMasterEmail ? "master" : "viewer") as AppRole,
         };
       }
     },

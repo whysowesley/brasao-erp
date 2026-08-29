@@ -17,7 +17,7 @@ export function BrasaoLogo({
   ...props
 }: BrasaoLogoProps) {
   const { branding } = useBranding();
-  const logoSrc = customSrc || branding.logoUrl || "/assets/branding/logo-brasao.png";
+  const logoSrc = customSrc || branding.logoUrl || "/brasao-logo.jpeg";
 
   const sizeMap = {
     xs: "h-6 w-6",
@@ -38,8 +38,8 @@ export function BrasaoLogo({
           loading="eager"
           onError={(e) => {
             const target = e.currentTarget;
-            if (target.src !== "/assets/branding/logo-brasao.png" && !target.src.endsWith("/assets/branding/logo-brasao.png")) {
-              target.src = "/assets/branding/logo-brasao.png";
+            if (target.src !== "/brasao-logo.jpeg" && !target.src.endsWith("/brasao-logo.jpeg")) {
+              target.src = "/brasao-logo.jpeg";
             }
           }}
           className="h-full w-full object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)] transition-transform duration-200 hover:scale-105"

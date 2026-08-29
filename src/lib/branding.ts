@@ -13,7 +13,7 @@ export interface BrandingSettings {
 }
 
 export const DEFAULT_BRANDING: BrandingSettings = {
-  logoUrl: "/assets/branding/logo-brasao.png",
+  logoUrl: "/brasao-logo.jpeg",
   companyName: "Galeteria Brasão",
   subtitle: "Sistema de Gestão & ERP",
 };
