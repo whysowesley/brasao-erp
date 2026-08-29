@@ -8,9 +8,11 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   tanstackStart: {
+    client: { entry: "client.ts" },
     server: { entry: "server" },
     spa: {
       enabled: true,
+      maskPath: "/auth",
       prerender: {
         outputPath: "/index.html",
       },

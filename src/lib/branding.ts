@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
+import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "@/integrations/firebase/config";
+import { auth, db, storage } from "@/integrations/firebase/config";
 
 export interface BrandingSettings {
   logoUrl: string | null;
@@ -22,62 +23,74 @@ export const DEFAULT_BRANDING: BrandingSettings = {
  * Hook reativo em tempo real para sincronização com o Firestore (/settings/branding)
  */
 export function useBranding() {
-  const [branding, setBranding] = useState<BrandingSettings>(() => {
-    // Tenta carregar cache local inicial para evitar flash visual
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("brasao_branding_cache");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          return { ...DEFAULT_BRANDING, ...parsed };
-        }
-      } catch {
-        // Ignora
-      }
-    }
-    return DEFAULT_BRANDING;
-  });
+  const [branding, setBranding] = useState<BrandingSettings>(DEFAULT_BRANDING);
 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const docRef = doc(db, "settings", "branding");
+    // Carrega o cache somente depois da hidratação para manter servidor e navegador iguais.
+    try {
+      const saved = localStorage.getItem("brasao_branding_cache");
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<BrandingSettings>;
+        setBranding({ ...DEFAULT_BRANDING, ...parsed });
+      }
+    } catch {
+      // Ignora cache inválido ou indisponível.
+    }
 
-    const unsubscribe = onSnapshot(
-      docRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data() as BrandingSettings;
-          const merged: BrandingSettings = {
-            logoUrl: data.logoUrl || DEFAULT_BRANDING.logoUrl,
-            companyName: data.companyName || DEFAULT_BRANDING.companyName,
-            subtitle: data.subtitle || DEFAULT_BRANDING.subtitle,
-            ...(data.themePrimaryColor !== undefined
-              ? { themePrimaryColor: data.themePrimaryColor }
-              : {}),
-            ...(data.updatedAt !== undefined ? { updatedAt: data.updatedAt } : {}),
-            ...(data.updatedBy !== undefined ? { updatedBy: data.updatedBy } : {}),
-          };
-          setBranding(merged);
-          if (typeof window !== "undefined") {
+    let unsubscribeBranding: (() => void) | undefined;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      unsubscribeBranding?.();
+      unsubscribeBranding = undefined;
+
+      // As regras do Firestore exigem autenticação. Na tela de login usamos o cache ou o padrão.
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      const docRef = doc(db, "settings", "branding");
+
+      unsubscribeBranding = onSnapshot(
+        docRef,
+        (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data() as BrandingSettings;
+            const merged: BrandingSettings = {
+              logoUrl: data.logoUrl || DEFAULT_BRANDING.logoUrl,
+              companyName: data.companyName || DEFAULT_BRANDING.companyName,
+              subtitle: data.subtitle || DEFAULT_BRANDING.subtitle,
+              ...(data.themePrimaryColor !== undefined
+                ? { themePrimaryColor: data.themePrimaryColor }
+                : {}),
+              ...(data.updatedAt !== undefined ? { updatedAt: data.updatedAt } : {}),
+              ...(data.updatedBy !== undefined ? { updatedBy: data.updatedBy } : {}),
+            };
+            setBranding(merged);
             try {
               localStorage.setItem("brasao_branding_cache", JSON.stringify(merged));
             } catch {
-              // Ignora
+              // Ignora cache indisponível.
             }
+          } else {
+            setBranding(DEFAULT_BRANDING);
           }
-        } else {
-          setBranding(DEFAULT_BRANDING);
-        }
-        setLoading(false);
-      },
-      (error) => {
-        console.warn("Aviso ao sincronizar branding do Firebase:", error);
-        setLoading(false);
-      },
-    );
+          setLoading(false);
+        },
+        (error) => {
+          console.warn("Aviso ao sincronizar branding do Firebase:", error);
+          setLoading(false);
+        },
+      );
+    });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      unsubscribeBranding?.();
+    };
   }, []);
 
   return { branding, loading };
