@@ -16,6 +16,7 @@ node_modules
 dist
 dist-ssr
 .output
+.firebase/
 .vinxi
 .tanstack/**
 .nitro

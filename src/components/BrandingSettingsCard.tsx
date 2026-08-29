@@ -17,7 +17,7 @@ import { useAuth } from "@/lib/auth";
 
 export function BrandingSettingsCard() {
   const { branding, loading: brandingLoading } = useBranding();
-  const { userProfile, isMaster, role } = useAuth();
+  const { profile: userProfile, isMaster, role } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [companyName, setCompanyName] = useState(branding.companyName);
@@ -159,7 +159,7 @@ export function BrandingSettingsCard() {
         {/* Preview da Logo */}
         <div className="md:col-span-5 flex flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 p-6 text-center">
           <div className="relative mb-4 flex h-32 w-32 items-center justify-center rounded-xl bg-background/80 p-3 shadow-inner ring-1 ring-border">
-            <BrasaoLogo size="lg" customSrc={currentLogo || undefined} />
+            <BrasaoLogo size="lg" {...(currentLogo ? { customSrc: currentLogo } : {})} />
           </div>
 
           <div className="text-center">

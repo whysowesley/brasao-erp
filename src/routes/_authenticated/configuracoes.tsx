@@ -28,7 +28,7 @@ function ConfiguracoesPage() {
   const { data: products } = useProducts();
   const { data: suppliers } = useSuppliers();
   const { data: categories } = useCategories();
-  const { userProfile, role, isMaster } = useAuth();
+  const { profile: userProfile, role, isMaster } = useAuth();
 
   const stats = [
     { label: "Produtos cadastrados", value: products?.length ?? 0 },
@@ -70,7 +70,9 @@ function ConfiguracoesPage() {
           <div className="rounded-md bg-muted/40 p-3">
             <p className="text-xs text-muted-foreground">Nível de Acesso</p>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="font-semibold text-foreground">{ROLE_LABEL[role] || role}</span>
+              <span className="font-semibold text-foreground">
+                {role ? ROLE_LABEL[role] || role : "Não definido"}
+              </span>
               {isMaster && (
                 <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
                   Master

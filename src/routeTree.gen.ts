@@ -21,6 +21,12 @@ import { Route as AuthenticatedImportarRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedPedidosRouteImport } from './routes/_authenticated/pedidos'
 import { Route as AuthenticatedSugestoesRouteImport } from './routes/_authenticated/sugestoes'
 import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticated/usuarios'
+import { Route as AuthenticatedFinanceiroIndexRouteImport } from './routes/_authenticated/financeiro.index'
+import { Route as AuthenticatedFinanceiroContasPagarRouteImport } from './routes/_authenticated/financeiro.contas-pagar'
+import { Route as AuthenticatedFinanceiroContasReceberRouteImport } from './routes/_authenticated/financeiro.contas-receber'
+import { Route as AuthenticatedFinanceiroLancamentosRouteImport } from './routes/_authenticated/financeiro.lancamentos'
+import { Route as AuthenticatedFinanceiroMesesRouteImport } from './routes/_authenticated/financeiro.meses'
+import { Route as AuthenticatedFinanceiroRelatoriosRouteImport } from './routes/_authenticated/financeiro.relatorios'
 import { Route as AuthenticatedProdutosIdRouteImport } from './routes/_authenticated/produtos.$id'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -84,6 +90,42 @@ const AuthenticatedUsuariosRoute = AuthenticatedUsuariosRouteImport.update({
   path: '/usuarios',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedFinanceiroIndexRoute =
+  AuthenticatedFinanceiroIndexRouteImport.update({
+    id: '/financeiro/',
+    path: '/financeiro/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFinanceiroContasPagarRoute =
+  AuthenticatedFinanceiroContasPagarRouteImport.update({
+    id: '/financeiro/contas-pagar',
+    path: '/financeiro/contas-pagar',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFinanceiroContasReceberRoute =
+  AuthenticatedFinanceiroContasReceberRouteImport.update({
+    id: '/financeiro/contas-receber',
+    path: '/financeiro/contas-receber',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFinanceiroLancamentosRoute =
+  AuthenticatedFinanceiroLancamentosRouteImport.update({
+    id: '/financeiro/lancamentos',
+    path: '/financeiro/lancamentos',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFinanceiroMesesRoute =
+  AuthenticatedFinanceiroMesesRouteImport.update({
+    id: '/financeiro/meses',
+    path: '/financeiro/meses',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFinanceiroRelatoriosRoute =
+  AuthenticatedFinanceiroRelatoriosRouteImport.update({
+    id: '/financeiro/relatorios',
+    path: '/financeiro/relatorios',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProdutosIdRoute = AuthenticatedProdutosIdRouteImport.update({
   id: '/produtos/$id',
   path: '/produtos/$id',
@@ -102,7 +144,13 @@ export interface FileRoutesByFullPath {
   '/pedidos': typeof AuthenticatedPedidosRoute
   '/sugestoes': typeof AuthenticatedSugestoesRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
+  '/financeiro/contas-pagar': typeof AuthenticatedFinanceiroContasPagarRoute
+  '/financeiro/contas-receber': typeof AuthenticatedFinanceiroContasReceberRoute
+  '/financeiro/lancamentos': typeof AuthenticatedFinanceiroLancamentosRoute
+  '/financeiro/meses': typeof AuthenticatedFinanceiroMesesRoute
+  '/financeiro/relatorios': typeof AuthenticatedFinanceiroRelatoriosRoute
   '/produtos/$id': typeof AuthenticatedProdutosIdRoute
+  '/financeiro/': typeof AuthenticatedFinanceiroIndexRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
@@ -116,7 +164,13 @@ export interface FileRoutesByTo {
   '/sugestoes': typeof AuthenticatedSugestoesRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
   '/': typeof AuthenticatedIndexRoute
+  '/financeiro/contas-pagar': typeof AuthenticatedFinanceiroContasPagarRoute
+  '/financeiro/contas-receber': typeof AuthenticatedFinanceiroContasReceberRoute
+  '/financeiro/lancamentos': typeof AuthenticatedFinanceiroLancamentosRoute
+  '/financeiro/meses': typeof AuthenticatedFinanceiroMesesRoute
+  '/financeiro/relatorios': typeof AuthenticatedFinanceiroRelatoriosRoute
   '/produtos/$id': typeof AuthenticatedProdutosIdRoute
+  '/financeiro': typeof AuthenticatedFinanceiroIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -132,7 +186,13 @@ export interface FileRoutesById {
   '/_authenticated/sugestoes': typeof AuthenticatedSugestoesRoute
   '/_authenticated/usuarios': typeof AuthenticatedUsuariosRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/financeiro/contas-pagar': typeof AuthenticatedFinanceiroContasPagarRoute
+  '/_authenticated/financeiro/contas-receber': typeof AuthenticatedFinanceiroContasReceberRoute
+  '/_authenticated/financeiro/lancamentos': typeof AuthenticatedFinanceiroLancamentosRoute
+  '/_authenticated/financeiro/meses': typeof AuthenticatedFinanceiroMesesRoute
+  '/_authenticated/financeiro/relatorios': typeof AuthenticatedFinanceiroRelatoriosRoute
   '/_authenticated/produtos/$id': typeof AuthenticatedProdutosIdRoute
+  '/_authenticated/financeiro/': typeof AuthenticatedFinanceiroIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -148,7 +208,13 @@ export interface FileRouteTypes {
     | '/pedidos'
     | '/sugestoes'
     | '/usuarios'
+    | '/financeiro/contas-pagar'
+    | '/financeiro/contas-receber'
+    | '/financeiro/lancamentos'
+    | '/financeiro/meses'
+    | '/financeiro/relatorios'
     | '/produtos/$id'
+    | '/financeiro/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -162,7 +228,13 @@ export interface FileRouteTypes {
     | '/sugestoes'
     | '/usuarios'
     | '/'
+    | '/financeiro/contas-pagar'
+    | '/financeiro/contas-receber'
+    | '/financeiro/lancamentos'
+    | '/financeiro/meses'
+    | '/financeiro/relatorios'
     | '/produtos/$id'
+    | '/financeiro'
   id:
     | '__root__'
     | '/_authenticated'
@@ -177,7 +249,13 @@ export interface FileRouteTypes {
     | '/_authenticated/sugestoes'
     | '/_authenticated/usuarios'
     | '/_authenticated/'
+    | '/_authenticated/financeiro/contas-pagar'
+    | '/_authenticated/financeiro/contas-receber'
+    | '/_authenticated/financeiro/lancamentos'
+    | '/_authenticated/financeiro/meses'
+    | '/_authenticated/financeiro/relatorios'
     | '/_authenticated/produtos/$id'
+    | '/_authenticated/financeiro/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -271,6 +349,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUsuariosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/financeiro/': {
+      id: '/_authenticated/financeiro/'
+      path: '/financeiro'
+      fullPath: '/financeiro/'
+      preLoaderRoute: typeof AuthenticatedFinanceiroIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/financeiro/contas-pagar': {
+      id: '/_authenticated/financeiro/contas-pagar'
+      path: '/financeiro/contas-pagar'
+      fullPath: '/financeiro/contas-pagar'
+      preLoaderRoute: typeof AuthenticatedFinanceiroContasPagarRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/financeiro/contas-receber': {
+      id: '/_authenticated/financeiro/contas-receber'
+      path: '/financeiro/contas-receber'
+      fullPath: '/financeiro/contas-receber'
+      preLoaderRoute: typeof AuthenticatedFinanceiroContasReceberRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/financeiro/lancamentos': {
+      id: '/_authenticated/financeiro/lancamentos'
+      path: '/financeiro/lancamentos'
+      fullPath: '/financeiro/lancamentos'
+      preLoaderRoute: typeof AuthenticatedFinanceiroLancamentosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/financeiro/meses': {
+      id: '/_authenticated/financeiro/meses'
+      path: '/financeiro/meses'
+      fullPath: '/financeiro/meses'
+      preLoaderRoute: typeof AuthenticatedFinanceiroMesesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/financeiro/relatorios': {
+      id: '/_authenticated/financeiro/relatorios'
+      path: '/financeiro/relatorios'
+      fullPath: '/financeiro/relatorios'
+      preLoaderRoute: typeof AuthenticatedFinanceiroRelatoriosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/produtos/$id': {
       id: '/_authenticated/produtos/$id'
       path: '/produtos/$id'
@@ -292,7 +412,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSugestoesRoute: typeof AuthenticatedSugestoesRoute
   AuthenticatedUsuariosRoute: typeof AuthenticatedUsuariosRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedFinanceiroContasPagarRoute: typeof AuthenticatedFinanceiroContasPagarRoute
+  AuthenticatedFinanceiroContasReceberRoute: typeof AuthenticatedFinanceiroContasReceberRoute
+  AuthenticatedFinanceiroLancamentosRoute: typeof AuthenticatedFinanceiroLancamentosRoute
+  AuthenticatedFinanceiroMesesRoute: typeof AuthenticatedFinanceiroMesesRoute
+  AuthenticatedFinanceiroRelatoriosRoute: typeof AuthenticatedFinanceiroRelatoriosRoute
   AuthenticatedProdutosIdRoute: typeof AuthenticatedProdutosIdRoute
+  AuthenticatedFinanceiroIndexRoute: typeof AuthenticatedFinanceiroIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -306,7 +432,17 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSugestoesRoute: AuthenticatedSugestoesRoute,
   AuthenticatedUsuariosRoute: AuthenticatedUsuariosRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedFinanceiroContasPagarRoute:
+    AuthenticatedFinanceiroContasPagarRoute,
+  AuthenticatedFinanceiroContasReceberRoute:
+    AuthenticatedFinanceiroContasReceberRoute,
+  AuthenticatedFinanceiroLancamentosRoute:
+    AuthenticatedFinanceiroLancamentosRoute,
+  AuthenticatedFinanceiroMesesRoute: AuthenticatedFinanceiroMesesRoute,
+  AuthenticatedFinanceiroRelatoriosRoute:
+    AuthenticatedFinanceiroRelatoriosRoute,
   AuthenticatedProdutosIdRoute: AuthenticatedProdutosIdRoute,
+  AuthenticatedFinanceiroIndexRoute: AuthenticatedFinanceiroIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

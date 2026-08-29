@@ -52,9 +52,11 @@ export function useBranding() {
             logoUrl: data.logoUrl || DEFAULT_BRANDING.logoUrl,
             companyName: data.companyName || DEFAULT_BRANDING.companyName,
             subtitle: data.subtitle || DEFAULT_BRANDING.subtitle,
-            themePrimaryColor: data.themePrimaryColor,
-            updatedAt: data.updatedAt,
-            updatedBy: data.updatedBy,
+            ...(data.themePrimaryColor !== undefined
+              ? { themePrimaryColor: data.themePrimaryColor }
+              : {}),
+            ...(data.updatedAt !== undefined ? { updatedAt: data.updatedAt } : {}),
+            ...(data.updatedBy !== undefined ? { updatedBy: data.updatedBy } : {}),
           };
           setBranding(merged);
           if (typeof window !== "undefined") {
