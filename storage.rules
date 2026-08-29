@@ -1,21 +1,15 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Assets institucionais e branding da Galeteria Brasão
-    match /assets/branding/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email == 'wesleyjunio197@gmail.com';
     }
 
-    // Documentos fiscais, notas e comprovantes de pagamentos
-    match /documents/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
-    }
-
-    // Padrão protegido para arquivos internos
+    // Logos, comprovantes e demais arquivos internos são exclusivos do proprietário.
     match /{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isOwner();
     }
   }
 }

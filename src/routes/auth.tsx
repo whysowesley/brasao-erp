@@ -8,12 +8,10 @@ import {
   getInitialSessionAuth,
   signInWithGoogleAuth,
   signInWithPasswordAuth,
-  signUpWithPasswordAuth,
 } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -39,7 +37,6 @@ function AuthPage() {
   const { branding } = useBranding();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -58,22 +55,6 @@ function AuthPage() {
       return;
     }
     navigate({ to: "/", replace: true });
-  }
-
-  async function signUp(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    const { data, error, friendlyMessage } = await signUpWithPasswordAuth(email, password, name);
-    setLoading(false);
-    if (error) {
-      toast.error(friendlyMessage || error.message);
-      return;
-    }
-    if (data?.session) {
-      navigate({ to: "/", replace: true });
-    } else {
-      toast.success("Cadastro criado com sucesso. Aguarde a aprovação do administrador.");
-    }
   }
 
   async function google() {
@@ -110,76 +91,34 @@ function AuthPage() {
           <div className="h-px flex-1 bg-border" /> ou <div className="h-px flex-1 bg-border" />
         </div>
 
-        <Tabs defaultValue="login">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="login">Entrar</TabsTrigger>
-            <TabsTrigger value="signup">Criar conta</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="login">
-            <form className="space-y-3" onSubmit={signIn}>
-              <div className="space-y-1">
-                <Label htmlFor="email">E-mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="password">Senha</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                Entrar
-              </Button>
-            </form>
-          </TabsContent>
-
-          <TabsContent value="signup">
-            <form className="space-y-3" onSubmit={signUp}>
-              <div className="space-y-1">
-                <Label htmlFor="name">Nome</Label>
-                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="email2">E-mail</Label>
-                <Input
-                  id="email2"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="password2">Senha</Label>
-                <Input
-                  id="password2"
-                  type="password"
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                Criar conta
-              </Button>
-              <p className="text-center text-xs text-muted-foreground">
-                Novas contas entram como visualizador e precisam ser liberadas pelo administrador.
-              </p>
-            </form>
-          </TabsContent>
-        </Tabs>
+        <form className="space-y-3" onSubmit={signIn}>
+          <div className="space-y-1">
+            <Label htmlFor="email">E-mail</Label>
+            <Input
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="password">Senha</Label>
+            <Input
+              id="password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <Button type="submit" className="w-full" disabled={loading}>
+            Entrar
+          </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            Acesso exclusivo do proprietário.
+          </p>
+        </form>
       </div>
     </div>
   );

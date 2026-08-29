@@ -49,6 +49,18 @@ export const ROLE_LABEL: Record<AppRole, string> = {
   viewer: "Visualizador",
 };
 
+export const OWNER_EMAIL = "wesleyjunio197@gmail.com";
+const OWNER_ONLY_MESSAGE = "Acesso restrito ao proprietário do Brasão ERP.";
+
+function isOwnerUser(user: FirebaseUser): boolean {
+  return user.email?.trim().toLowerCase() === OWNER_EMAIL;
+}
+
+function ownerOnlyResult() {
+  const error = new Error(OWNER_ONLY_MESSAGE);
+  return { data: null, error, friendlyMessage: OWNER_ONLY_MESSAGE };
+}
+
 export function getFriendlyAuthErrorMessage(
   error: unknown,
   context: "login" | "signup" | "google" = "login",
@@ -132,7 +144,13 @@ export function getAuthUserPromise(): Promise<FirebaseUser | null> {
 }
 
 export async function getCurrentAuthUser(): Promise<FirebaseUser | null> {
-  return auth.currentUser || (await getAuthUserPromise());
+  const user = auth.currentUser || (await getAuthUserPromise());
+  if (!user) return null;
+  if (!isOwnerUser(user)) {
+    await firebaseSignOut(auth);
+    return null;
+  }
+  return user;
 }
 
 export async function getInitialSessionAuth(): Promise<FirebaseUser | null> {
@@ -144,12 +162,17 @@ export async function signInWithPasswordAuth(email: string, pass: string) {
     const cred = await signInWithEmailAndPassword(auth, email, pass);
     const user = cred.user;
 
+    if (!isOwnerUser(user)) {
+      await firebaseSignOut(auth);
+      return ownerOnlyResult();
+    }
+
     const userDocRef = doc(db, "users", user.uid);
     try {
       const userSnap = await getDoc(userDocRef);
 
       if (!userSnap.exists()) {
-        const isMasterEmail = user.email?.toLowerCase() === "wesleyjunio197@gmail.com";
+        const isMasterEmail = isOwnerUser(user);
         const role: AppRole = isMasterEmail ? "master" : "viewer";
         const approved = isMasterEmail;
 
@@ -179,10 +202,14 @@ export async function signInWithPasswordAuth(email: string, pass: string) {
 
 export async function signUpWithPasswordAuth(email: string, pass: string, fullName?: string) {
   try {
+    if (email.trim().toLowerCase() !== OWNER_EMAIL) {
+      return ownerOnlyResult();
+    }
+
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
     const user = cred.user;
 
-    const isMasterEmail = user.email?.toLowerCase() === "wesleyjunio197@gmail.com";
+    const isMasterEmail = isOwnerUser(user);
     const role: AppRole = isMasterEmail ? "master" : "viewer";
     const approved = isMasterEmail;
 
@@ -224,12 +251,17 @@ export async function signInWithGoogleAuth() {
     const cred = await signInWithPopup(auth, provider);
     const user = cred.user;
 
+    if (!isOwnerUser(user)) {
+      await firebaseSignOut(auth);
+      return ownerOnlyResult();
+    }
+
     const userDocRef = doc(db, "users", user.uid);
     try {
       const userSnap = await getDoc(userDocRef);
 
       if (!userSnap.exists()) {
-        const isMasterEmail = user.email?.toLowerCase() === "wesleyjunio197@gmail.com";
+        const isMasterEmail = isOwnerUser(user);
         const role: AppRole = isMasterEmail ? "master" : "viewer";
         const approved = isMasterEmail;
 
@@ -266,10 +298,10 @@ export function useMe() {
   return useQuery({
     queryKey: ["auth_profile"],
     queryFn: async (): Promise<UserProfile | null> => {
-      const user = auth.currentUser || (await getAuthUserPromise());
+      const user = await getCurrentAuthUser();
       if (!user) return null;
 
-      const isMasterEmail = user.email?.toLowerCase() === "wesleyjunio197@gmail.com";
+      const isMasterEmail = isOwnerUser(user);
 
       try {
         const userDocRef = doc(db, "users", user.uid);

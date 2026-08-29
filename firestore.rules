@@ -1,140 +1,15 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    function isMasterEmail() {
-      return isAuthenticated() && (
-        request.auth.token.email == 'wesleyjunio197@gmail.com' ||
-        (request.auth.token.email != null && request.auth.token.email.lower() == 'wesleyjunio197@gmail.com')
-      );
-    }
-    
-    function userDocExists() {
-      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
-    
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-    
-    function isMaster() {
-      return isAuthenticated() && (
-        isMasterEmail() ||
-        (userDocExists() && getUserData().role == 'master')
-      );
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() == 'wesleyjunio197@gmail.com';
     }
 
-    function isApproved() {
-      return isAuthenticated() && (
-        isMaster() ||
-        !userDocExists() ||
-        getUserData().approved == true
-      );
-    }
-    
-    function getUserRole() {
-      return userDocExists() ? getUserData().role : (isMasterEmail() ? 'master' : 'viewer');
-    }
-    
-    function canWrite() {
-      return isAuthenticated() && (
-        isMaster() ||
-        (isApproved() && (
-          getUserRole() == 'manager' ||
-          getUserRole() == 'editor' ||
-          getUserRole() == 'operator'
-        ))
-      );
-    }
-
-    // Perfil de Usuários e Roles
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && (request.auth.uid == userId || isMaster());
-      allow update: if isAuthenticated() && (
-        isMaster() ||
-        request.auth.uid == userId
-      );
-      allow delete: if isMaster();
-    }
-
-    match /profiles/{profileId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() && (request.auth.uid == profileId || isMaster());
-      allow delete: if isMaster();
-    }
-
-    match /user_roles/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isMaster();
-    }
-
-    // Configurações Gerais
-    match /settings/{settingId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    // Catálogos e Cadastros Base
-    match /categories/{categoryId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    match /units/{unitCode} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    match /suppliers/{supplierId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    // Produtos e Estoque
-    match /products/{productId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    match /stock_movements/{movementId} {
-      allow read: if isAuthenticated();
-      allow create, update, delete: if isAuthenticated();
-    }
-
-    match /stock_counts/{countId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    match /purchase_orders/{orderId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    // Módulo Financeiro
-    match /financial_categories/{categoryId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    match /cost_centers/{centerId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    match /payment_methods/{methodId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    match /financial_transactions/{transactionId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+    // Este ERP é de uso individual: somente o proprietário acessa qualquer coleção.
+    match /{document=**} {
+      allow read, write: if isOwner();
     }
   }
 }
