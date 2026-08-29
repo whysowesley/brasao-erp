@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "users": {
+      "description": "Perfis de usuários, níveis de acesso e status de aprovação",
+      "fields": {
+        "email": { "type": "string", "description": "Email do usuário" },
+        "fullName": { "type": "string", "description": "Nome completo" },
+        "avatarUrl": { "type": "string", "description": "URL do avatar", "optional": true },
+        "approved": { "type": "boolean", "description": "Status de aprovação pelo master" },
+        "role": { "type": "string", "description": "Papel: master, editor ou viewer" },
+        "createdAt": { "type": "timestamp", "description": "Data de criação" },
+        "updatedAt": { "type": "timestamp", "description": "Data de atualização" }
+      }
+    },
+    "products": {
+      "description": "Cadastro de produtos e saldo atual de estoque",
+      "fields": {
+        "code": { "type": "number", "description": "Código do produto", "optional": true },
+        "description": { "type": "string", "description": "Descrição / Nome do produto" },
+        "unit": { "type": "string", "description": "Unidade de medida (ex: KG, UN, LT)" },
+        "current_stock": { "type": "number", "description": "Estoque atual disponível" },
+        "avg_weekly_consumption": { "type": "number", "description": "Consumo médio semanal" },
+        "min_stock": { "type": "number", "description": "Estoque mínimo" },
+        "desired_stock": { "type": "number", "description": "Estoque desejado" },
+        "coverage_weeks": { "type": "number", "description": "Semanas de cobertura", "optional": true },
+        "safety_stock": { "type": "number", "description": "Estoque de segurança" },
+        "lead_time_days": { "type": "number", "description": "Prazo de entrega em dias" },
+        "category_id": { "type": "string", "description": "ID da categoria", "optional": true },
+        "category_name": { "type": "string", "description": "Nome da categoria", "optional": true },
+        "supplier_id": { "type": "string", "description": "ID do fornecedor", "optional": true },
+        "supplier_name": { "type": "string", "description": "Nome do fornecedor", "optional": true },
+        "notes": { "type": "string", "description": "Observações", "optional": true },
+        "active": { "type": "boolean", "description": "Ativo no estoque" }
+      }
+    },
+    "stock_movements": {
+      "description": "Histórico imutável de movimentações de estoque",
+      "fields": {
+        "product_id": { "type": "string", "description": "ID do produto" },
+        "product_description": { "type": "string", "description": "Descrição do produto" },
+        "product_unit": { "type": "string", "description": "Unidade" },
+        "type": { "type": "string", "description": "Tipo de movimentação" },
+        "quantity_before": { "type": "number", "description": "Quantidade anterior" },
+        "quantity_change": { "type": "number", "description": "Variação de quantidade" },
+        "quantity_after": { "type": "number", "description": "Quantidade resultante" },
+        "user_name": { "type": "string", "description": "Nome do usuário" },
+        "notes": { "type": "string", "description": "Observações", "optional": true },
+        "reference_type": { "type": "string", "description": "Tipo de referência", "optional": true },
+        "reference_id": { "type": "string", "description": "ID da referência", "optional": true },
+        "created_at": { "type": "timestamp", "description": "Data e hora do registro" }
+      }
+    },
+    "purchase_orders": {
+      "description": "Pedidos de compra e itens associados",
+      "fields": {
+        "supplier_id": { "type": "string", "description": "ID do fornecedor", "optional": true },
+        "supplier_name": { "type": "string", "description": "Nome do fornecedor", "optional": true },
+        "status": { "type": "string", "description": "Status: rascunho, pedido_realizado, recebido, cancelado" },
+        "user_name": { "type": "string", "description": "Responsável" },
+        "notes": { "type": "string", "description": "Observações", "optional": true },
+        "items": { "type": "array", "description": "Lista de itens do pedido" },
+        "ordered_at": { "type": "string", "description": "Data do pedido", "optional": true },
+        "received_at": { "type": "string", "description": "Data de recebimento", "optional": true },
+        "created_at": { "type": "timestamp", "description": "Data de criação" }
+      }
+    },
+    "financial_transactions": {
+      "description": "Lançamentos financeiros de contas a pagar e receber",
+      "fields": {
+        "description": { "type": "string", "description": "Descrição do lançamento", "optional": true },
+        "type": { "type": "string", "description": "receita ou despesa" },
+        "amount": { "type": "number", "description": "Valor nominal" },
+        "due_date": { "type": "string", "description": "Data de vencimento YYYY-MM-DD" },
+        "payment_date": { "type": "string", "description": "Data de pagamento YYYY-MM-DD", "optional": true },
+        "paid_amount": { "type": "number", "description": "Valor efetivamente pago", "optional": true },
+        "status": { "type": "string", "description": "pendente, pago, cancelado" },
+        "category_id": { "type": "string", "description": "ID da categoria financeira", "optional": true },
+        "cost_center_id": { "type": "string", "description": "ID do centro de custo", "optional": true },
+        "payment_method_id": { "type": "string", "description": "ID da forma de pagamento", "optional": true },
+        "supplier_id": { "type": "string", "description": "ID do fornecedor", "optional": true },
+        "supplier_name": { "type": "string", "description": "Nome do fornecedor", "optional": true },
+        "notes": { "type": "string", "description": "Observações", "optional": true },
+        "document_url": { "type": "string", "description": "URL do comprovante", "optional": true },
+        "is_recurring": { "type": "boolean", "description": "Indica se é recorrente ou parcelada" },
+        "recurrence_group_id": { "type": "string", "description": "ID do grupo de recorrência/parcelas", "optional": true },
+        "installment_current": { "type": "number", "description": "Parcela atual", "optional": true },
+        "installment_total": { "type": "number", "description": "Total de parcelas", "optional": true }
+      }
+    },
+    "settings": {
+      "description": "Configurações institucionais de branding, parâmetros de cálculo e regras globais",
+      "fields": {
+        "logoUrl": { "type": "string", "description": "URL da logo salva no Firebase Storage", "optional": true },
+        "companyName": { "type": "string", "description": "Nome da empresa/estabelecimento", "optional": true },
+        "subtitle": { "type": "string", "description": "Subtítulo ou slogan institucional", "optional": true },
+        "updatedAt": { "type": "timestamp", "description": "Data de atualização" },
+        "updatedBy": { "type": "string", "description": "Nome do usuário responsável", "optional": true }
+      }
+    }
+  }
+}

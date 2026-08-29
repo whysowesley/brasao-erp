@@ -11,10 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { AppSidebar } from "@/components/AppSidebar";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
-
 
 function NotFoundComponent() {
   return (
@@ -81,12 +78,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Brasão | Controle de Estoque e Compras" },
+      { title: "Galeteria Brasão | Controle de Estoque, Compras & Financeiro" },
       {
         name: "description",
         content:
-          "Sistema interno da Brasão para controle de estoque, contagens, sugestões e pedidos de compra.",
+          "Sistema interno da Galeteria Brasão para controle de estoque, contagens, compras e gestão financeira.",
       },
+      { property: "og:title", content: "Galeteria Brasão | ERP" },
+      { property: "og:image", content: "/assets/branding/logo-brasao.png" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -95,7 +94,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/assets/branding/logo-brasao.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/assets/branding/logo-brasao.png" },
+      { rel: "shortcut icon", href: "/assets/branding/logo-brasao.png" },
     ],
   }),
   shellComponent: RootShell,
@@ -123,26 +124,8 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full bg-background">
-          <AppSidebar />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-card/90 px-4 backdrop-blur">
-              <SidebarTrigger />
-              <div className="h-5 w-px bg-border" />
-              <p className="text-sm font-medium text-muted-foreground">
-                Centro de Controle de Estoque e Compras
-              </p>
-            </header>
-            <main className="flex-1 px-4 py-6 md:px-8">
-              {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-              <Outlet />
-            </main>
-          </div>
-        </div>
-        <Toaster richColors position="top-right" />
-      </SidebarProvider>
+      <Outlet />
+      <Toaster richColors position="top-right" />
     </QueryClientProvider>
   );
-
 }

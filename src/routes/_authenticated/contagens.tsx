@@ -15,8 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { supabase } from "@/integrations/supabase/client";
-import { CURRENT_USER, applyMovement, useCounts, useInvalidateAll, useProducts } from "@/lib/data";
+import { recordStockCount, useCounts, useInvalidateAll, useProducts } from "@/lib/data";
 import { formatDateTime, formatQty } from "@/lib/inventory";
 import { usePurchasePlan } from "@/lib/purchase-plan";
 
@@ -64,36 +63,20 @@ function ContagensPage() {
     }
     setSaving(true);
     try {
-      const { data: count, error } = await supabase
-        .from("stock_counts")
-        .insert({ user_name: CURRENT_USER, notes: notes.trim() || null })
-        .select("id")
-        .single();
-      if (error) throw error;
-
+      const itemsToRecord: Array<{ productId: string; expected: number; counted: number }> = [];
       for (const [productId, raw] of filled) {
         const product = (products ?? []).find((p) => p.id === productId);
         if (!product) continue;
         const counted = Number(raw.replace(",", ".")) || 0;
         const expected = Number(product.current_stock);
-        await supabase.from("stock_count_items").insert({
-          count_id: count.id,
-          product_id: productId,
-          expected_quantity: expected,
-          counted_quantity: counted,
-          difference: counted - expected,
+        itemsToRecord.push({
+          productId,
+          expected,
+          counted,
         });
-        if (counted !== expected) {
-          await applyMovement({
-            productId,
-            type: "contagem",
-            newQuantity: counted,
-            notes: `Contagem de estoque (diferença ${counted - expected})`,
-            referenceType: "stock_count",
-            referenceId: count.id,
-          });
-        }
       }
+
+      await recordStockCount(notes.trim() || null, itemsToRecord);
 
       setValues({});
       setNotes("");

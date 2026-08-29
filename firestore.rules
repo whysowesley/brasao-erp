@@ -1,0 +1,128 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function userDocExists() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isApproved() {
+      return isAuthenticated() && (!userDocExists() || getUserData().approved == true);
+    }
+    
+    function getUserRole() {
+      return userDocExists() ? getUserData().role : 'viewer';
+    }
+    
+    function isMaster() {
+      return isAuthenticated() && getUserRole() == 'master';
+    }
+    
+    function canWrite() {
+      return isAuthenticated() && isApproved() && (
+        getUserRole() == 'master' ||
+        getUserRole() == 'manager' ||
+        getUserRole() == 'editor' ||
+        getUserRole() == 'operator'
+      );
+    }
+
+    // Perfil de Usuários e Roles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && (
+        isMaster() ||
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'approved']))
+      );
+      allow delete: if isMaster();
+    }
+
+    match /profiles/{profileId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == profileId;
+      allow update: if isAuthenticated() && (
+        isMaster() || request.auth.uid == profileId
+      );
+      allow delete: if isMaster();
+    }
+
+    match /user_roles/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isMaster();
+    }
+
+    // Configurações Gerais
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if canWrite();
+    }
+
+    // Catálogos e Cadastros Base
+    match /categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow write: if canWrite();
+    }
+
+    match /units/{unitCode} {
+      allow read: if isAuthenticated();
+      allow write: if canWrite();
+    }
+
+    match /suppliers/{supplierId} {
+      allow read: if isAuthenticated();
+      allow write: if canWrite();
+    }
+
+    // Produtos e Estoque
+    match /products/{productId} {
+      allow read: if isAuthenticated();
+      allow write: if canWrite();
+    }
+
+    match /stock_movements/{movementId} {
+      allow read: if isAuthenticated();
+      allow create: if canWrite();
+      allow update, delete: if isMaster();
+    }
+
+    match /stock_counts/{countId} {
+      allow read: if isAuthenticated();
+      allow write: if canWrite();
+    }
+
+    match /purchase_orders/{orderId} {
+      allow read: if isAuthenticated();
+      allow write: if canWrite();
+    }
+
+    // Módulo Financeiro
+    match /financial_categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow write: if canWrite();
+    }
+
+    match /cost_centers/{centerId} {
+      allow read: if isAuthenticated();
+      allow write: if canWrite();
+    }
+
+    match /payment_methods/{methodId} {
+      allow read: if isAuthenticated();
+      allow write: if canWrite();
+    }
+
+    match /financial_transactions/{transactionId} {
+      allow read: if isAuthenticated();
+      allow write: if canWrite();
+    }
+  }
+}

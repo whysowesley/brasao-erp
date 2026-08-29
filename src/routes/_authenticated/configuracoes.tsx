@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { PageHeader } from "@/components/PageHeader";
-import { CURRENT_USER, useCategories, useProducts, useSuppliers } from "@/lib/data";
+import { BrandingSettingsCard } from "@/components/BrandingSettingsCard";
+import { useCategories, useProducts, useSuppliers } from "@/lib/data";
+import { useAuth, ROLE_LABEL } from "@/lib/auth";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
@@ -10,12 +12,12 @@ export const Route = createFileRoute("/_authenticated/configuracoes")({
       {
         name: "description",
         content:
-          "Informações do sistema interno de controle de estoque e compras da Brasão: usuário, regras de cálculo e totais cadastrados.",
+          "Configurações gerais do sistema: Identidade Visual / Branding da empresa, perfil de usuário, regras de cálculo de estoque e estatísticas.",
       },
       { property: "og:title", content: "Configurações | Brasão" },
       {
         property: "og:description",
-        content: "Usuário atual, regras de cálculo e resumo do cadastro.",
+        content: "Identidade visual, regras de cálculo e parâmetros do sistema.",
       },
     ],
   }),
@@ -26,6 +28,7 @@ function ConfiguracoesPage() {
   const { data: products } = useProducts();
   const { data: suppliers } = useSuppliers();
   const { data: categories } = useCategories();
+  const { userProfile, role, isMaster } = useAuth();
 
   const stats = [
     { label: "Produtos cadastrados", value: products?.length ?? 0 },
@@ -34,9 +37,16 @@ function ConfiguracoesPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <PageHeader title="Configurações" description="Informações e regras do sistema." />
+    <div className="mx-auto max-w-4xl space-y-6">
+      <PageHeader
+        title="Configurações do Sistema"
+        description="Gerencie a identidade visual, veja parâmetros de estoque e informações de acesso."
+      />
 
+      {/* Seção 1: Identidade Visual e Branding */}
+      <BrandingSettingsCard />
+
+      {/* Seção 2: Estatísticas Rápidas de Cadastro */}
       <div className="grid gap-4 sm:grid-cols-3">
         {stats.map((s) => (
           <div key={s.label} className="rounded-lg border bg-card p-4 shadow-card">
@@ -46,15 +56,39 @@ function ConfiguracoesPage() {
         ))}
       </div>
 
-      <section className="mt-6 rounded-lg border bg-card p-5 shadow-card">
-        <h2 className="text-sm font-semibold">Usuário atual</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Todas as movimentações são registradas em nome de <strong>{CURRENT_USER}</strong>.
-        </p>
+      {/* Seção 3: Usuário Logado & Permissões */}
+      <section className="rounded-lg border bg-card p-5 shadow-card">
+        <h2 className="text-sm font-semibold">Sessão e Permissões</h2>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 text-sm">
+          <div className="rounded-md bg-muted/40 p-3">
+            <p className="text-xs text-muted-foreground">Usuário Ativo</p>
+            <p className="font-semibold text-foreground mt-0.5">
+              {userProfile?.fullName || "Administrador"}
+            </p>
+            <p className="text-xs text-muted-foreground">{userProfile?.email || "Sem e-mail"}</p>
+          </div>
+          <div className="rounded-md bg-muted/40 p-3">
+            <p className="text-xs text-muted-foreground">Nível de Acesso</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="font-semibold text-foreground">{ROLE_LABEL[role] || role}</span>
+              {isMaster && (
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                  Master
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {isMaster
+                ? "Acesso irrestrito a todos os módulos e configurações."
+                : "Permissões configuradas pelo administrador master."}
+            </p>
+          </div>
+        </div>
       </section>
 
-      <section className="mt-4 rounded-lg border bg-card p-5 shadow-card">
-        <h2 className="text-sm font-semibold">Regras de cálculo</h2>
+      {/* Seção 4: Regras de Cálculo */}
+      <section className="rounded-lg border bg-card p-5 shadow-card">
+        <h2 className="text-sm font-semibold">Regras de Cálculo de Estoque</h2>
         <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
           <li>
             <strong className="text-foreground">Compra sugerida</strong> = Estoque desejado −

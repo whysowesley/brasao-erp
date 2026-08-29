@@ -33,10 +33,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { supabase } from "@/integrations/supabase/client";
-import { applyMovement, deleteOrder, useInvalidateAll, useOrders, useSuppliers } from "@/lib/data";
+import {
+  deleteOrder,
+  updateOrderStatus,
+  useInvalidateAll,
+  useOrders,
+  useSuppliers,
+} from "@/lib/data";
 import { ORDER_STATUSES, formatDateTime, formatQty, orderStatusLabel } from "@/lib/inventory";
-
 
 export const Route = createFileRoute("/_authenticated/pedidos")({
   head: () => ({
@@ -81,9 +85,7 @@ function PedidosPage() {
       const searchMatch =
         !term ||
         String(o.number).includes(term) ||
-        ((o.suppliers as { name?: string } | null)?.name ?? "")
-          .toLowerCase()
-          .includes(term);
+        ((o.suppliers as { name?: string } | null)?.name ?? "").toLowerCase().includes(term);
       return supplierMatch && searchMatch;
     });
   }, [orders, supplierFilter, search]);
@@ -91,37 +93,7 @@ function PedidosPage() {
   async function changeStatus(orderId: string, status: string, items: OrderItem[]) {
     setBusy(orderId);
     try {
-      if (status === "recebido") {
-        for (const item of items) {
-          const { data: p, error } = await supabase
-            .from("products")
-            .select("current_stock")
-            .eq("id", item.product_id)
-            .single();
-          if (error) throw error;
-          await applyMovement({
-            productId: item.product_id,
-            type: "entrada_compra",
-            newQuantity: Number(p.current_stock) + Number(item.quantity),
-            notes: "Recebimento de pedido de compra",
-            referenceType: "purchase_order",
-            referenceId: orderId,
-          });
-          await supabase
-            .from("purchase_order_items")
-            .update({ received_quantity: item.quantity })
-            .eq("id", item.id);
-        }
-      }
-      const patch = {
-        status,
-        received_at: status === "recebido" ? new Date().toISOString() : null,
-        ordered_at: status === "pedido_realizado" ? new Date().toISOString() : null,
-      };
-      const { error } = await supabase.from("purchase_orders").update(patch).eq("id", orderId);
-
-
-      if (error) throw error;
+      await updateOrderStatus(orderId, status, items);
       invalidate();
       toast.success(
         status === "recebido"
@@ -148,8 +120,6 @@ function PedidosPage() {
     }
   }
 
-
-
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
@@ -159,9 +129,7 @@ function PedidosPage() {
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <label className="mb-1 block text-xs font-medium text-muted-foreground">
-            Fornecedor
-          </label>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">Fornecedor</label>
           <Select value={supplierFilter} onValueChange={setSupplierFilter}>
             <SelectTrigger className="w-full sm:w-72">
               <SelectValue placeholder="Todos os fornecedores" />
@@ -195,7 +163,9 @@ function PedidosPage() {
       {isLoading && <p className="text-sm text-muted-foreground">Carregando pedidos...</p>}
       {!isLoading && filteredOrders.length === 0 && (
         <div className="rounded-lg border bg-card p-10 text-center text-sm text-muted-foreground shadow-card">
-          {orders?.length ? "Nenhum pedido encontrado para o filtro selecionado." : "Nenhum pedido criado ainda. Gere um pedido na tela de Sugestões de Compra."}
+          {orders?.length
+            ? "Nenhum pedido encontrado para o filtro selecionado."
+            : "Nenhum pedido criado ainda. Gere um pedido na tela de Sugestões de Compra."}
         </div>
       )}
 
@@ -268,7 +238,6 @@ function PedidosPage() {
                     </AlertDialogContent>
                   </AlertDialog>
                 </div>
-
               </header>
               <Table>
                 <TableHeader>

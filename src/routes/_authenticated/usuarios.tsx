@@ -22,8 +22,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { supabase } from "@/integrations/supabase/client";
-import { ROLE_LABEL, useMe, type AppRole } from "@/lib/auth";
+import {
+  ROLE_LABEL,
+  fetchUsersList,
+  setUserApproval,
+  setUserRole,
+  useMe,
+  type AppRole,
+  type UserProfileRow,
+} from "@/lib/auth";
 
 export const Route = createFileRoute("/_authenticated/usuarios")({
   head: () => ({
@@ -44,15 +51,6 @@ export const Route = createFileRoute("/_authenticated/usuarios")({
   component: UsersPage,
 });
 
-type UserRow = {
-  id: string;
-  email: string | null;
-  full_name: string | null;
-  approved: boolean;
-  created_at: string;
-  role: AppRole;
-};
-
 function UsersPage() {
   const { data: me } = useMe();
   const qc = useQueryClient();
@@ -60,29 +58,12 @@ function UsersPage() {
   const { data: users, isLoading } = useQuery({
     queryKey: ["users"],
     enabled: me?.role === "master",
-    queryFn: async (): Promise<UserRow[]> => {
-      const [{ data: profiles, error }, { data: roles }] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("id, email, full_name, approved, created_at")
-          .order("created_at", { ascending: false }),
-        supabase.from("user_roles").select("user_id, role"),
-      ]);
-      if (error) throw error;
-      const byUser = new Map<string, AppRole>();
-      for (const r of roles ?? []) {
-        const role = r.role as AppRole;
-        const current = byUser.get(r.user_id);
-        if (role === "master" || !current) byUser.set(r.user_id, role);
-      }
-      return (profiles ?? []).map((p) => ({ ...p, role: byUser.get(p.id) ?? "viewer" }));
-    },
+    queryFn: fetchUsersList,
   });
 
   const setApproved = useMutation({
     mutationFn: async ({ id, approved }: { id: string; approved: boolean }) => {
-      const { error } = await supabase.from("profiles").update({ approved }).eq("id", id);
-      if (error) throw error;
+      await setUserApproval(id, approved);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["users"] });
@@ -93,10 +74,7 @@ function UsersPage() {
 
   const setRole = useMutation({
     mutationFn: async ({ id, role }: { id: string; role: AppRole }) => {
-      const { error: e1 } = await supabase.from("user_roles").delete().eq("user_id", id);
-      if (e1) throw e1;
-      const { error } = await supabase.from("user_roles").insert({ user_id: id, role });
-      if (error) throw error;
+      await setUserRole(id, role);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["users"] });

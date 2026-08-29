@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,12 +27,14 @@ import {
   useSuppliers,
   useUnits,
   useRules,
-  applyMovement,
+  saveProduct,
+  saveCategory,
+  saveSupplier,
+  saveUnit,
 } from "@/lib/data";
 
 import type { ComputedProduct } from "@/lib/inventory";
 import { DEFAULT_RULES, computeProduct, formatQty } from "@/lib/inventory";
-
 
 type FormState = {
   description: string;
@@ -109,10 +110,13 @@ export function ProductDialog({
       },
       rules ?? DEFAULT_RULES,
     );
-    return { current, consumption, suggestedPurchase: c.suggestedPurchase, futureStock: c.futureStock };
+    return {
+      current,
+      consumption,
+      suggestedPurchase: c.suggestedPurchase,
+      futureStock: c.futureStock,
+    };
   })();
-
-
 
   useEffect(() => {
     if (!open) return;
@@ -146,52 +150,26 @@ export function ProductDialog({
     }
     setSaving(true);
     try {
-      const payload = {
-        description: form.description.trim(),
-        code: form.code.trim() === "" ? null : Number(form.code),
-        category_id: form.category_id || null,
-        supplier_id: form.supplier_id || null,
-        unit: form.unit,
-        avg_weekly_consumption: num(form.avg_weekly_consumption),
-        min_stock: num(form.min_stock),
-        desired_stock: num(form.desired_stock),
-        safety_stock: num(form.safety_stock),
-        coverage_weeks: form.coverage_weeks.trim() === "" ? null : num(form.coverage_weeks),
-        lead_time_days: Math.round(num(form.lead_time_days)),
-        notes: form.notes.trim() || null,
-      };
+      await saveProduct(
+        {
+          description: form.description,
+          code: form.code.trim() === "" ? null : Number(form.code),
+          category_id: form.category_id || null,
+          supplier_id: form.supplier_id || null,
+          unit: form.unit,
+          avg_weekly_consumption: num(form.avg_weekly_consumption),
+          min_stock: num(form.min_stock),
+          desired_stock: num(form.desired_stock),
+          safety_stock: num(form.safety_stock),
+          coverage_weeks: form.coverage_weeks.trim() === "" ? null : num(form.coverage_weeks),
+          lead_time_days: Math.round(num(form.lead_time_days)),
+          notes: form.notes.trim() || null,
+          current_stock: num(form.current_stock),
+        },
+        product ? { id: product.id, current_stock: Number(product.current_stock) } : undefined,
+      );
 
-      if (product) {
-        const { error } = await supabase.from("products").update(payload).eq("id", product.id);
-        if (error) throw error;
-        const newStock = num(form.current_stock);
-        if (newStock !== Number(product.current_stock)) {
-          await applyMovement({
-            productId: product.id,
-            type: newStock > Number(product.current_stock) ? "ajuste_positivo" : "ajuste_negativo",
-            newQuantity: newStock,
-            notes: "Ajuste manual pelo cadastro do produto",
-          });
-        }
-        toast.success("Produto atualizado.");
-      } else {
-        const { data, error } = await supabase
-          .from("products")
-          .insert({ ...payload, current_stock: 0 })
-          .select("id")
-          .single();
-        if (error) throw error;
-        const initial = num(form.current_stock);
-        if (initial !== 0) {
-          await applyMovement({
-            productId: data.id,
-            type: "contagem",
-            newQuantity: initial,
-            notes: "Estoque inicial no cadastro",
-          });
-        }
-        toast.success("Produto cadastrado.");
-      }
+      toast.success(product ? "Produto atualizado." : "Produto cadastrado.");
       invalidate();
       onOpenChange(false);
     } catch (e) {
@@ -244,13 +222,9 @@ export function ProductDialog({
                 placeholder="Sigla (ex.: CX)"
                 extraPlaceholder="Nome (ex.: Caixa)"
                 onCreate={async (code, name) => {
-                  const value = code.toUpperCase();
-                  const { error } = await supabase
-                    .from("units")
-                    .insert({ code: value, name: name || value });
-                  if (error) throw error;
+                  const result = await saveUnit(code, name);
                   invalidate();
-                  set("unit")(value);
+                  set("unit")(result.code);
                   toast.success("Unidade criada.");
                 }}
               />
@@ -275,14 +249,9 @@ export function ProductDialog({
                 title="Nova categoria"
                 placeholder="Nome da categoria"
                 onCreate={async (name) => {
-                  const { data, error } = await supabase
-                    .from("categories")
-                    .insert({ name: name.toUpperCase() })
-                    .select("id")
-                    .single();
-                  if (error) throw error;
+                  const result = await saveCategory(name);
                   invalidate();
-                  set("category_id")(data.id);
+                  set("category_id")(result.id);
                   toast.success("Categoria criada.");
                 }}
               />
@@ -307,14 +276,9 @@ export function ProductDialog({
                 title="Novo fornecedor"
                 placeholder="Nome do fornecedor"
                 onCreate={async (name) => {
-                  const { data, error } = await supabase
-                    .from("suppliers")
-                    .insert({ name: name.toUpperCase() })
-                    .select("id")
-                    .single();
-                  if (error) throw error;
+                  const result = await saveSupplier({ name: name.toUpperCase() });
                   invalidate();
-                  set("supplier_id")(data.id);
+                  set("supplier_id")(result.id);
                   toast.success("Fornecedor criado.");
                 }}
               />
@@ -402,8 +366,6 @@ export function ProductDialog({
           <Preview label="Compra sugerida" value={preview.suggestedPurchase} unit={form.unit} />
           <Preview label="Estoque futuro" value={preview.futureStock} unit={form.unit} />
         </div>
-
-
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

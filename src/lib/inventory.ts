@@ -112,7 +112,6 @@ export function statusFor(
 }
 
 export const STATUS_LABEL: Record<StockStatus, string> = {
-
   critico: "Crítico",
   atencao: "Atenção",
   normal: "Normal",
@@ -128,8 +127,7 @@ export const MOVEMENT_TYPES = [
   { value: "correcao", label: "Correção" },
 ] as const;
 
-export const movementLabel = (t: string) =>
-  MOVEMENT_TYPES.find((m) => m.value === t)?.label ?? t;
+export const movementLabel = (t: string) => MOVEMENT_TYPES.find((m) => m.value === t)?.label ?? t;
 
 export const ORDER_STATUSES = [
   { value: "rascunho", label: "Rascunho" },

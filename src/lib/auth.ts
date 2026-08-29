@@ -1,67 +1,436 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  type User as FirebaseUser,
+} from "firebase/auth";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  getDocs,
+  collection,
+  serverTimestamp,
+  updateDoc,
+  query,
+  orderBy,
+} from "firebase/firestore";
+import { auth, db } from "@/integrations/firebase/config";
 
-export type AppRole = "master" | "editor" | "viewer";
+export type AppRole = "master" | "manager" | "operator" | "viewer" | "editor";
 
-export type Me = {
+export interface UserProfile {
   userId: string;
   email: string;
   fullName: string;
   avatarUrl: string | null;
   approved: boolean;
   role: AppRole;
-};
-
-export function useMe() {
-  return useQuery({
-    queryKey: ["me"],
-    staleTime: 30_000,
-    queryFn: async (): Promise<Me | null> => {
-      const { data: userData } = await supabase.auth.getUser();
-      const user = userData.user;
-      if (!user) return null;
-
-      const [{ data: profile }, { data: roles }] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("email, full_name, avatar_url, approved")
-          .eq("id", user.id)
-          .maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", user.id),
-      ]);
-
-      const roleList = (roles ?? []).map((r) => r.role as AppRole);
-      const role: AppRole = roleList.includes("master")
-        ? "master"
-        : roleList.includes("editor")
-          ? "editor"
-          : "viewer";
-
-      return {
-        userId: user.id,
-        email: profile?.email ?? user.email ?? "",
-        fullName: profile?.full_name ?? user.email ?? "",
-        avatarUrl: profile?.avatar_url ?? null,
-        approved: Boolean(profile?.approved),
-        role,
-      };
-    },
-  });
 }
 
-/** Pode criar, editar e excluir dados do sistema. */
-export function useCanWrite() {
-  const { data: me } = useMe();
-  return Boolean(me?.approved && (me.role === "master" || me.role === "editor"));
-}
-
-export function useIsMaster() {
-  const { data: me } = useMe();
-  return me?.role === "master";
+export interface UserProfileRow {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  approved: boolean;
+  created_at: string;
+  role: AppRole;
 }
 
 export const ROLE_LABEL: Record<AppRole, string> = {
-  master: "Administrador master",
+  master: "Master (Acesso Total)",
+  manager: "Gerente",
+  operator: "Operador",
   editor: "Editor",
   viewer: "Visualizador",
 };
+
+export function getFriendlyAuthErrorMessage(
+  error: unknown,
+  context: "login" | "signup" | "google" = "login",
+): string {
+  if (!error) return "Ocorreu um erro desconhecido na autenticação.";
+
+  const err = error as { code?: string; message?: string };
+  const code = err.code || "";
+  const message = err.message || "";
+
+  switch (code) {
+    case "auth/operation-not-allowed":
+      if (context === "google") {
+        return "O login com Google está desativado no Firebase. Ative o provedor Google no Console do Firebase (Authentication > Sign-in method).";
+      }
+      return "Login por E-mail e Senha está desativado no Firebase. Ative este provedor no Console do Firebase (Authentication > Sign-in method).";
+
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "E-mail ou senha incorretos. Verifique suas credenciais e tente novamente.";
+
+    case "auth/email-already-in-use":
+      return "Este e-mail já está cadastrado. Faça login ou utilize outro endereço de e-mail.";
+
+    case "auth/weak-password":
+      return "A senha é muito fraca. Utilize pelo menos 6 caracteres com números ou símbolos.";
+
+    case "auth/too-many-requests":
+      return "Muitas tentativas sem sucesso. Por segurança, aguarde alguns instantes antes de tentar novamente.";
+
+    case "auth/popup-closed-by-user":
+      return "A janela de login com Google foi fechada antes de concluir a autenticação.";
+
+    case "auth/popup-blocked":
+      return "A janela pop-up de login foi bloqueada pelo navegador. Permita pop-ups para este site e tente novamente.";
+
+    case "auth/account-exists-with-different-credential":
+      return "Já existe uma conta associada a este e-mail utilizando outro método de autenticação.";
+
+    case "auth/invalid-email":
+      return "O endereço de e-mail informado possui formato inválido.";
+
+    case "auth/network-request-failed":
+      return "Erro de conexão com o Firebase. Verifique sua conexão de rede e tente novamente.";
+
+    case "auth/unauthorized-domain":
+      return "Este domínio não está autorizado no Firebase Authentication (Console > Authentication > Settings > Authorized domains).";
+
+    case "auth/user-disabled":
+      return "Esta conta foi desativada pelo administrador no Firebase.";
+
+    default:
+      if (message.includes("operation-not-allowed")) {
+        return context === "google"
+          ? "O login com Google está desativado no Firebase. Ative o provedor Google no Console do Firebase (Authentication > Sign-in method)."
+          : "Login por E-mail e Senha está desativado no Firebase. Ative este provedor no Console do Firebase (Authentication > Sign-in method).";
+      }
+      return message || "Erro ao processar autenticação no Firebase.";
+  }
+}
+
+let authUserPromise: Promise<FirebaseUser | null> | null = null;
+export function getAuthUserPromise(): Promise<FirebaseUser | null> {
+  if (!authUserPromise) {
+    authUserPromise = new Promise((resolve) => {
+      const unsubscribe = onAuthStateChanged(
+        auth,
+        (user) => {
+          unsubscribe();
+          resolve(user);
+        },
+        () => {
+          unsubscribe();
+          resolve(null);
+        },
+      );
+    });
+  }
+  return authUserPromise;
+}
+
+export async function getCurrentAuthUser(): Promise<FirebaseUser | null> {
+  return auth.currentUser || (await getAuthUserPromise());
+}
+
+export async function getInitialSessionAuth(): Promise<FirebaseUser | null> {
+  return getCurrentAuthUser();
+}
+
+export async function signInWithPasswordAuth(email: string, pass: string) {
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    const user = cred.user;
+
+    const userDocRef = doc(db, "users", user.uid);
+    const userSnap = await getDoc(userDocRef);
+
+    if (!userSnap.exists()) {
+      const isMasterEmail = user.email === "wesleyjunio197@gmail.com";
+      const allUsersSnap = await getDocs(collection(db, "users"));
+      const isFirstUser = allUsersSnap.empty;
+
+      const role: AppRole = isFirstUser || isMasterEmail ? "master" : "viewer";
+      const approved = isFirstUser || isMasterEmail;
+
+      await setDoc(userDocRef, {
+        email: user.email || "",
+        fullName: user.displayName || user.email?.split("@")[0] || "Usuário",
+        role,
+        approved,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    return { data: cred, error: null, friendlyMessage: null };
+  } catch (err: unknown) {
+    const friendlyMessage = getFriendlyAuthErrorMessage(err, "login");
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error(String(err)),
+      friendlyMessage,
+    };
+  }
+}
+
+export async function signUpWithPasswordAuth(email: string, pass: string, fullName?: string) {
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    const user = cred.user;
+
+    const isMasterEmail = user.email === "wesleyjunio197@gmail.com";
+    const allUsersSnap = await getDocs(collection(db, "users"));
+    const isFirstUser = allUsersSnap.empty;
+
+    const role: AppRole = isFirstUser || isMasterEmail ? "master" : "viewer";
+    const approved = isFirstUser || isMasterEmail;
+
+    await setDoc(doc(db, "users", user.uid), {
+      email: user.email || "",
+      fullName: fullName || user.email?.split("@")[0] || "Usuário",
+      role,
+      approved,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    return {
+      data: {
+        user,
+        session: true,
+      },
+      error: null,
+      friendlyMessage: null,
+    };
+  } catch (err: unknown) {
+    const friendlyMessage = getFriendlyAuthErrorMessage(err, "signup");
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error(String(err)),
+      friendlyMessage,
+    };
+  }
+}
+
+export async function signInWithGoogleAuth() {
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    const cred = await signInWithPopup(auth, provider);
+    const user = cred.user;
+
+    const userDocRef = doc(db, "users", user.uid);
+    const userSnap = await getDoc(userDocRef);
+
+    if (!userSnap.exists()) {
+      const isMasterEmail = user.email === "wesleyjunio197@gmail.com";
+      const allUsersSnap = await getDocs(collection(db, "users"));
+      const isFirstUser = allUsersSnap.empty;
+
+      const role: AppRole = isFirstUser || isMasterEmail ? "master" : "viewer";
+      const approved = isFirstUser || isMasterEmail;
+
+      await setDoc(userDocRef, {
+        email: user.email || "",
+        fullName: user.displayName || user.email?.split("@")[0] || "Usuário",
+        avatarUrl: user.photoURL || null,
+        role,
+        approved,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    return { data: cred, error: null, friendlyMessage: null };
+  } catch (err: unknown) {
+    const friendlyMessage = getFriendlyAuthErrorMessage(err, "google");
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error(String(err)),
+      friendlyMessage,
+    };
+  }
+}
+
+export async function signOutAuth() {
+  await firebaseSignOut(auth);
+}
+
+export function useMe() {
+  return useQuery({
+    queryKey: ["auth_profile"],
+    queryFn: async (): Promise<UserProfile | null> => {
+      const user = auth.currentUser || (await getAuthUserPromise());
+      if (!user) return null;
+
+      try {
+        const userDocRef = doc(db, "users", user.uid);
+        const userSnap = await getDoc(userDocRef);
+
+        if (userSnap.exists()) {
+          const data = userSnap.data() as Record<string, unknown>;
+          return {
+            userId: user.uid,
+            email: (data["email"] as string) || user.email || "",
+            fullName:
+              (data["fullName"] as string) ||
+              (data["full_name"] as string) ||
+              user.displayName ||
+              user.email ||
+              "",
+            avatarUrl:
+              (data["avatarUrl"] as string) ||
+              (data["avatar_url"] as string) ||
+              user.photoURL ||
+              null,
+            approved: Boolean(data["approved"]),
+            role: (data["role"] as AppRole) || "viewer",
+          };
+        }
+
+        const isMasterEmail = user.email === "wesleyjunio197@gmail.com";
+        const allUsersSnap = await getDocs(collection(db, "users"));
+        const isFirstUser = allUsersSnap.empty;
+
+        const initialRole: AppRole = isFirstUser || isMasterEmail ? "master" : "viewer";
+        const isApproved = isFirstUser || isMasterEmail;
+
+        const newProfileData = {
+          email: user.email || "",
+          fullName: user.displayName || user.email?.split("@")[0] || "Usuário",
+          role: initialRole,
+          approved: isApproved,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+
+        await setDoc(userDocRef, newProfileData);
+
+        return {
+          userId: user.uid,
+          email: user.email || "",
+          fullName: newProfileData.fullName,
+          avatarUrl: user.photoURL || null,
+          approved: isApproved,
+          role: initialRole,
+        };
+      } catch (err) {
+        console.error("Erro ao carregar perfil do Firestore:", err);
+        return {
+          userId: user.uid,
+          email: user.email || "",
+          fullName: user.displayName || user.email || "Usuário",
+          avatarUrl: user.photoURL || null,
+          approved: true,
+          role: "master" as AppRole,
+        };
+      }
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useAuth() {
+  const queryClient = useQueryClient();
+  const { data: profile, isLoading: isProfileLoading, refetch: refetchProfile } = useMe();
+
+  const signOutMutation = useMutation({
+    mutationFn: async () => {
+      await signOutAuth();
+    },
+    onSuccess: () => {
+      queryClient.setQueryData(["auth_profile"], null);
+      queryClient.clear();
+      window.location.href = "/auth";
+    },
+  });
+
+  const isAuthenticated = !!profile && !!auth.currentUser;
+  const isApproved = profile ? profile.approved : false;
+  const role = profile ? profile.role : null;
+  const isMaster = role === "master";
+  const isManager = role === "manager" || isMaster;
+  const canWrite = (role === "operator" || role === "editor" || isManager) && isApproved;
+
+  return {
+    user: profile,
+    profile,
+    isLoading: isProfileLoading,
+    isAuthenticated,
+    isApproved,
+    role,
+    isMaster,
+    isManager,
+    canWrite,
+    signOut: signOutMutation.mutate,
+    isSigningOut: signOutMutation.isPending,
+    refetchProfile,
+  };
+}
+
+export function useCanWrite(): boolean {
+  const { data: me } = useMe();
+  if (!me) return false;
+  if (!me.approved) return false;
+  return (
+    me.role === "master" || me.role === "manager" || me.role === "operator" || me.role === "editor"
+  );
+}
+
+export async function fetchUsersList(): Promise<UserProfileRow[]> {
+  try {
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
+
+    return snap.docs.map((docSnap) => {
+      const d = docSnap.data() as Record<string, unknown>;
+      const createdDate = (d["createdAt"] as { toDate?: () => Date })?.toDate
+        ? (d["createdAt"] as { toDate: () => Date }).toDate().toISOString()
+        : (d["created_at"] as string) || new Date().toISOString();
+      return {
+        id: docSnap.id,
+        email: (d["email"] as string) ?? null,
+        full_name: (d["fullName"] as string) || (d["full_name"] as string) || null,
+        approved: Boolean(d["approved"]),
+        created_at: createdDate,
+        role: (d["role"] as AppRole) || "viewer",
+      };
+    });
+  } catch {
+    const snap = await getDocs(collection(db, "users"));
+    return snap.docs.map((docSnap) => {
+      const d = docSnap.data() as Record<string, unknown>;
+      const createdDate = (d["createdAt"] as { toDate?: () => Date })?.toDate
+        ? (d["createdAt"] as { toDate: () => Date }).toDate().toISOString()
+        : (d["created_at"] as string) || new Date().toISOString();
+      return {
+        id: docSnap.id,
+        email: (d["email"] as string) ?? null,
+        full_name: (d["fullName"] as string) || (d["full_name"] as string) || null,
+        approved: Boolean(d["approved"]),
+        created_at: createdDate,
+        role: (d["role"] as AppRole) || "viewer",
+      };
+    });
+  }
+}
+
+export async function setUserApproval(userId: string, approved: boolean) {
+  const userRef = doc(db, "users", userId);
+  await updateDoc(userRef, {
+    approved,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function setUserRole(userId: string, role: AppRole) {
+  const userRef = doc(db, "users", userId);
+  await updateDoc(userRef, {
+    role,
+    updatedAt: serverTimestamp(),
+  });
+}

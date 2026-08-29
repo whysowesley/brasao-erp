@@ -1,34 +1,81 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { collection, onSnapshot, type Unsubscribe } from "firebase/firestore";
+import { db } from "@/integrations/firebase/config";
 
-import { supabase } from "@/integrations/supabase/client";
-
-const TABLES = [
+const COLLECTIONS = [
   "products",
   "stock_movements",
   "stock_counts",
-  "stock_count_items",
   "purchase_orders",
-  "purchase_order_items",
+  "financial_transactions",
+  "financial_categories",
+  "cost_centers",
+  "payment_methods",
+  "suppliers",
+  "categories",
+  "units",
+  "users",
+  "settings",
 ] as const;
 
 /**
- * Mantém todas as telas sincronizadas: qualquer alteração no estoque, contagem,
- * movimentação ou pedido feita em qualquer lugar recarrega os dados na hora.
+ * Mantém todas as telas sincronizadas em tempo real com Firestore:
+ * Qualquer alteração no estoque, contagem, movimentação, pedidos ou financeiro
+ * feita em qualquer sessão/dispositivo invalida as queries ativas e atualiza a UI.
  */
 export function useRealtimeSync() {
   const qc = useQueryClient();
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    const channel = supabase.channel("app-sync");
-    for (const table of TABLES) {
-      channel.on("postgres_changes", { event: "*", schema: "public", table }, () => {
+    const unsubs: Unsubscribe[] = [];
+
+    const notifyChange = () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
         qc.invalidateQueries();
-      });
+      }, 150);
+    };
+
+    for (const collName of COLLECTIONS) {
+      try {
+        const collRef = collection(db, collName);
+        let isInitial = true;
+        const unsub = onSnapshot(
+          collRef,
+          { includeMetadataChanges: false },
+          () => {
+            // Ignora a emissão inicial imediata para não duplicar requisições no mount
+            if (isInitial) {
+              isInitial = false;
+              return;
+            }
+            notifyChange();
+          },
+          (error) => {
+            console.warn(`[RealtimeSync] Listener de ${collName}:`, error.message);
+          },
+        );
+        unsubs.push(unsub);
+      } catch (err) {
+        console.warn(`[RealtimeSync] Falha ao registrar ${collName}:`, err);
+      }
     }
-    channel.subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      unsubs.forEach((unsub) => {
+        try {
+          unsub();
+        } catch {
+          // ignora
+        }
+      });
     };
   }, [qc]);
 }

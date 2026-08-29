@@ -16,8 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { supabase } from "@/integrations/supabase/client";
-import { CURRENT_USER, useInvalidateAll, useProducts, useRules } from "@/lib/data";
+import { createOrdersFromSuggestions, useInvalidateAll, useProducts, useRules } from "@/lib/data";
 import { formatQty, statusFor } from "@/lib/inventory";
 import { usePurchasePlan } from "@/lib/purchase-plan";
 
@@ -49,10 +48,7 @@ function SugestoesPage() {
   const { data: rules } = useRules();
   const [saving, setSaving] = useState(false);
 
-  const rows = useMemo(
-    () => (products ?? []).filter((p) => p.suggestedPurchase > 0),
-    [products],
-  );
+  const rows = useMemo(() => (products ?? []).filter((p) => p.suggestedPurchase > 0), [products]);
   const allChecked = rows.length > 0 && rows.every((r) => selected[r.id]);
   const chosen = rows.filter((r) => selected[r.id]);
 
@@ -69,29 +65,16 @@ function SugestoesPage() {
         bySupplier.set(key, [...(bySupplier.get(key) ?? []), p]);
       }
 
-      for (const [supplierId, items] of bySupplier) {
-        const { data: order, error } = await supabase
-          .from("purchase_orders")
-          .insert({
-            supplier_id: supplierId === "sem-fornecedor" ? null : supplierId,
-            status: "rascunho",
-            user_name: CURRENT_USER,
-            notes: "Gerado a partir das sugestões de compra",
-          })
-          .select("id")
-          .single();
-        if (error) throw error;
+      const groups = Array.from(bySupplier.entries()).map(([supplierId, items]) => ({
+        supplierId: supplierId === "sem-fornecedor" ? null : supplierId,
+        items: items.map((p) => ({
+          productId: p.id,
+          quantity: plan[p.id] ?? p.suggestedPurchase,
+          unit: p.unit,
+        })),
+      }));
 
-        const { error: e2 } = await supabase.from("purchase_order_items").insert(
-          items.map((p) => ({
-            order_id: order.id,
-            product_id: p.id,
-            quantity: plan[p.id] ?? p.suggestedPurchase,
-            unit: p.unit,
-          })),
-        );
-        if (e2) throw e2;
-      }
+      await createOrdersFromSuggestions(groups);
 
       clearPlan(chosen.map((p) => p.id));
       invalidate();
@@ -126,9 +109,7 @@ function SugestoesPage() {
                   <Checkbox
                     checked={allChecked}
                     onCheckedChange={(v) =>
-                      setSelected(
-                        v ? Object.fromEntries(rows.map((r) => [r.id, true])) : {},
-                      )
+                      setSelected(v ? Object.fromEntries(rows.map((r) => [r.id, true])) : {})
                     }
                   />
                 </TableHead>
@@ -146,52 +127,51 @@ function SugestoesPage() {
             <TableBody>
               {rows.map((p) => {
                 const wanted = plan[p.id] ?? p.suggestedPurchase;
-                const future =
-                  Number(p.current_stock) + wanted - Number(p.avg_weekly_consumption);
+                const future = Number(p.current_stock) + wanted - Number(p.avg_weekly_consumption);
                 return (
-                <TableRow key={p.id} data-state={selected[p.id] ? "selected" : undefined}>
-                  <TableCell>
-                    <Checkbox
-                      checked={!!selected[p.id]}
-                      onCheckedChange={(v) => setSelected((s) => ({ ...s, [p.id]: !!v }))}
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">{p.description}</TableCell>
-                  <TableCell className="text-muted-foreground">{p.supplierName}</TableCell>
-                  <TableCell className="num text-right">
-                    {formatQty(p.current_stock, p.unit)}
-                  </TableCell>
-                  <TableCell className="num text-right">
-                    {formatQty(p.avg_weekly_consumption, p.unit)}
-                  </TableCell>
-                  <TableCell className="num text-right font-semibold">
-                    {formatQty(p.suggestedPurchase, p.unit)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Input
-                      className="num ml-auto h-8 w-28 text-right font-semibold"
-                      value={String(wanted)}
-                      onChange={(e) =>
-                        setPlanned(p.id, Number(e.target.value.replace(",", ".")) || 0)
-                      }
-                      inputMode="decimal"
-                    />
-                  </TableCell>
-                  <TableCell className="num text-right">{formatQty(future, p.unit)}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={p.status} />
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge
-                      status={statusFor(
-                        future,
-                        Number(p.avg_weekly_consumption),
-                        Number(p.min_stock),
-                        rules,
-                      )}
-                    />
-                  </TableCell>
-                </TableRow>
+                  <TableRow key={p.id} data-state={selected[p.id] ? "selected" : undefined}>
+                    <TableCell>
+                      <Checkbox
+                        checked={!!selected[p.id]}
+                        onCheckedChange={(v) => setSelected((s) => ({ ...s, [p.id]: !!v }))}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">{p.description}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.supplierName}</TableCell>
+                    <TableCell className="num text-right">
+                      {formatQty(p.current_stock, p.unit)}
+                    </TableCell>
+                    <TableCell className="num text-right">
+                      {formatQty(p.avg_weekly_consumption, p.unit)}
+                    </TableCell>
+                    <TableCell className="num text-right font-semibold">
+                      {formatQty(p.suggestedPurchase, p.unit)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Input
+                        className="num ml-auto h-8 w-28 text-right font-semibold"
+                        value={String(wanted)}
+                        onChange={(e) =>
+                          setPlanned(p.id, Number(e.target.value.replace(",", ".")) || 0)
+                        }
+                        inputMode="decimal"
+                      />
+                    </TableCell>
+                    <TableCell className="num text-right">{formatQty(future, p.unit)}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={p.status} />
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge
+                        status={statusFor(
+                          future,
+                          Number(p.avg_weekly_consumption),
+                          Number(p.min_stock),
+                          rules,
+                        )}
+                      />
+                    </TableCell>
+                  </TableRow>
                 );
               })}
               {rows.length === 0 && (

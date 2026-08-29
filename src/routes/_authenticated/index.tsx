@@ -10,7 +10,6 @@ import {
   TrendingDown,
 } from "lucide-react";
 
-
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -32,9 +31,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useMovements, useOrders, useProducts } from "@/lib/data";
-import { OPEN_ORDER_STATUSES, formatDateTime, formatQty, movementLabel, orderStatusLabel, statusFor } from "@/lib/inventory";
+import {
+  OPEN_ORDER_STATUSES,
+  formatDateTime,
+  formatQty,
+  movementLabel,
+  orderStatusLabel,
+  statusFor,
+} from "@/lib/inventory";
 import { usePurchasePlan } from "@/lib/purchase-plan";
-
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -97,7 +102,6 @@ function buildSupplierSummary(products: ReturnType<typeof useProducts>["data"]):
   return Array.from(map.values()).sort((a, b) => b.totalSuggested - a.totalSuggested);
 }
 
-
 function Dashboard() {
   const { data: products, isLoading } = useProducts();
   const { data: orders } = useOrders();
@@ -108,7 +112,6 @@ function Dashboard() {
   const toBuy = products?.filter((p) => p.suggestedPurchase > 0) ?? [];
   const openOrders = orders?.filter((o) => OPEN_ORDER_STATUSES.includes(o.status)) ?? [];
   const supplierSummary = buildSupplierSummary(products);
-
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -290,7 +293,9 @@ function Dashboard() {
                     <TableCell className="font-medium">{s.supplierName}</TableCell>
                     <TableCell className="num text-right">{s.products}</TableCell>
                     <TableCell className="num text-right">{formatQty(s.totalStock)}</TableCell>
-                    <TableCell className="num text-right">{formatQty(s.totalConsumption)}</TableCell>
+                    <TableCell className="num text-right">
+                      {formatQty(s.totalConsumption)}
+                    </TableCell>
                     <TableCell className="num text-right font-semibold">
                       {s.totalSuggested > 0 ? formatQty(s.totalSuggested) : "—"}
                     </TableCell>
@@ -332,10 +337,7 @@ function Dashboard() {
 
       <SupplierFocus products={products} />
 
-
-
       {openOrders.length > 0 && (
-
         <section className="mt-6 rounded-lg border bg-card shadow-card">
           <header className="flex items-center justify-between border-b px-4 py-3">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -381,14 +383,16 @@ type Products = NonNullable<ReturnType<typeof useProducts>["data"]>;
 
 /** Análise detalhada: escolha um fornecedor e veja os itens dele com resumo. */
 function SupplierFocus({ products }: { products: Products | undefined }) {
-  const list = products ?? [];
   const suppliers = useMemo(() => {
+    if (!products) return [];
     const map = new Map<string, string>();
-    for (const p of list) map.set(p.supplier_id ?? "sem", p.supplierName ?? "Sem fornecedor");
+    for (const p of products) map.set(p.supplier_id ?? "sem", p.supplierName ?? "Sem fornecedor");
     return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) =>
       a.name.localeCompare(b.name),
     );
-  }, [list]);
+  }, [products]);
+
+  const list = products ?? [];
 
   const [supplierId, setSupplierId] = useState<string>("");
   const { plan, setPlanned } = usePurchasePlan();

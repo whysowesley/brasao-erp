@@ -56,15 +56,13 @@ function ProductDetail() {
     return <Skeleton className="h-64 w-full rounded-lg" />;
   }
 
-  const chartData = [...(movements ?? [])]
-    .reverse()
-    .map((m) => ({
-      date: new Date(m.created_at).toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-      }),
-      estoque: Number(m.quantity_after),
-    }));
+  const chartData = [...(movements ?? [])].reverse().map((m) => ({
+    date: new Date(m.created_at).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+    }),
+    estoque: Number(m.quantity_after),
+  }));
 
   const info: Array<[string, string]> = [
     ["Categoria", product.categoryName],

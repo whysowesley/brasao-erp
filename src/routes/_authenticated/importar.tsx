@@ -7,8 +7,7 @@ import * as XLSX from "xlsx";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { supabase } from "@/integrations/supabase/client";
-import { applyMovement, useInvalidateAll, useProducts } from "@/lib/data";
+import { applyMovement, updateProductConsumption, useInvalidateAll, useProducts } from "@/lib/data";
 
 export const Route = createFileRoute("/_authenticated/importar")({
   head: () => ({
@@ -73,10 +72,7 @@ function ImportarPage() {
           continue;
         }
         if (consKey) {
-          await supabase
-            .from("products")
-            .update({ avg_weekly_consumption: num(row[consKey]) })
-            .eq("id", product.id);
+          await updateProductConsumption(product.id, num(row[consKey]));
         }
         if (stockKey) {
           const newQty = num(row[stockKey]);
@@ -111,8 +107,9 @@ function ImportarPage() {
 
       <div className="rounded-lg border bg-card p-6 shadow-card">
         <p className="text-sm text-muted-foreground">
-          A planilha deve conter uma coluna com o nome do produto (Produto/Descrição) e, opcionalmente,
-          colunas de Estoque e Consumo. Os produtos são identificados pelo nome já cadastrado.
+          A planilha deve conter uma coluna com o nome do produto (Produto/Descrição) e,
+          opcionalmente, colunas de Estoque e Consumo. Os produtos são identificados pelo nome já
+          cadastrado.
         </p>
         <div className="mt-4 flex items-center gap-3">
           <Input

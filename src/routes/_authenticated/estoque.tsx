@@ -37,10 +37,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { supabase } from "@/integrations/supabase/client";
 import {
   applyMovement,
   deleteProduct,
+  updateProductConsumption,
   useCategories,
   useInvalidateAll,
   useProducts,
@@ -49,7 +49,6 @@ import {
 } from "@/lib/data";
 import { formatQty, statusFor, type ComputedProduct } from "@/lib/inventory";
 import { usePurchasePlan } from "@/lib/purchase-plan";
-
 
 export const Route = createFileRoute("/_authenticated/estoque")({
   head: () => ({
@@ -148,7 +147,6 @@ function EstoquePage() {
     }
   }
 
-
   async function quickSaveStock(p: ComputedProduct, value: string) {
     const v = Number(value.replace(",", ".")) || 0;
     if (v === Number(p.current_stock)) return;
@@ -170,19 +168,15 @@ function EstoquePage() {
   async function quickSaveConsumption(p: ComputedProduct, value: string) {
     const v = Number(value.replace(",", ".")) || 0;
     if (v === Number(p.avg_weekly_consumption)) return;
-    const { error } = await supabase
-      .from("products")
-      .update({ avg_weekly_consumption: v })
-      .eq("id", p.id);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      await updateProductConsumption(p.id, v);
+      clearPlan([p.id]);
+      invalidate();
+      toast.success("Consumo médio semanal atualizado.");
+    } catch (err) {
+      toast.error((err as Error).message);
     }
-    clearPlan([p.id]);
-    invalidate();
-    toast.success("Consumo médio semanal atualizado.");
   }
-
 
   const Th = ({ k, children, align }: { k: SortKey; children: string; align?: "right" }) => (
     <TableHead className={align === "right" ? "text-right" : undefined}>
@@ -422,7 +416,6 @@ function EstoquePage() {
                   </TableCell>
                 </TableRow>
               )}
-
             </TableBody>
           </Table>
         </div>
