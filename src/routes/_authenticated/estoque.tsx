@@ -47,7 +47,7 @@ import {
   useRules,
   useSuppliers,
 } from "@/lib/data";
-import { formatQty, statusFor, type ComputedProduct } from "@/lib/inventory";
+import { formatQty, futureStatusFor, type ComputedProduct } from "@/lib/inventory";
 import { usePurchasePlan } from "@/lib/purchase-plan";
 
 export const Route = createFileRoute("/_authenticated/estoque")({
@@ -105,9 +105,9 @@ function EstoquePage() {
   const buyQty = (p: ComputedProduct) => plan[p.id] ?? p.suggestedPurchase;
   const futureWithBuy = (p: ComputedProduct) =>
     Number(p.current_stock) + buyQty(p) - Number(p.avg_weekly_consumption);
-  /** Status projetado em tempo real conforme a quantidade que será comprada. */
+  /** Status projetado em tempo real conforme a quantidade que será comprada (só fica crítico se <= 0). */
   const futureStatus = (p: ComputedProduct) =>
-    statusFor(futureWithBuy(p), Number(p.avg_weekly_consumption), Number(p.min_stock), rules);
+    futureStatusFor(futureWithBuy(p), Number(p.min_stock), rules);
 
   const rows = useMemo(() => {
     let list = products ?? [];

@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { InlineCreate } from "@/components/InlineCreate";
+import { StatusBadge } from "@/components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 
 import {
   Select,
@@ -33,8 +35,15 @@ import {
   saveUnit,
 } from "@/lib/data";
 
-import type { ComputedProduct } from "@/lib/inventory";
-import { DEFAULT_RULES, computeProduct, formatQty } from "@/lib/inventory";
+import type { ComputedProduct, ConsumptionMode, DayOfWeek } from "@/lib/inventory";
+import {
+  DEFAULT_RULES,
+  DAYS_OF_WEEK,
+  computeProduct,
+  formatQty,
+  futureStatusFor,
+  sumDailyConsumption,
+} from "@/lib/inventory";
 
 type FormState = {
   description: string;
@@ -50,6 +59,28 @@ type FormState = {
   coverage_weeks: string;
   lead_time_days: string;
   notes: string;
+};
+
+type DailyFormState = {
+  seg: string;
+  ter: string;
+  qua: string;
+  qui: string;
+  sex: string;
+  sab: string;
+  dom: string;
+  seg2: string;
+};
+
+const emptyDaily: DailyFormState = {
+  seg: "0",
+  ter: "0",
+  qua: "0",
+  qui: "0",
+  sex: "0",
+  sab: "0",
+  dom: "0",
+  seg2: "0",
 };
 
 const empty: FormState = {
@@ -69,6 +100,8 @@ const empty: FormState = {
 };
 
 const num = (v: string) => (v.trim() === "" ? 0 : Number(v.replace(",", ".")) || 0);
+const roundVal = (n: number) =>
+  Number.isInteger(n) ? String(n) : String(Math.round((n + Number.EPSILON) * 100) / 100);
 
 export function ProductDialog({
   open,
@@ -84,6 +117,9 @@ export function ProductDialog({
   const { data: units } = useUnits();
   const invalidate = useInvalidateAll();
   const [form, setForm] = useState<FormState>(empty);
+  const [consumptionMode, setConsumptionMode] = useState<ConsumptionMode>("constant");
+  const [constantDaily, setConstantDaily] = useState<string>("0");
+  const [daily, setDaily] = useState<DailyFormState>(emptyDaily);
   const [saving, setSaving] = useState(false);
   const { data: rules } = useRules();
 
@@ -110,46 +146,160 @@ export function ProductDialog({
       },
       rules ?? DEFAULT_RULES,
     );
+    const futureStatus = futureStatusFor(
+      c.futureStock,
+      num(form.min_stock),
+      rules ?? DEFAULT_RULES,
+    );
     return {
       current,
       consumption,
       suggestedPurchase: c.suggestedPurchase,
       futureStock: c.futureStock,
+      status: c.status,
+      futureStatus,
     };
   })();
 
   useEffect(() => {
     if (!open) return;
-    setForm(
-      product
-        ? {
-            description: product.description,
-            code: product.code?.toString() ?? "",
-            category_id: product.category_id ?? "",
-            supplier_id: product.supplier_id ?? "",
-            unit: product.unit,
-            current_stock: String(product.current_stock),
-            avg_weekly_consumption: String(product.avg_weekly_consumption),
-            min_stock: String(product.min_stock),
-            desired_stock: String(product.desired_stock),
-            safety_stock: String(product.safety_stock),
-            coverage_weeks: product.coverage_weeks?.toString() ?? "",
-            lead_time_days: String(product.lead_time_days),
-            notes: product.notes ?? "",
-          }
-        : empty,
-    );
+    if (product) {
+      setForm({
+        description: product.description,
+        code: product.code?.toString() ?? "",
+        category_id: product.category_id ?? "",
+        supplier_id: product.supplier_id ?? "",
+        unit: product.unit,
+        current_stock: String(product.current_stock),
+        avg_weekly_consumption: String(product.avg_weekly_consumption),
+        min_stock: String(product.min_stock),
+        desired_stock: String(product.desired_stock),
+        safety_stock: String(product.safety_stock),
+        coverage_weeks: product.coverage_weeks?.toString() ?? "",
+        lead_time_days: String(product.lead_time_days),
+        notes: product.notes ?? "",
+      });
+
+      const mode = product.daily_consumption_mode ?? "constant";
+      setConsumptionMode(mode);
+
+      if (product.daily_consumption) {
+        setDaily({
+          seg: String(product.daily_consumption.seg ?? 0),
+          ter: String(product.daily_consumption.ter ?? 0),
+          qua: String(product.daily_consumption.qua ?? 0),
+          qui: String(product.daily_consumption.qui ?? 0),
+          sex: String(product.daily_consumption.sex ?? 0),
+          sab: String(product.daily_consumption.sab ?? 0),
+          dom: String(product.daily_consumption.dom ?? 0),
+          seg2: String(product.daily_consumption.seg2 ?? product.daily_consumption.seg ?? 0),
+        });
+      } else {
+        const perDay = roundVal(Number(product.avg_weekly_consumption) / 8);
+        setDaily({
+          seg: perDay,
+          ter: perDay,
+          qua: perDay,
+          qui: perDay,
+          sex: perDay,
+          sab: perDay,
+          dom: perDay,
+          seg2: perDay,
+        });
+      }
+
+      if (
+        product.constant_daily_consumption !== undefined &&
+        product.constant_daily_consumption !== null
+      ) {
+        setConstantDaily(String(product.constant_daily_consumption));
+      } else {
+        setConstantDaily(roundVal(Number(product.avg_weekly_consumption) / 8));
+      }
+    } else {
+      setForm(empty);
+      setConsumptionMode("constant");
+      setConstantDaily("0");
+      setDaily(emptyDaily);
+    }
   }, [open, product]);
 
   const set = (k: keyof FormState) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Atualização no modo Consumo Constante (replicado para os 8 dias - Segunda a Segunda)
+  const handleConstantChange = (val: string) => {
+    setConstantDaily(val);
+    const dailyNum = num(val);
+    const weeklyTotal = roundVal(dailyNum * 8);
+    setForm((f) => ({ ...f, avg_weekly_consumption: weeklyTotal }));
+    setDaily({
+      seg: val,
+      ter: val,
+      qua: val,
+      qui: val,
+      sex: val,
+      sab: val,
+      dom: val,
+      seg2: val,
+    });
+  };
+
+  // Atualização em um dia individual no modo Personalizado
+  const handleDayChange = (day: DayOfWeek, val: string) => {
+    const updatedDaily = { ...daily, [day]: val };
+    setDaily(updatedDaily);
+    const sum = sumDailyConsumption({
+      seg: num(updatedDaily.seg),
+      ter: num(updatedDaily.ter),
+      qua: num(updatedDaily.qua),
+      qui: num(updatedDaily.qui),
+      sex: num(updatedDaily.sex),
+      sab: num(updatedDaily.sab),
+      dom: num(updatedDaily.dom),
+      seg2: num(updatedDaily.seg2),
+    });
+    setForm((f) => ({ ...f, avg_weekly_consumption: roundVal(sum) }));
+  };
+
+  // Troca de modo de consumo
+  const handleModeChange = (mode: ConsumptionMode) => {
+    setConsumptionMode(mode);
+    if (mode === "constant") {
+      const currentWeekly = num(form.avg_weekly_consumption);
+      const perDay = roundVal(currentWeekly / 8);
+      setConstantDaily(perDay);
+      setDaily({
+        seg: perDay,
+        ter: perDay,
+        qua: perDay,
+        qui: perDay,
+        sex: perDay,
+        sab: perDay,
+        dom: perDay,
+        seg2: perDay,
+      });
+    }
+  };
 
   async function save() {
     if (!form.description.trim()) {
       toast.error("Informe a descrição do produto.");
       return;
     }
+
     setSaving(true);
     try {
+      const dailyObj = {
+        seg: num(daily.seg),
+        ter: num(daily.ter),
+        qua: num(daily.qua),
+        qui: num(daily.qui),
+        sex: num(daily.sex),
+        sab: num(daily.sab),
+        dom: num(daily.dom),
+        seg2: num(daily.seg2),
+      };
+
       await saveProduct(
         {
           description: form.description,
@@ -158,6 +308,10 @@ export function ProductDialog({
           supplier_id: form.supplier_id || null,
           unit: form.unit,
           avg_weekly_consumption: num(form.avg_weekly_consumption),
+          daily_consumption_mode: consumptionMode,
+          daily_consumption: dailyObj,
+          constant_daily_consumption:
+            consumptionMode === "constant" ? num(constantDaily) : undefined,
           min_stock: num(form.min_stock),
           desired_stock: num(form.desired_stock),
           safety_stock: num(form.safety_stock),
@@ -181,11 +335,11 @@ export function ProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{product ? "Editar produto" : "Novo produto"}</DialogTitle>
           <DialogDescription>
-            Alterações no estoque atual geram automaticamente uma movimentação no histórico.
+            Defina o consumo diário por dia da semana ou use consumo constante padrão.
           </DialogDescription>
         </DialogHeader>
 
@@ -196,6 +350,7 @@ export function ProductDialog({
               id="desc"
               value={form.description}
               onChange={(e) => set("description")(e.target.value)}
+              placeholder="Ex.: Filé Mignon"
             />
           </div>
           <div>
@@ -294,15 +449,137 @@ export function ProductDialog({
               onChange={(e) => set("current_stock")(e.target.value)}
             />
           </div>
+
           <div>
-            <Label htmlFor="cons">Consumo médio semanal</Label>
+            <Label htmlFor="lead">Prazo de entrega (dias)</Label>
             <Input
-              id="cons"
-              inputMode="decimal"
-              value={form.avg_weekly_consumption}
-              onChange={(e) => set("avg_weekly_consumption")(e.target.value)}
+              id="lead"
+              inputMode="numeric"
+              value={form.lead_time_days}
+              onChange={(e) => set("lead_time_days")(e.target.value)}
             />
           </div>
+
+          {/* Configuração de Consumo Diário e Semanal (Segunda a Segunda - 8 dias) */}
+          <div className="sm:col-span-2 rounded-lg border bg-muted/30 p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b">
+              <div>
+                <Label className="text-sm font-semibold flex items-center gap-1.5">
+                  Consumo Diário (Segunda a Segunda — 8 dias)
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Defina manualmente o consumo de cada um dos 8 dias (Seg a Seg) ou use a semana
+                  padrão para replicar para todos os dias.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs font-normal"
+                  onClick={() => {
+                    const baseVal = constantDaily || "10";
+                    handleConstantChange(baseVal);
+                    toast.info(`Replicado ${baseVal} ${form.unit}/dia para os 8 dias (Seg a Seg)`);
+                  }}
+                >
+                  Replicar {constantDaily || "10"} p/ os 8 dias
+                </Button>
+              </div>
+            </div>
+
+            {/* Atalho / Flag de Semana Padrão (Replicação Automática) */}
+            <div className="rounded-md border bg-background/90 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="standard-week-val" className="text-xs font-medium text-foreground">
+                  Semana Padrão (Consumo Diário Fixo)
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Digite um valor fixo por dia para replicar automaticamente para os 8 dias (Segunda
+                  a Segunda, ex.: 10 {form.unit}/dia).
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative w-28">
+                  <Input
+                    id="standard-week-val"
+                    inputMode="decimal"
+                    value={constantDaily}
+                    onChange={(e) => handleConstantChange(e.target.value)}
+                    placeholder="Ex.: 10"
+                    className="num h-8 text-xs text-right pr-7"
+                  />
+                  <span className="absolute right-2 top-2 text-[10px] text-muted-foreground">
+                    /dia
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => handleConstantChange(constantDaily || "0")}
+                >
+                  Aplicar aos 8 dias
+                </Button>
+              </div>
+            </div>
+
+            {/* Inputs individuais para cada DIA (Seg, Ter, Qua, Qui, Sex, Sáb, Dom, Seg 2) */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-foreground">
+                  Ajuste manual dia por dia (8 dias):
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Altere individualmente qualquer dia abaixo
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+                {DAYS_OF_WEEK.map((d) => (
+                  <div
+                    key={d.key}
+                    className="rounded-md border bg-card p-2 text-center transition-colors focus-within:ring-1 focus-within:ring-primary focus-within:border-primary"
+                  >
+                    <Label
+                      htmlFor={`day-${d.key}`}
+                      className="block text-[11px] font-bold text-foreground/80 uppercase"
+                    >
+                      {d.short}
+                    </Label>
+                    <span className="block text-[9px] text-muted-foreground truncate mb-1">
+                      {d.key === "seg2" ? "2ª Segunda" : d.label.split("-")[0]}
+                    </span>
+                    <Input
+                      id={`day-${d.key}`}
+                      inputMode="decimal"
+                      value={daily[d.key]}
+                      onChange={(e) => handleDayChange(d.key, e.target.value)}
+                      placeholder="0"
+                      className="num h-8 text-center text-xs px-1 font-bold bg-background"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Totalizador semanal calculado em tempo real */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between rounded-md bg-muted/60 px-3 py-2 border gap-1">
+              <div className="text-xs flex items-center gap-1.5">
+                <span className="text-muted-foreground">
+                  Consumo Total (Soma dos 8 dias — Seg a Seg):
+                </span>
+                <span className="font-bold text-foreground text-sm">
+                  {form.avg_weekly_consumption} {form.unit}/período
+                </span>
+              </div>
+              <Badge variant="outline" className="text-[11px] font-normal w-fit">
+                Média: {roundVal(num(form.avg_weekly_consumption) / 8)} {form.unit}/dia
+              </Badge>
+            </div>
+          </div>
+
           <div>
             <Label htmlFor="min">Estoque mínimo</Label>
             <Input
@@ -340,15 +617,7 @@ export function ProductDialog({
               onChange={(e) => set("coverage_weeks")(e.target.value)}
             />
           </div>
-          <div>
-            <Label htmlFor="lead">Prazo de entrega (dias)</Label>
-            <Input
-              id="lead"
-              inputMode="numeric"
-              value={form.lead_time_days}
-              onChange={(e) => set("lead_time_days")(e.target.value)}
-            />
-          </div>
+
           <div className="sm:col-span-2">
             <Label htmlFor="obs">Observação</Label>
             <Textarea
@@ -360,11 +629,17 @@ export function ProductDialog({
           </div>
         </div>
 
-        <div className="grid gap-3 rounded-lg border bg-muted/40 p-3 sm:grid-cols-4">
+        <div className="grid gap-3 rounded-lg border bg-muted/40 p-3 sm:grid-cols-5 items-center">
           <Preview label="Estoque atual" value={preview.current} unit={form.unit} />
-          <Preview label="Consumo da semana" value={preview.consumption} unit={form.unit} />
+          <Preview label="Consumo semanal" value={preview.consumption} unit={form.unit} />
           <Preview label="Compra sugerida" value={preview.suggestedPurchase} unit={form.unit} />
           <Preview label="Estoque futuro" value={preview.futureStock} unit={form.unit} />
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
+              Status Futuro
+            </p>
+            <StatusBadge status={preview.futureStatus} />
+          </div>
         </div>
 
         <DialogFooter>

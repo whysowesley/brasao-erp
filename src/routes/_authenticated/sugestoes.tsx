@@ -17,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createOrdersFromSuggestions, useInvalidateAll, useProducts, useRules } from "@/lib/data";
-import { formatQty, statusFor } from "@/lib/inventory";
+import { formatQty, futureStatusFor } from "@/lib/inventory";
 import { usePurchasePlan } from "@/lib/purchase-plan";
 
 export const Route = createFileRoute("/_authenticated/sugestoes")({
@@ -162,14 +162,7 @@ function SugestoesPage() {
                       <StatusBadge status={p.status} />
                     </TableCell>
                     <TableCell>
-                      <StatusBadge
-                        status={statusFor(
-                          future,
-                          Number(p.avg_weekly_consumption),
-                          Number(p.min_stock),
-                          rules,
-                        )}
-                      />
+                      <StatusBadge status={futureStatusFor(future, Number(p.min_stock), rules)} />
                     </TableCell>
                   </TableRow>
                 );

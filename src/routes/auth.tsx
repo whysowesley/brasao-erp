@@ -4,11 +4,7 @@ import { toast } from "sonner";
 
 import { BrasaoLogo } from "@/components/BrasaoLogo";
 import { useBranding } from "@/lib/branding";
-import {
-  getInitialSessionAuth,
-  signInWithGoogleAuth,
-  signInWithPasswordAuth,
-} from "@/lib/auth";
+import { getInitialSessionAuth, signInWithGoogleAuth, signInWithPasswordAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

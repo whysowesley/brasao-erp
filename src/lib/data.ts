@@ -20,6 +20,8 @@ import { db } from "@/integrations/firebase/config";
 import {
   DEFAULT_RULES,
   computeProduct,
+  type ConsumptionMode,
+  type DailyConsumption,
   type ProductRow,
   type PurchaseRules,
 } from "@/lib/inventory";
@@ -121,6 +123,13 @@ export function useProducts() {
           unit: d["unit"] || "UN",
           current_stock: Number(d["current_stock"]) || 0,
           avg_weekly_consumption: Number(d["avg_weekly_consumption"]) || 0,
+          daily_consumption_mode: d["daily_consumption_mode"] ?? "constant",
+          daily_consumption: d["daily_consumption"] ?? undefined,
+          constant_daily_consumption:
+            d["constant_daily_consumption"] !== undefined &&
+            d["constant_daily_consumption"] !== null
+              ? Number(d["constant_daily_consumption"])
+              : undefined,
           min_stock: Number(d["min_stock"]) || 0,
           desired_stock: Number(d["desired_stock"]) || 0,
           coverage_weeks:
@@ -171,6 +180,12 @@ export function useProduct(id: string) {
         unit: d["unit"] || "UN",
         current_stock: Number(d["current_stock"]) || 0,
         avg_weekly_consumption: Number(d["avg_weekly_consumption"]) || 0,
+        daily_consumption_mode: d["daily_consumption_mode"] ?? "constant",
+        daily_consumption: d["daily_consumption"] ?? undefined,
+        constant_daily_consumption:
+          d["constant_daily_consumption"] !== undefined && d["constant_daily_consumption"] !== null
+            ? Number(d["constant_daily_consumption"])
+            : undefined,
         min_stock: Number(d["min_stock"]) || 0,
         desired_stock: Number(d["desired_stock"]) || 0,
         coverage_weeks:
@@ -431,6 +446,9 @@ export type ProductInput = {
   supplier_id?: string | null;
   unit: string;
   avg_weekly_consumption: number;
+  daily_consumption_mode?: ConsumptionMode;
+  daily_consumption?: DailyConsumption;
+  constant_daily_consumption?: number;
   min_stock: number;
   desired_stock: number;
   safety_stock: number;
@@ -474,6 +492,10 @@ export async function saveProduct(
     supplier_name: supplierName,
     unit: input.unit,
     avg_weekly_consumption: input.avg_weekly_consumption,
+    daily_consumption_mode: input.daily_consumption_mode ?? "constant",
+    daily_consumption: input.daily_consumption ?? null,
+    constant_daily_consumption:
+      input.constant_daily_consumption !== undefined ? input.constant_daily_consumption : null,
     min_stock: input.min_stock,
     desired_stock: input.desired_stock,
     safety_stock: input.safety_stock,
@@ -519,12 +541,24 @@ export async function saveProduct(
   }
 }
 
-export async function updateProductConsumption(productId: string, avgWeeklyConsumption: number) {
+export async function updateProductConsumption(
+  productId: string,
+  avgWeeklyConsumption: number,
+  dailyConsumption?: DailyConsumption,
+  mode?: ConsumptionMode,
+) {
   const productRef = doc(db, "products", productId);
-  await updateDoc(productRef, {
+  const data: Record<string, unknown> = {
     avg_weekly_consumption: avgWeeklyConsumption,
     updated_at: serverTimestamp(),
-  });
+  };
+  if (dailyConsumption) {
+    data.daily_consumption = dailyConsumption;
+  }
+  if (mode) {
+    data.daily_consumption_mode = mode;
+  }
+  await updateDoc(productRef, data);
 }
 
 export type SupplierInput = {

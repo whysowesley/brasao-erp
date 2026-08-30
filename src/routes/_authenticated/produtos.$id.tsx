@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Calendar, Pencil } from "lucide-react";
 import {
   CartesianGrid,
   Line,
@@ -16,6 +16,7 @@ import { ProductDialog } from "@/components/ProductDialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -25,7 +26,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useMovements, useProduct } from "@/lib/data";
-import { formatDateTime, formatQty, movementLabel } from "@/lib/inventory";
+import {
+  DAYS_OF_WEEK,
+  formatDateTime,
+  formatQty,
+  getDailyConsumptionFromProduct,
+  movementLabel,
+} from "@/lib/inventory";
 
 export const Route = createFileRoute("/_authenticated/produtos/$id")({
   head: () => ({
@@ -64,12 +71,20 @@ function ProductDetail() {
     estoque: Number(m.quantity_after),
   }));
 
+  const daily = getDailyConsumptionFromProduct(product);
+
   const info: Array<[string, string]> = [
     ["Categoria", product.categoryName],
     ["Fornecedor", product.supplierName],
     ["Unidade / embalagem", product.unit],
     ["Estoque atual", formatQty(product.current_stock, product.unit)],
     ["Consumo médio semanal", formatQty(product.avg_weekly_consumption, product.unit)],
+    [
+      "Modo de consumo",
+      product.daily_consumption_mode === "custom"
+        ? "Personalizado por dia"
+        : "Constante todos os dias",
+    ],
     ["Estoque mínimo", formatQty(product.min_stock, product.unit)],
     ["Estoque desejado", formatQty(product.desired_stock, product.unit)],
     ["Estoque projetado (sem compra)", formatQty(product.projectedStock, product.unit)],
@@ -89,12 +104,17 @@ function ProductDetail() {
         title={product.description}
         description={`Código ${product.code ?? "—"} · ${product.categoryName}`}
         actions={
-          <>
-            <StatusBadge status={product.status} className="h-9 px-3 text-sm" />
-            <Button onClick={() => setOpen(true)}>
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center">
+              <span className="text-xs text-muted-foreground mr-1">Status Atual:</span>
+              <StatusBadge status={product.status} className="h-8 px-2.5 text-xs" />
+              <span className="text-xs text-muted-foreground ml-2 mr-1">Status Futuro:</span>
+              <StatusBadge status={product.futureStatus} className="h-8 px-2.5 text-xs" />
+            </div>
+            <Button onClick={() => setOpen(true)} className="ml-2">
               <Pencil className="h-4 w-4" /> Editar
             </Button>
-          </>
+          </div>
         }
       />
 
@@ -109,6 +129,27 @@ function ProductDetail() {
               </div>
             ))}
           </dl>
+
+          {/* Consumo Diário por Dia da Semana (Segunda a Segunda) */}
+          <div className="mt-4 pt-3 border-t">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5" /> Consumo Diário (8 dias)
+              </h3>
+              <Badge variant="outline" className="text-[10px]">
+                {product.daily_consumption_mode === "custom" ? "Por dia" : "Constante"}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-4 sm:grid-cols-8 gap-1 text-center">
+              {DAYS_OF_WEEK.map((d) => (
+                <div key={d.key} className="rounded bg-muted/50 p-1">
+                  <div className="text-[10px] font-semibold text-muted-foreground">{d.short}</div>
+                  <div className="num text-xs font-bold mt-0.5">{formatQty(daily[d.key])}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {product.notes && (
             <p className="mt-3 rounded-md bg-muted p-3 text-xs text-muted-foreground">
               {product.notes}
