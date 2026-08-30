@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowUpDown, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowUpDown, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/PageHeader";
@@ -198,15 +198,22 @@ function EstoquePage() {
         actions={
           <div className="flex items-center gap-2">
             {Object.keys(plan).length > 0 && (
-              <Button variant="outline" onClick={() => clearPlan()}>
-                Limpar plano de compra
+              <Button variant="outline" onClick={() => clearPlan()} className="text-xs sm:text-sm">
+                Limpar plano
               </Button>
             )}
+            <Link to="/importar">
+              <Button variant="outline" className="gap-1.5 text-xs sm:text-sm">
+                <Upload className="h-4 w-4" />
+                <span>Importar Planilha</span>
+              </Button>
+            </Link>
             <Button
               onClick={() => {
                 setEditing(null);
                 setDialogOpen(true);
               }}
+              className="gap-1.5 text-xs sm:text-sm"
             >
               <Plus className="h-4 w-4" /> Novo produto
             </Button>

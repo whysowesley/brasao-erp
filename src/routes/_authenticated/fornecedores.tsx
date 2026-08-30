@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Plus,
   Pencil,
@@ -14,6 +14,7 @@ import {
   Layers,
   Ruler,
   AlertTriangle,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -223,16 +224,24 @@ function FornecedoresPage() {
         description="Gestão unificada de parceiros comerciais, categorias e unidades para Estoque, Compras e Financeiro"
         actions={
           canWrite && (
-            <Button
-              onClick={() => {
-                setSupplierToEdit(null);
-                setOpenSupplierDialog(true);
-              }}
-              className="gap-1.5 bg-primary font-medium text-primary-foreground shadow hover:bg-primary/90"
-            >
-              <Plus className="h-4 w-4" />
-              <span>+ Novo Fornecedor</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Link to="/importar">
+                <Button variant="outline" className="gap-1.5 text-xs sm:text-sm">
+                  <Upload className="h-4 w-4" />
+                  <span>Importar Planilha</span>
+                </Button>
+              </Link>
+              <Button
+                onClick={() => {
+                  setSupplierToEdit(null);
+                  setOpenSupplierDialog(true);
+                }}
+                className="gap-1.5 bg-primary font-medium text-primary-foreground shadow hover:bg-primary/90 text-xs sm:text-sm"
+              >
+                <Plus className="h-4 w-4" />
+                <span>+ Novo Fornecedor</span>
+              </Button>
+            </div>
           )
         }
       />
