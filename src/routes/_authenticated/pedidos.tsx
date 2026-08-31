@@ -92,9 +92,14 @@ function PedidosPage() {
       const supplierId = (o as { supplier_id?: string | null }).supplier_id;
       const supplierMatch = supplierFilter === "all" || supplierId === supplierFilter;
       const term = search.trim().toLowerCase();
+      const numStr = String(o.number ?? 1);
+      const paddedNumStr = numStr.padStart(4, "0");
       const searchMatch =
         !term ||
-        String(o.number).includes(term) ||
+        numStr.includes(term) ||
+        paddedNumStr.includes(term) ||
+        `#${numStr}`.includes(term) ||
+        `#${paddedNumStr}`.includes(term) ||
         ((o.suppliers as { name?: string } | null)?.name ?? "").toLowerCase().includes(term);
       return supplierMatch && searchMatch;
     });
@@ -188,7 +193,7 @@ function PedidosPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="num text-sm font-semibold">
-                      PEDIDO DE COMPRA #{String(o.number).padStart(4, "0")}
+                      PEDIDO DE COMPRA #{String(o.number ?? 1).padStart(4, "0")}
                     </h2>
                     <Badge variant="secondary">{orderStatusLabel(o.status)}</Badge>
                   </div>
@@ -232,7 +237,7 @@ function PedidosPage() {
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>
-                          Apagar pedido #{String(o.number).padStart(4, "0")}?
+                          Apagar pedido #{String(o.number ?? 1).padStart(4, "0")}?
                         </AlertDialogTitle>
                         <AlertDialogDescription>
                           O pedido e seus itens serão removidos do histórico de pedidos. As

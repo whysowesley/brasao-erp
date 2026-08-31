@@ -375,15 +375,42 @@ export function useOrders() {
         });
       });
 
+      // Ordenar cronologicamente em ordem crescente para calcular fallback de número caso algum pedido antigo não tenha `number` gravado
+      const sortedAsc = [...snap.docs].sort((a, b) => {
+        const da = a.data()["created_at"]?.toDate ? a.data()["created_at"].toDate().getTime() : 0;
+        const dbTime = b.data()["created_at"]?.toDate
+          ? b.data()["created_at"].toDate().getTime()
+          : 0;
+        return da - dbTime;
+      });
+
+      // Mapear números já atribuídos e preencher os ausentes
+      const assignedNumbers = new Map<string, number>();
+      let maxKnown = 0;
+      sortedAsc.forEach((d) => {
+        const num = Number(d.data()["number"]);
+        if (Number.isFinite(num) && num > 0) {
+          assignedNumbers.set(d.id, num);
+          if (num > maxKnown) maxKnown = num;
+        }
+      });
+      sortedAsc.forEach((d) => {
+        if (!assignedNumbers.has(d.id)) {
+          maxKnown++;
+          assignedNumbers.set(d.id, maxKnown);
+        }
+      });
+
       const items: PurchaseOrderRow[] = snap.docs.map((d) => {
         const data = d.data();
         const createdDate = data["created_at"]?.toDate
           ? data["created_at"].toDate().toISOString()
           : data["created_at"] || new Date().toISOString();
         const rawItems = data["items"] || data["purchase_order_items"] || [];
+        const orderNum = assignedNumbers.get(d.id) ?? (data["number"] ? Number(data["number"]) : 1);
         return {
           id: d.id,
-          number: data["number"] ?? null,
+          number: orderNum,
           supplier_id: data["supplier_id"] || null,
           supplier_name: data["supplier_name"] || null,
           status: data["status"] || "rascunho",
@@ -801,6 +828,20 @@ export async function createOrdersFromSuggestions(
     }>;
   }>,
 ) {
+  // Buscar o maior número de pedido atual para continuar a sequência numérica
+  let nextNumber = 1;
+  try {
+    const existingOrdersSnap = await getDocs(collection(db, "purchase_orders"));
+    existingOrdersSnap.docs.forEach((docSnap) => {
+      const num = Number(docSnap.data()["number"]);
+      if (Number.isFinite(num) && num >= nextNumber) {
+        nextNumber = num + 1;
+      }
+    });
+  } catch {
+    // se falhar, utiliza 1 como base
+  }
+
   for (const group of groups) {
     let supplierName: string | null = null;
     if (group.supplierId) {
@@ -822,7 +863,10 @@ export async function createOrdersFromSuggestions(
       unit: it.unit,
     }));
 
+    const currentOrderNum = nextNumber++;
+
     await setDoc(orderDocRef, {
+      number: currentOrderNum,
       supplier_id: group.supplierId,
       supplier_name: supplierName,
       status: "rascunho",
