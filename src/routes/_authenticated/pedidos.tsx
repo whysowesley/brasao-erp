@@ -38,6 +38,7 @@ import {
   updateOrderStatus,
   useInvalidateAll,
   useOrders,
+  useProducts,
   useSuppliers,
 } from "@/lib/data";
 import { ORDER_STATUSES, formatDateTime, formatQty, orderStatusLabel } from "@/lib/inventory";
@@ -72,10 +73,19 @@ type OrderItem = {
 function PedidosPage() {
   const { data: orders, isLoading } = useOrders();
   const { data: suppliers } = useSuppliers();
+  const { data: products } = useProducts();
   const invalidate = useInvalidateAll();
   const [busy, setBusy] = useState<string | null>(null);
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+
+  const productMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (products ?? []).forEach((p) => {
+      map.set(p.id, p.description);
+    });
+    return map;
+  }, [products]);
 
   const filteredOrders = useMemo(() => {
     return (orders ?? []).filter((o) => {
@@ -248,13 +258,20 @@ function PedidosPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((it) => (
-                    <TableRow key={it.id}>
-                      <TableCell className="font-medium">{it.products?.description}</TableCell>
-                      <TableCell className="num text-right">{formatQty(it.quantity)}</TableCell>
-                      <TableCell className="text-muted-foreground">{it.unit}</TableCell>
-                    </TableRow>
-                  ))}
+                  {items.map((it) => {
+                    const desc =
+                      it.products?.description ||
+                      (it as { product_description?: string }).product_description ||
+                      productMap.get(it.product_id) ||
+                      "Produto";
+                    return (
+                      <TableRow key={it.id}>
+                        <TableCell className="font-medium">{desc}</TableCell>
+                        <TableCell className="num text-right">{formatQty(it.quantity)}</TableCell>
+                        <TableCell className="text-muted-foreground">{it.unit}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
               {o.notes && (

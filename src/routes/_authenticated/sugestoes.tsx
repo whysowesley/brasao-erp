@@ -1,13 +1,23 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ShoppingCart } from "lucide-react";
+import { Filter, Search, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/PageHeader";
+import { PlanInput } from "@/components/PlanInput";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -16,7 +26,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createOrdersFromSuggestions, useInvalidateAll, useProducts, useRules } from "@/lib/data";
+import {
+  createOrdersFromSuggestions,
+  useInvalidateAll,
+  useProducts,
+  useRules,
+  useSuppliers,
+} from "@/lib/data";
 import { formatQty, futureStatusFor } from "@/lib/inventory";
 import { usePurchasePlan } from "@/lib/purchase-plan";
 
@@ -41,6 +57,7 @@ export const Route = createFileRoute("/_authenticated/sugestoes")({
 
 function SugestoesPage() {
   const { data: products } = useProducts();
+  const { data: suppliers } = useSuppliers();
   const invalidate = useInvalidateAll();
   const navigate = useNavigate();
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -48,7 +65,34 @@ function SugestoesPage() {
   const { data: rules } = useRules();
   const [saving, setSaving] = useState(false);
 
-  const rows = useMemo(() => (products ?? []).filter((p) => p.suggestedPurchase > 0), [products]);
+  // Filtros
+  const [supplierFilter, setSupplierFilter] = useState<string>("all");
+  const [showAllStock, setShowAllStock] = useState<boolean>(false);
+  const [search, setSearch] = useState("");
+
+  const rows = useMemo(() => {
+    let list = products ?? [];
+
+    if (supplierFilter !== "all") {
+      list = list.filter((p) => (p.supplier_id || "sem-fornecedor") === supplierFilter);
+    }
+
+    if (!showAllStock) {
+      list = list.filter((p) => p.suggestedPurchase > 0);
+    }
+
+    if (search.trim()) {
+      const term = search.toLowerCase().trim();
+      list = list.filter(
+        (p) =>
+          p.description.toLowerCase().includes(term) ||
+          (p.code !== null && p.code !== undefined && String(p.code).includes(term)),
+      );
+    }
+
+    return list;
+  }, [products, supplierFilter, showAllStock, search]);
+
   const allChecked = rows.length > 0 && rows.every((r) => selected[r.id]);
   const chosen = rows.filter((r) => selected[r.id]);
 
@@ -67,11 +111,22 @@ function SugestoesPage() {
 
       const groups = Array.from(bySupplier.entries()).map(([supplierId, items]) => ({
         supplierId: supplierId === "sem-fornecedor" ? null : supplierId,
-        items: items.map((p) => ({
-          productId: p.id,
-          quantity: plan[p.id] ?? p.suggestedPurchase,
-          unit: p.unit,
-        })),
+        items: items.map((p) => {
+          const plannedVal = plan[p.id];
+          const qty =
+            plannedVal !== undefined
+              ? plannedVal
+              : p.suggestedPurchase > 0
+                ? p.suggestedPurchase
+                : 0;
+
+          return {
+            productId: p.id,
+            description: p.description,
+            quantity: qty,
+            unit: p.unit,
+          };
+        }),
       }));
 
       await createOrdersFromSuggestions(groups);
@@ -91,7 +146,7 @@ function SugestoesPage() {
     <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="Sugestões de Compra"
-        description="Apenas produtos que precisam de reposição, com quantidade calculada automaticamente."
+        description="Produtos que precisam de reposição, com sugestão calculada automaticamente e suporte a inclusão de itens com dígito 0."
         actions={
           <Button onClick={generateOrders} disabled={saving || chosen.length === 0}>
             <ShoppingCart className="h-4 w-4" />
@@ -99,6 +154,58 @@ function SugestoesPage() {
           </Button>
         }
       />
+
+      {/* Barra de Filtros */}
+      <div className="mb-4 flex flex-col gap-4 rounded-lg border bg-card p-4 shadow-card md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-1 flex-col gap-4 sm:flex-row sm:items-center">
+          {/* Fornecedor */}
+          <div className="w-full sm:w-64">
+            <Label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Fornecedor
+            </Label>
+            <Select value={supplierFilter} onValueChange={setSupplierFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todos os fornecedores" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os fornecedores</SelectItem>
+                {suppliers?.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Flag Opcional: Exibir estoque completo mesmo com sugestão 0 */}
+          <div className="flex items-center gap-2 pt-2 sm:pt-4">
+            <Switch id="show-all-stock" checked={showAllStock} onCheckedChange={setShowAllStock} />
+            <Label
+              htmlFor="show-all-stock"
+              className="cursor-pointer text-xs font-medium leading-none select-none"
+            >
+              Exibir estoque completo (mesmo com sugestão 0)
+            </Label>
+          </div>
+        </div>
+
+        {/* Busca rápida */}
+        <div className="w-full md:w-64">
+          <Label className="mb-1 block text-xs font-medium text-muted-foreground">
+            Buscar produto
+          </Label>
+          <div className="relative">
+            <Search className="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Nome ou código..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+        </div>
+      </div>
 
       <div className="rounded-lg border bg-card shadow-card">
         <div className="overflow-x-auto">
@@ -126,7 +233,12 @@ function SugestoesPage() {
             </TableHeader>
             <TableBody>
               {rows.map((p) => {
-                const wanted = plan[p.id] ?? p.suggestedPurchase;
+                const wanted =
+                  plan[p.id] !== undefined
+                    ? plan[p.id]
+                    : p.suggestedPurchase > 0
+                      ? p.suggestedPurchase
+                      : 0;
                 const future = Number(p.current_stock) + wanted - Number(p.avg_weekly_consumption);
                 return (
                   <TableRow key={p.id} data-state={selected[p.id] ? "selected" : undefined}>
@@ -145,16 +257,13 @@ function SugestoesPage() {
                       {formatQty(p.avg_weekly_consumption, p.unit)}
                     </TableCell>
                     <TableCell className="num text-right font-semibold">
-                      {formatQty(p.suggestedPurchase, p.unit)}
+                      {p.suggestedPurchase > 0 ? formatQty(p.suggestedPurchase, p.unit) : "0"}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Input
+                      <PlanInput
+                        value={wanted}
+                        onChange={(val) => setPlanned(p.id, val)}
                         className="num ml-auto h-8 w-28 text-right font-semibold"
-                        value={String(wanted)}
-                        onChange={(e) =>
-                          setPlanned(p.id, Number(e.target.value.replace(",", ".")) || 0)
-                        }
-                        inputMode="decimal"
                       />
                     </TableCell>
                     <TableCell className="num text-right">{formatQty(future, p.unit)}</TableCell>
@@ -170,7 +279,9 @@ function SugestoesPage() {
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
-                    Nenhum produto precisa de reposição no momento.
+                    {showAllStock
+                      ? "Nenhum produto encontrado para os filtros selecionados."
+                      : "Nenhum produto precisa de reposição no momento. Ative 'Exibir estoque completo' para visualizar todos os itens."}
                   </TableCell>
                 </TableRow>
               )}
@@ -179,7 +290,9 @@ function SugestoesPage() {
         </div>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        Os pedidos são criados agrupando os produtos selecionados por fornecedor.
+        Os pedidos são criados agrupando os produtos selecionados por fornecedor. Se desejar enviar
+        um produto com quantidade 0 para confirmação ao fornecedor, mantenha o item marcado com 0 em
+        &quot;Quero Comprar&quot;.
       </p>
     </div>
   );

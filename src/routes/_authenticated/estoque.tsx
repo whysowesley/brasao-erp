@@ -4,6 +4,7 @@ import { ArrowUpDown, Pencil, Plus, Search, Trash2, Upload } from "lucide-react"
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/PageHeader";
+import { PlanInput } from "@/components/PlanInput";
 import { ProductDialog } from "@/components/ProductDialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
@@ -356,13 +357,10 @@ function EstoquePage() {
                       {p.suggestedPurchase > 0 ? formatQty(p.suggestedPurchase, p.unit) : "—"}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Input
-                        value={String(buyQty(p))}
-                        onChange={(e) =>
-                          setPlanned(p.id, Number(e.target.value.replace(",", ".")) || 0)
-                        }
+                      <PlanInput
+                        value={buyQty(p)}
+                        onChange={(val) => setPlanned(p.id, val)}
                         className="num ml-auto h-8 w-24 text-right"
-                        inputMode="decimal"
                       />
                     </TableCell>
                     <TableCell className="num text-right font-semibold">

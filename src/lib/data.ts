@@ -358,7 +358,20 @@ export function useOrders() {
   return useQuery({
     queryKey: ["orders"],
     queryFn: async (): Promise<PurchaseOrderRow[]> => {
-      const snap = await getDocs(collection(db, "purchase_orders"));
+      const [snap, productsSnap] = await Promise.all([
+        getDocs(collection(db, "purchase_orders")),
+        getDocs(collection(db, "products")),
+      ]);
+
+      const productMap = new Map<string, { description: string; unit: string }>();
+      productsSnap.docs.forEach((pDoc) => {
+        const pData = pDoc.data();
+        productMap.set(pDoc.id, {
+          description: pData["description"] || "",
+          unit: pData["unit"] || "UN",
+        });
+      });
+
       const items: PurchaseOrderRow[] = snap.docs.map((d) => {
         const data = d.data();
         const createdDate = data["created_at"]?.toDate
@@ -379,19 +392,35 @@ export function useOrders() {
           suppliers: data["supplier_name"]
             ? { name: data["supplier_name"] }
             : data["suppliers"] || null,
-          purchase_order_items: rawItems.map((it: Record<string, unknown>, idx: number) => ({
-            id: (it["id"] as string) || `${d.id}_${idx}`,
-            product_id: (it["product_id"] as string) || "",
-            quantity: Number(it["quantity"]) || 0,
-            unit: (it["unit"] as string) || "UN",
-            notes: (it["notes"] as string) || null,
-            products: it["product_description"]
-              ? {
-                  description: it["product_description"] as string,
-                  unit: (it["unit"] as string) || "UN",
-                }
-              : (it["products"] as { description: string; unit: string }) || null,
-          })),
+          purchase_order_items: rawItems.map((it: Record<string, unknown>, idx: number) => {
+            const pId = (it["product_id"] as string) || "";
+            const matched = productMap.get(pId);
+            const desc =
+              (it["product_description"] as string) ||
+              (it["description"] as string) ||
+              (it["product_name"] as string) ||
+              (it["name"] as string) ||
+              (it["products"] as { description?: string })?.description ||
+              matched?.description ||
+              "Produto";
+            const unit =
+              (it["unit"] as string) ||
+              (it["products"] as { unit?: string })?.unit ||
+              matched?.unit ||
+              "UN";
+
+            return {
+              id: (it["id"] as string) || `${d.id}_${idx}`,
+              product_id: pId,
+              quantity: Number(it["quantity"]) || 0,
+              unit: unit,
+              notes: (it["notes"] as string) || null,
+              products: {
+                description: desc,
+                unit: unit,
+              },
+            };
+          }),
         };
       });
       items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -404,7 +433,20 @@ export function useCounts() {
   return useQuery({
     queryKey: ["counts"],
     queryFn: async (): Promise<StockCountRow[]> => {
-      const snap = await getDocs(collection(db, "stock_counts"));
+      const [snap, productsSnap] = await Promise.all([
+        getDocs(collection(db, "stock_counts")),
+        getDocs(collection(db, "products")),
+      ]);
+
+      const productMap = new Map<string, { description: string; unit: string }>();
+      productsSnap.docs.forEach((pDoc) => {
+        const pData = pDoc.data();
+        productMap.set(pDoc.id, {
+          description: pData["description"] || "",
+          unit: pData["unit"] || "UN",
+        });
+      });
+
       const items: StockCountRow[] = snap.docs.map((d) => {
         const data = d.data();
         const countedDate = data["counted_at"]?.toDate
@@ -416,19 +458,35 @@ export function useCounts() {
           user_name: data["user_name"] || "Administrador",
           notes: data["notes"] || null,
           counted_at: countedDate,
-          stock_count_items: rawItems.map((it: Record<string, unknown>, idx: number) => ({
-            id: (it["id"] as string) || `${d.id}_${idx}`,
-            product_id: (it["product_id"] as string) || "",
-            expected_quantity: Number(it["expected_quantity"]) || 0,
-            counted_quantity: Number(it["counted_quantity"]) || 0,
-            difference: Number(it["difference"]) || 0,
-            products: it["product_description"]
-              ? {
-                  description: it["product_description"] as string,
-                  unit: (it["unit"] as string) || "UN",
-                }
-              : (it["products"] as { description: string; unit: string }) || null,
-          })),
+          stock_count_items: rawItems.map((it: Record<string, unknown>, idx: number) => {
+            const pId = (it["product_id"] as string) || "";
+            const matched = productMap.get(pId);
+            const desc =
+              (it["product_description"] as string) ||
+              (it["description"] as string) ||
+              (it["product_name"] as string) ||
+              (it["name"] as string) ||
+              (it["products"] as { description?: string })?.description ||
+              matched?.description ||
+              "Produto";
+            const unit =
+              (it["unit"] as string) ||
+              (it["products"] as { unit?: string })?.unit ||
+              matched?.unit ||
+              "UN";
+
+            return {
+              id: (it["id"] as string) || `${d.id}_${idx}`,
+              product_id: pId,
+              expected_quantity: Number(it["expected_quantity"]) || 0,
+              counted_quantity: Number(it["counted_quantity"]) || 0,
+              difference: Number(it["difference"]) || 0,
+              products: {
+                description: desc,
+                unit: unit,
+              },
+            };
+          }),
         };
       });
       items.sort((a, b) => new Date(b.counted_at).getTime() - new Date(a.counted_at).getTime());
@@ -732,7 +790,12 @@ export async function recordStockCount(
 export async function createOrdersFromSuggestions(
   groups: Array<{
     supplierId: string | null;
-    items: Array<{ productId: string; quantity: number; unit: string }>;
+    items: Array<{
+      productId: string;
+      quantity: number;
+      unit: string;
+      description?: string;
+    }>;
   }>,
 ) {
   for (const group of groups) {
@@ -751,6 +814,7 @@ export async function createOrdersFromSuggestions(
       id: crypto.randomUUID(),
       order_id: orderDocRef.id,
       product_id: it.productId,
+      product_description: it.description || "",
       quantity: it.quantity,
       unit: it.unit,
     }));

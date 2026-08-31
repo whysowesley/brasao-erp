@@ -4,6 +4,7 @@ import { Save, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/PageHeader";
+import { PlanInput } from "@/components/PlanInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -160,13 +161,10 @@ function ContagensPage() {
                       {diff === null ? "—" : `${diff > 0 ? "+" : ""}${formatQty(diff, p.unit)}`}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Input
+                      <PlanInput
                         className="num ml-auto h-8 w-24 text-right"
-                        inputMode="decimal"
-                        value={String(plan[p.id] ?? p.suggestedPurchase)}
-                        onChange={(e) =>
-                          setPlanned(p.id, Number(e.target.value.replace(",", ".")) || 0)
-                        }
+                        value={plan[p.id] ?? p.suggestedPurchase}
+                        onChange={(val) => setPlanned(p.id, val)}
                       />
                     </TableCell>
                   </TableRow>

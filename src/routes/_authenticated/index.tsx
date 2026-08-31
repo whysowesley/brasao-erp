@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { PageHeader, StatCard } from "@/components/PageHeader";
+import { PlanInput } from "@/components/PlanInput";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -475,13 +476,10 @@ function SupplierFocus({ products }: { products: Products | undefined }) {
                     {formatQty(p.suggestedPurchase, p.unit)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Input
+                    <PlanInput
                       className="num ml-auto h-8 w-24 text-right"
-                      inputMode="decimal"
-                      value={String(qty)}
-                      onChange={(e) =>
-                        setPlanned(p.id, Number(e.target.value.replace(",", ".")) || 0)
-                      }
+                      value={qty}
+                      onChange={(val) => setPlanned(p.id, val)}
                     />
                   </TableCell>
                   <TableCell className="num text-right font-semibold">
