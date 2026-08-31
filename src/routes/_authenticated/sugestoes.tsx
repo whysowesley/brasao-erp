@@ -233,9 +233,10 @@ function SugestoesPage() {
             </TableHeader>
             <TableBody>
               {rows.map((p) => {
+                const plannedValue = plan[p.id];
                 const wanted =
-                  plan[p.id] !== undefined
-                    ? plan[p.id]
+                  plannedValue !== undefined
+                    ? plannedValue
                     : p.suggestedPurchase > 0
                       ? p.suggestedPurchase
                       : 0;

@@ -310,8 +310,9 @@ export function ProductDialog({
           avg_weekly_consumption: num(form.avg_weekly_consumption),
           daily_consumption_mode: consumptionMode,
           daily_consumption: dailyObj,
-          constant_daily_consumption:
-            consumptionMode === "constant" ? num(constantDaily) : undefined,
+          ...(consumptionMode === "constant"
+            ? { constant_daily_consumption: num(constantDaily) }
+            : {}),
           min_stock: num(form.min_stock),
           desired_stock: num(form.desired_stock),
           safety_stock: num(form.safety_stock),

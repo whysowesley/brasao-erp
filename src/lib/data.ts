@@ -124,12 +124,13 @@ export function useProducts() {
           current_stock: Number(d["current_stock"]) || 0,
           avg_weekly_consumption: Number(d["avg_weekly_consumption"]) || 0,
           daily_consumption_mode: d["daily_consumption_mode"] ?? "constant",
-          daily_consumption: d["daily_consumption"] ?? undefined,
-          constant_daily_consumption:
-            d["constant_daily_consumption"] !== undefined &&
-            d["constant_daily_consumption"] !== null
-              ? Number(d["constant_daily_consumption"])
-              : undefined,
+          ...(d["daily_consumption"] !== undefined && d["daily_consumption"] !== null
+            ? { daily_consumption: d["daily_consumption"] as DailyConsumption }
+            : {}),
+          ...(d["constant_daily_consumption"] !== undefined &&
+          d["constant_daily_consumption"] !== null
+            ? { constant_daily_consumption: Number(d["constant_daily_consumption"]) }
+            : {}),
           min_stock: Number(d["min_stock"]) || 0,
           desired_stock: Number(d["desired_stock"]) || 0,
           coverage_weeks:
@@ -181,11 +182,13 @@ export function useProduct(id: string) {
         current_stock: Number(d["current_stock"]) || 0,
         avg_weekly_consumption: Number(d["avg_weekly_consumption"]) || 0,
         daily_consumption_mode: d["daily_consumption_mode"] ?? "constant",
-        daily_consumption: d["daily_consumption"] ?? undefined,
-        constant_daily_consumption:
-          d["constant_daily_consumption"] !== undefined && d["constant_daily_consumption"] !== null
-            ? Number(d["constant_daily_consumption"])
-            : undefined,
+        ...(d["daily_consumption"] !== undefined && d["daily_consumption"] !== null
+          ? { daily_consumption: d["daily_consumption"] as DailyConsumption }
+          : {}),
+        ...(d["constant_daily_consumption"] !== undefined &&
+        d["constant_daily_consumption"] !== null
+          ? { constant_daily_consumption: Number(d["constant_daily_consumption"]) }
+          : {}),
         min_stock: Number(d["min_stock"]) || 0,
         desired_stock: Number(d["desired_stock"]) || 0,
         coverage_weeks:
@@ -611,10 +614,10 @@ export async function updateProductConsumption(
     updated_at: serverTimestamp(),
   };
   if (dailyConsumption) {
-    data.daily_consumption = dailyConsumption;
+    data["daily_consumption"] = dailyConsumption;
   }
   if (mode) {
-    data.daily_consumption_mode = mode;
+    data["daily_consumption_mode"] = mode;
   }
   await updateDoc(productRef, data);
 }

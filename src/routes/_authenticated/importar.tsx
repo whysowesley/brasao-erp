@@ -375,18 +375,18 @@ function ImportarPage() {
           };
 
           if (rawCode !== null) {
-            updatePayload.code = rawCode;
+            updatePayload["code"] = rawCode;
           }
           if (supplierId) {
-            updatePayload.supplier_id = supplierId;
-            updatePayload.supplier_name = supplierName;
+            updatePayload["supplier_id"] = supplierId;
+            updatePayload["supplier_name"] = supplierName;
           }
           if (categoryId) {
-            updatePayload.category_id = categoryId;
-            updatePayload.category_name = categoryName;
+            updatePayload["category_id"] = categoryId;
+            updatePayload["category_name"] = categoryName;
           }
           if (rawCons > 0) {
-            updatePayload.avg_weekly_consumption = rawCons;
+            updatePayload["avg_weekly_consumption"] = rawCons;
           }
 
           await updateDoc(doc(db, "products", existingProd.id), updatePayload);
