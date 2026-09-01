@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PlanInput } from "@/components/PlanInput";
 import { ProductDialog } from "@/components/ProductDialog";
 import { StatusBadge } from "@/components/StatusBadge";
+import { WhatsAppStockImportDialog } from "@/components/WhatsAppStockImportDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -197,12 +198,13 @@ function EstoquePage() {
         title="Controle de Estoque"
         description="Todos os produtos, com cálculo automático de compra sugerida e estoque futuro."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {Object.keys(plan).length > 0 && (
               <Button variant="outline" onClick={() => clearPlan()} className="text-xs sm:text-sm">
                 Limpar plano
               </Button>
             )}
+            <WhatsAppStockImportDialog />
             <Link to="/importar">
               <Button variant="outline" className="gap-1.5 text-xs sm:text-sm">
                 <Upload className="h-4 w-4" />

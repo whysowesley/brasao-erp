@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { PageHeader } from "@/components/PageHeader";
 import { PlanInput } from "@/components/PlanInput";
+import { WhatsAppStockImportDialog } from "@/components/WhatsAppStockImportDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -96,9 +97,16 @@ function ContagensPage() {
         title="Nova Contagem"
         description="Informe a quantidade encontrada. A diferença é calculada e registrada no histórico."
         actions={
-          <Button onClick={confirm} disabled={saving || filled.length === 0}>
-            <Save className="h-4 w-4" /> Confirmar contagem ({filled.length})
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <WhatsAppStockImportDialog
+              onApplyToTable={(newValues) => {
+                setValues((prev) => ({ ...prev, ...newValues }));
+              }}
+            />
+            <Button onClick={confirm} disabled={saving || filled.length === 0}>
+              <Save className="h-4 w-4" /> Confirmar contagem ({filled.length})
+            </Button>
+          </div>
         }
       />
 
