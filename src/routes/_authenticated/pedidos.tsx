@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { PackageCheck, Trash2 } from "lucide-react";
+import { FileText, PackageCheck, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/PageHeader";
+import { PurchaseOrderPrintDialog } from "@/components/PurchaseOrderPrintDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -202,13 +203,14 @@ function PedidosPage() {
                     {formatDateTime(o.created_at)}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <PurchaseOrderPrintDialog order={o} productMap={productMap} />
                   <Select
                     value={o.status}
                     onValueChange={(v) => changeStatus(o.id, v, items)}
                     disabled={busy === o.id}
                   >
-                    <SelectTrigger className="w-52">
+                    <SelectTrigger className="w-48">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -224,6 +226,7 @@ function PedidosPage() {
                       variant="outline"
                       disabled={busy === o.id}
                       onClick={() => changeStatus(o.id, "recebido", items)}
+                      className="text-xs"
                     >
                       <PackageCheck className="h-4 w-4" /> Registrar recebimento
                     </Button>

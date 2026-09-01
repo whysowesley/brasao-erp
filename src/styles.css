@@ -167,3 +167,47 @@
   font-weight: 600;
   letter-spacing: -0.02em;
 }
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Ocultar elementos fora do documento a ser impresso */
+  header,
+  nav,
+  aside,
+  button,
+  [data-radix-portal] > div:not(:has(#printable-purchase-order)),
+  [role="dialog"] > button {
+    display: none !important;
+  }
+
+  .printable-purchase-order,
+  #printable-purchase-order {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    zoom: 100% !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+  }
+
+  [role="dialog"] {
+    position: static !important;
+    transform: none !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
+
