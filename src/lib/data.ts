@@ -384,22 +384,46 @@ export function useOrders() {
         return da - dbTime;
       });
 
-      // Mapear números já atribuídos e preencher os ausentes
+      // Mapear números válidos já atribuídos e preencher ausentes ou duplicados.
       const assignedNumbers = new Map<string, number>();
+      const usedNumbers = new Set<number>();
       let maxKnown = 0;
       sortedAsc.forEach((d) => {
         const num = Number(d.data()["number"]);
-        if (Number.isFinite(num) && num > 0) {
+        if (Number.isInteger(num) && num > 0 && !usedNumbers.has(num)) {
           assignedNumbers.set(d.id, num);
+          usedNumbers.add(num);
           if (num > maxKnown) maxKnown = num;
         }
       });
       sortedAsc.forEach((d) => {
         if (!assignedNumbers.has(d.id)) {
-          maxKnown++;
+          do {
+            maxKnown++;
+          } while (usedNumbers.has(maxKnown));
           assignedNumbers.set(d.id, maxKnown);
+          usedNumbers.add(maxKnown);
         }
       });
+
+      // Persistir a migração para que o número não mude entre recarregamentos e
+      // para que pedidos novos nunca reutilizem o número de um registro antigo.
+      const numberUpdates = sortedAsc.filter((d) => {
+        const assigned = assignedNumbers.get(d.id);
+        const stored = Number(d.data()["number"]);
+        return assigned !== undefined && (!Number.isInteger(stored) || stored !== assigned);
+      });
+
+      for (let start = 0; start < numberUpdates.length; start += 400) {
+        const batch = writeBatch(db);
+        numberUpdates.slice(start, start + 400).forEach((d) => {
+          batch.update(d.ref, {
+            number: assignedNumbers.get(d.id),
+            updated_at: serverTimestamp(),
+          });
+        });
+        await batch.commit();
+      }
 
       const items: PurchaseOrderRow[] = snap.docs.map((d) => {
         const data = d.data();
@@ -781,39 +805,97 @@ export async function recordStockCount(
   notes: string | null,
   items: Array<{ productId: string; expected: number; counted: number }>,
 ) {
+  if (items.length === 0) {
+    throw new Error("Inclua ao menos um produto na contagem.");
+  }
+  if (items.length > 240) {
+    throw new Error("Uma contagem pode atualizar no máximo 240 produtos por vez.");
+  }
+
+  const uniqueProductIds = new Set<string>();
+  items.forEach((item) => {
+    if (uniqueProductIds.has(item.productId)) {
+      throw new Error("A contagem contém o mesmo produto mais de uma vez.");
+    }
+    if (!Number.isFinite(item.expected) || !Number.isFinite(item.counted) || item.counted < 0) {
+      throw new Error("A contagem contém uma quantidade inválida.");
+    }
+    uniqueProductIds.add(item.productId);
+  });
+
   const countDocRef = doc(collection(db, "stock_counts"));
   const countId = countDocRef.id;
+  const productRefs = items.map((item) => doc(db, "products", item.productId));
+  const movementRefs = items.map(() => doc(collection(db, "stock_movements")));
 
-  const countItems = [];
+  await runTransaction(db, async (transaction) => {
+    // O Firestore exige que todas as leituras ocorram antes da primeira escrita.
+    const productSnapshots = await Promise.all(
+      productRefs.map((productRef) => transaction.get(productRef)),
+    );
 
-  for (const item of items) {
-    countItems.push({
+    const productStates = items.map((item, index) => {
+      const productRef = productRefs[index];
+      const productSnap = productSnapshots[index];
+      const movementRef = movementRefs[index];
+
+      if (!productRef || !productSnap || !movementRef || !productSnap.exists()) {
+        throw new Error(`Produto não encontrado para contagem: ${item.productId}`);
+      }
+
+      const productData = productSnap.data();
+      const before = Number(productData["current_stock"]) || 0;
+      if (before !== item.expected) {
+        const description = productData["description"] || item.productId;
+        throw new Error(
+          `O estoque de "${description}" mudou enquanto a contagem estava aberta. Atualize a página e confira novamente.`,
+        );
+      }
+
+      return { item, productRef, movementRef, productData, before };
+    });
+
+    const countItems = productStates.map(({ item, before }) => ({
       id: crypto.randomUUID(),
       count_id: countId,
       product_id: item.productId,
-      expected_quantity: item.expected,
+      expected_quantity: before,
       counted_quantity: item.counted,
-      difference: item.counted - item.expected,
+      difference: item.counted - before,
+    }));
+
+    productStates.forEach(({ item, productRef, movementRef, productData, before }) => {
+      const after = item.counted;
+
+      if (after !== before) {
+        transaction.update(productRef, {
+          current_stock: after,
+          updated_at: serverTimestamp(),
+        });
+        transaction.set(movementRef, {
+          product_id: item.productId,
+          product_description: productData["description"] || "",
+          product_unit: productData["unit"] || "UN",
+          type: "contagem",
+          quantity_before: before,
+          quantity_change: after - before,
+          quantity_after: after,
+          user_name: CURRENT_USER,
+          notes: `Contagem de estoque (diferença ${after - before})`,
+          reference_type: "stock_count",
+          reference_id: countId,
+          created_at: serverTimestamp(),
+        });
+      }
     });
 
-    if (item.counted !== item.expected) {
-      await applyMovement({
-        productId: item.productId,
-        type: "contagem",
-        newQuantity: item.counted,
-        notes: `Contagem de estoque (diferença ${item.counted - item.expected})`,
-        referenceType: "stock_count",
-        referenceId: countId,
-      });
-    }
-  }
-
-  await setDoc(countDocRef, {
-    user_name: CURRENT_USER,
-    notes: notes?.trim() || null,
-    items: countItems,
-    counted_at: new Date().toISOString(),
-    created_at: serverTimestamp(),
+    transaction.set(countDocRef, {
+      user_name: CURRENT_USER,
+      notes: notes?.trim() || null,
+      items: countItems,
+      counted_at: new Date().toISOString(),
+      created_at: serverTimestamp(),
+    });
   });
 }
 
@@ -828,55 +910,81 @@ export async function createOrdersFromSuggestions(
     }>;
   }>,
 ) {
-  // Buscar o maior número de pedido atual para continuar a sequência numérica
-  let nextNumber = 1;
-  try {
-    const existingOrdersSnap = await getDocs(collection(db, "purchase_orders"));
-    existingOrdersSnap.docs.forEach((docSnap) => {
-      const num = Number(docSnap.data()["number"]);
-      if (Number.isFinite(num) && num >= nextNumber) {
-        nextNumber = num + 1;
-      }
-    });
-  } catch {
-    // se falhar, utiliza 1 como base
-  }
+  if (groups.length === 0) return;
 
-  for (const group of groups) {
-    let supplierName: string | null = null;
-    if (group.supplierId) {
-      try {
-        const supSnap = await getDoc(doc(db, "suppliers", group.supplierId));
-        if (supSnap.exists()) supplierName = supSnap.data()["name"] || null;
-      } catch {
-        // ignora
-      }
+  // Reservar também os números que serão persistidos para pedidos antigos.
+  const existingOrdersSnap = await getDocs(collection(db, "purchase_orders"));
+  const usedNumbers = new Set<number>();
+  let maxExistingNumber = 0;
+  let ordersWithoutUniqueNumber = 0;
+  existingOrdersSnap.docs.forEach((orderDoc) => {
+    const number = Number(orderDoc.data()["number"]);
+    if (Number.isInteger(number) && number > 0 && !usedNumbers.has(number)) {
+      usedNumbers.add(number);
+      maxExistingNumber = Math.max(maxExistingNumber, number);
+    } else {
+      ordersWithoutUniqueNumber++;
     }
+  });
+  const legacyMaximum = maxExistingNumber + ordersWithoutUniqueNumber;
 
-    const orderDocRef = doc(collection(db, "purchase_orders"));
-    const orderItems = group.items.map((it) => ({
-      id: crypto.randomUUID(),
-      order_id: orderDocRef.id,
-      product_id: it.productId,
-      product_description: it.description || "",
-      quantity: it.quantity,
-      unit: it.unit,
-    }));
+  const preparedOrders = await Promise.all(
+    groups.map(async (group) => {
+      let supplierName: string | null = null;
+      if (group.supplierId) {
+        try {
+          const supSnap = await getDoc(doc(db, "suppliers", group.supplierId));
+          if (supSnap.exists()) supplierName = supSnap.data()["name"] || null;
+        } catch {
+          // ignora
+        }
+      }
 
-    const currentOrderNum = nextNumber++;
+      const orderDocRef = doc(collection(db, "purchase_orders"));
+      const orderItems = group.items.map((it) => ({
+        id: crypto.randomUUID(),
+        order_id: orderDocRef.id,
+        product_id: it.productId,
+        product_description: it.description || "",
+        quantity: it.quantity,
+        unit: it.unit,
+      }));
 
-    await setDoc(orderDocRef, {
-      number: currentOrderNum,
-      supplier_id: group.supplierId,
-      supplier_name: supplierName,
-      status: "rascunho",
-      user_name: CURRENT_USER,
-      notes: "Gerado a partir das sugestões de compra",
-      items: orderItems,
-      created_at: serverTimestamp(),
-      updated_at: serverTimestamp(),
+      return { group, supplierName, orderDocRef, orderItems };
+    }),
+  );
+
+  const counterRef = doc(db, "system_counters", "purchase_orders");
+  await runTransaction(db, async (transaction) => {
+    const counterSnap = await transaction.get(counterRef);
+    const storedLastNumber = Number(counterSnap.data()?.["last_number"]);
+    const safeStoredLastNumber =
+      Number.isInteger(storedLastNumber) && storedLastNumber > 0 ? storedLastNumber : 0;
+    const firstNumber = Math.max(legacyMaximum, safeStoredLastNumber) + 1;
+
+    transaction.set(
+      counterRef,
+      {
+        last_number: firstNumber + preparedOrders.length - 1,
+        updated_at: serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    preparedOrders.forEach(({ group, supplierName, orderDocRef, orderItems }, index) => {
+      transaction.set(orderDocRef, {
+        number: firstNumber + index,
+        supplier_id: group.supplierId,
+        supplier_name: supplierName,
+        status: "rascunho",
+        user_name: CURRENT_USER,
+        notes: "Gerado a partir das sugestões de compra",
+        items: orderItems,
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      });
     });
-  }
+  });
 }
 
 /* -------------------------------- movements -------------------------------- */

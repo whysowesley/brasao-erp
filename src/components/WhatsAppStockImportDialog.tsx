@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  AlertTriangle,
   Check,
   CheckCircle2,
   Copy,
@@ -44,7 +45,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { recordStockCount, useInvalidateAll, useProducts } from "@/lib/data";
 import { formatQty } from "@/lib/inventory";
-import { parseWhatsAppStockMessage, type ParsedStockItem } from "@/lib/whatsapp-stock-parser";
+import {
+  parseWhatsAppStockMessage,
+  unitsAreCompatible,
+  type ParsedStockItem,
+} from "@/lib/whatsapp-stock-parser";
 
 const SAMPLE_WHATSAPP_TEXT = `ABÓBORA: 2 PORÇÃO
 ALFACE: 1 UND
@@ -74,6 +79,15 @@ interface WhatsAppStockImportDialogProps {
   triggerButton?: React.ReactNode;
   onApplyToTable?: (values: Record<string, string>) => void;
   defaultOpen?: boolean;
+}
+
+function isReadyForImport(item: ParsedStockItem, duplicateProductIds: Set<string>): boolean {
+  return Boolean(
+    item.selectedProductId &&
+    item.matchedProduct &&
+    unitsAreCompatible(item.detectedUnit, item.matchedProduct.unit) &&
+    !duplicateProductIds.has(item.selectedProductId),
+  );
 }
 
 export function WhatsAppStockImportDialog({
@@ -146,55 +160,93 @@ export function WhatsAppStockImportDialog({
     setItems((prev) => prev.filter((item) => item.id !== itemId));
   };
 
-  // Estatísticas da identificação
+  const duplicateProductIds = useMemo(() => {
+    const occurrences = new Map<string, number>();
+
+    items.forEach((item) => {
+      if (item.selectedProductId && item.matchedProduct) {
+        occurrences.set(item.selectedProductId, (occurrences.get(item.selectedProductId) ?? 0) + 1);
+      }
+    });
+
+    return new Set(
+      [...occurrences.entries()].filter(([, count]) => count > 1).map(([productId]) => productId),
+    );
+  }, [items]);
+
+  // Estatísticas da identificação e da validação
   const stats = useMemo(() => {
     const total = items.length;
-    const mapped = items.filter((it) => it.selectedProductId && it.matchedProduct).length;
+    const mapped = items.filter((item) => isReadyForImport(item, duplicateProductIds)).length;
     const unmapped = total - mapped;
     const exact = items.filter((it) => it.matchType === "exact").length;
     const high = items.filter((it) => it.matchType === "high").length;
     const fuzzy = items.filter((it) => it.matchType === "fuzzy").length;
+    const unitMismatches = items.filter(
+      (item) =>
+        item.selectedProductId &&
+        item.matchedProduct &&
+        !unitsAreCompatible(item.detectedUnit, item.matchedProduct.unit),
+    ).length;
+    const duplicates = items.filter(
+      (item) => item.selectedProductId && duplicateProductIds.has(item.selectedProductId),
+    ).length;
 
-    return { total, mapped, unmapped, exact, high, fuzzy };
-  }, [items]);
+    return { total, mapped, unmapped, exact, high, fuzzy, unitMismatches, duplicates };
+  }, [duplicateProductIds, items]);
 
   // Lista filtrada para visualização
   const filteredItems = useMemo(() => {
     if (filterMode === "mapped") {
-      return items.filter((it) => it.selectedProductId && it.matchedProduct);
+      return items.filter((item) => isReadyForImport(item, duplicateProductIds));
     }
     if (filterMode === "unmapped") {
-      return items.filter((it) => !it.selectedProductId || !it.matchedProduct);
+      return items.filter((item) => !isReadyForImport(item, duplicateProductIds));
     }
     return items;
-  }, [items, filterMode]);
+  }, [duplicateProductIds, items, filterMode]);
 
   // Ação 1: Preencher na tabela da página de contagens
   const handleFillTable = () => {
     if (!onApplyToTable) return;
-    const tableValues: Record<string, string> = {};
-    let count = 0;
+    if (stats.unitMismatches > 0 || stats.duplicates > 0) {
+      toast.error("Corrija as unidades divergentes e os produtos duplicados antes de continuar.");
+      return;
+    }
+    if (stats.unmapped > 0) {
+      toast.error("Vincule ou remova todos os itens pendentes antes de continuar.");
+      return;
+    }
 
-    items.forEach((item) => {
-      if (item.selectedProductId && item.matchedProduct) {
-        tableValues[item.selectedProductId] = String(item.parsedQty);
-        count++;
-      }
+    const tableValues: Record<string, string> = {};
+    const validItems = items.filter((item) => isReadyForImport(item, duplicateProductIds));
+
+    validItems.forEach((item) => {
+      tableValues[item.selectedProductId!] = String(item.parsedQty);
     });
 
-    if (count === 0) {
+    if (validItems.length === 0) {
       toast.error("Nenhum produto correspondente para preencher na tabela.");
       return;
     }
 
     onApplyToTable(tableValues);
-    toast.success(`${count} quantidade(s) preenchida(s) na tabela de contagem.`);
+    toast.success(`${validItems.length} quantidade(s) preenchida(s) na tabela de contagem.`);
     setOpen(false);
   };
 
   // Ação 2: Atualizar estoque no banco de dados e gravar histórico de contagem
   const handleDirectUpdateStock = async () => {
-    const validItems = items.filter((it) => it.selectedProductId && it.matchedProduct);
+    if (stats.unitMismatches > 0 || stats.duplicates > 0) {
+      toast.error("Corrija as unidades divergentes e os produtos duplicados antes de continuar.");
+      return;
+    }
+    if (stats.unmapped > 0) {
+      toast.error("Vincule ou remova todos os itens pendentes antes de continuar.");
+      return;
+    }
+
+    const validItems = items.filter((item) => isReadyForImport(item, duplicateProductIds));
 
     if (validItems.length === 0) {
       toast.error("Nenhum produto válido mapeado para atualizar.");
@@ -327,7 +379,25 @@ export function WhatsAppStockImportDialog({
                       className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
                     >
                       <HelpCircle className="mr-1 h-3 w-3" />
-                      {stats.unmapped} não identificado(s)
+                      {stats.unmapped} pendente(s)
+                    </Badge>
+                  )}
+                  {stats.unitMismatches > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="border-destructive/30 bg-destructive/10 text-destructive"
+                    >
+                      <AlertTriangle className="mr-1 h-3 w-3" />
+                      {stats.unitMismatches} unidade(s) divergente(s)
+                    </Badge>
+                  )}
+                  {stats.duplicates > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="border-destructive/30 bg-destructive/10 text-destructive"
+                    >
+                      <AlertTriangle className="mr-1 h-3 w-3" />
+                      {stats.duplicates} linha(s) duplicada(s)
                     </Badge>
                   )}
                   <span className="text-xs text-muted-foreground">
@@ -398,14 +468,28 @@ export function WhatsAppStockImportDialog({
                     </TableHeader>
                     <TableBody>
                       {filteredItems.map((item) => {
-                        const product = item.matchedProduct;
+                        const product = item.selectedProductId ? item.matchedProduct : null;
+                        const suggestedProduct =
+                          item.matchType !== "exact" && !item.selectedProductId
+                            ? item.matchedProduct
+                            : null;
+                        const hasUnitMismatch = Boolean(
+                          product && !unitsAreCompatible(item.detectedUnit, product.unit),
+                        );
+                        const isDuplicate = Boolean(
+                          item.selectedProductId && duplicateProductIds.has(item.selectedProductId),
+                        );
                         const currentStock = product ? Number(product.current_stock) || 0 : null;
                         const diff = currentStock !== null ? item.parsedQty - currentStock : null;
 
                         return (
                           <TableRow
                             key={item.id}
-                            className={!item.matchedProduct ? "bg-amber-500/5" : undefined}
+                            className={
+                              !item.selectedProductId || hasUnitMismatch || isDuplicate
+                                ? "bg-amber-500/5"
+                                : undefined
+                            }
                           >
                             <TableCell className="py-2 font-mono text-xs font-medium">
                               <span title={item.rawLine}>{item.rawName}</span>
@@ -466,7 +550,33 @@ export function WhatsAppStockImportDialog({
                                     Aproximada
                                   </Badge>
                                 )}
+                                {hasUnitMismatch && (
+                                  <Badge
+                                    variant="outline"
+                                    className="h-5 shrink-0 border-destructive/30 bg-destructive/10 px-1.5 text-[10px] text-destructive"
+                                  >
+                                    Unidade divergente
+                                  </Badge>
+                                )}
+                                {isDuplicate && (
+                                  <Badge
+                                    variant="outline"
+                                    className="h-5 shrink-0 border-destructive/30 bg-destructive/10 px-1.5 text-[10px] text-destructive"
+                                  >
+                                    Duplicado
+                                  </Badge>
+                                )}
                               </div>
+                              {suggestedProduct && (
+                                <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-400">
+                                  Sugestão: {suggestedProduct.description}. Confirme no seletor.
+                                </p>
+                              )}
+                              {hasUnitMismatch && product && (
+                                <p className="mt-1 text-[10px] text-destructive">
+                                  A mensagem usa {item.detectedUnit}; o cadastro usa {product.unit}.
+                                </p>
+                              )}
                             </TableCell>
 
                             <TableCell className="py-2 text-right">

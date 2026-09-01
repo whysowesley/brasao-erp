@@ -26,6 +26,79 @@ export function normalizeString(str: string): string {
     .trim();
 }
 
+const UNIT_ALIASES: Record<string, string> = {
+  un: "UN",
+  und: "UN",
+  unid: "UN",
+  unidade: "UN",
+  unidades: "UN",
+  kg: "KG",
+  kgs: "KG",
+  quilo: "KG",
+  quilos: "KG",
+  quilograma: "KG",
+  quilogramas: "KG",
+  g: "G",
+  gr: "G",
+  grs: "G",
+  grama: "G",
+  gramas: "G",
+  cx: "CX",
+  caixa: "CX",
+  caixas: "CX",
+  sc: "SC",
+  saco: "SC",
+  sacos: "SC",
+  bdj: "BDJ",
+  bandeja: "BDJ",
+  bandejas: "BDJ",
+  porcao: "PORCAO",
+  porcoes: "PORCAO",
+  l: "L",
+  lt: "L",
+  litro: "L",
+  litros: "L",
+  ml: "ML",
+  mililitro: "ML",
+  mililitros: "ML",
+  pct: "PCT",
+  pacote: "PCT",
+  pacotes: "PCT",
+};
+
+/**
+ * Normaliza abreviações de unidade sem converter quantidades.
+ * Unidades diferentes (por exemplo, G e KG) permanecem diferentes para evitar
+ * que uma contagem seja gravada em uma escala incorreta.
+ */
+export function normalizeUnit(unit: string | null | undefined): string | null {
+  if (!unit?.trim()) return null;
+
+  const normalized = normalizeString(unit);
+  if (!normalized) return null;
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  const aliases = tokens.map((token) => UNIT_ALIASES[token]);
+  const [firstAlias] = aliases;
+
+  if (firstAlias !== undefined && aliases.every((alias) => alias === firstAlias)) {
+    return firstAlias;
+  }
+
+  return normalized.toUpperCase();
+}
+
+export function unitsAreCompatible(
+  detectedUnit: string | null | undefined,
+  productUnit: string | null | undefined,
+): boolean {
+  const detected = normalizeUnit(detectedUnit);
+  if (detected === null) return true;
+
+  const product = normalizeUnit(productUnit);
+  return product !== null && detected === product;
+}
+
 /**
  * Limpa termos comuns que aparecem em nomes de produtos como unidades entre parênteses
  */
@@ -125,20 +198,29 @@ export function parseWhatsAppLine(line: string): {
   let rawName = "";
   let rawRight = "";
 
-  // Tentar encontrar delimitador comum (: ou = ou - ou —)
-  const delimiterMatch = cleaned.match(/^([^:=—-]+)[:=—-]\s*(.*)$/);
+  // Primeiro procurar delimitadores que também podem aparecer junto ao texto.
+  // O hífen só é delimitador quando está cercado por espaços, preservando nomes
+  // como "COCA-COLA: 5".
+  const delimiterMatch =
+    cleaned.match(/^([^:=—–]+)[:=—–]\s*(.*)$/) ?? cleaned.match(/^(.*?)\s+-\s+(.*)$/);
 
   if (delimiterMatch) {
-    rawName = delimiterMatch[1].trim();
-    rawRight = delimiterMatch[2].trim();
+    const [, matchedName, matchedRight] = delimiterMatch;
+    if (matchedName === undefined || matchedRight === undefined) return null;
+
+    rawName = matchedName.trim();
+    rawRight = matchedRight.trim();
   } else {
     // Se não tiver delimitador explícito, procurar por número no final da linha
     const trailingNumMatch = cleaned.match(
       /^(.*?)(?:[\s]+)(\d+(?:[.,]\d+)?)\s*([a-zA-ZçÇãÃõÕéÉíÍóÓúÚ/]+)?$/,
     );
     if (trailingNumMatch) {
-      rawName = trailingNumMatch[1].trim();
-      rawRight = `${trailingNumMatch[2]} ${trailingNumMatch[3] || ""}`.trim();
+      const [, matchedName, matchedQty, matchedUnit = ""] = trailingNumMatch;
+      if (matchedName === undefined || matchedQty === undefined) return null;
+
+      rawName = matchedName.trim();
+      rawRight = `${matchedQty} ${matchedUnit}`.trim();
     } else {
       // Linha sem número detectável
       return null;
@@ -155,6 +237,8 @@ export function parseWhatsAppLine(line: string): {
   if (!qtyMatch) return null;
 
   const numStr = qtyMatch[1];
+  if (numStr === undefined) return null;
+
   // Normalizar vírgula para ponto se houver
   const parsedQty = parseFloat(numStr.replace(",", "."));
   if (isNaN(parsedQty)) return null;
@@ -271,7 +355,9 @@ export function parseWhatsAppStockMessage(text: string, products: ProductRow[]):
       matchedProduct,
       matchScore,
       matchType,
-      selectedProductId: matchedProduct?.id || null,
+      // Alterações de estoque exigem confirmação manual para qualquer
+      // correspondência que não seja exata.
+      selectedProductId: matchType === "exact" ? (matchedProduct?.id ?? null) : null,
     });
   });
 
