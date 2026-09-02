@@ -16,6 +16,7 @@ import {
   collection,
   serverTimestamp,
   updateDoc,
+  deleteDoc,
   query,
   orderBy,
 } from "firebase/firestore";
@@ -30,6 +31,7 @@ export interface UserProfile {
   avatarUrl: string | null;
   approved: boolean;
   role: AppRole;
+  createdAt?: string | null;
 }
 
 export interface UserProfileRow {
@@ -50,15 +52,10 @@ export const ROLE_LABEL: Record<AppRole, string> = {
 };
 
 export const OWNER_EMAIL = "wesleyjunio197@gmail.com";
-const OWNER_ONLY_MESSAGE = "Acesso restrito ao proprietário do Brasão ERP.";
 
-function isOwnerUser(user: FirebaseUser): boolean {
-  return user.email?.trim().toLowerCase() === OWNER_EMAIL;
-}
-
-function ownerOnlyResult() {
-  const error = new Error(OWNER_ONLY_MESSAGE);
-  return { data: null, error, friendlyMessage: OWNER_ONLY_MESSAGE };
+export function isOwnerUser(user: FirebaseUser | null | undefined): boolean {
+  if (!user || !user.email) return false;
+  return user.email.trim().toLowerCase() === OWNER_EMAIL;
 }
 
 export function getFriendlyAuthErrorMessage(
@@ -84,7 +81,7 @@ export function getFriendlyAuthErrorMessage(
       return "E-mail ou senha incorretos. Verifique suas credenciais e tente novamente.";
 
     case "auth/email-already-in-use":
-      return "Este e-mail já está cadastrado. Faça login ou utilize outro endereço de e-mail.";
+      return "Este e-mail já está cadastrado. Faça login na aba 'Entrar' ou recupere sua senha.";
 
     case "auth/weak-password":
       return "A senha é muito fraca. Utilize pelo menos 6 caracteres com números ou símbolos.";
@@ -145,11 +142,6 @@ export function getAuthUserPromise(): Promise<FirebaseUser | null> {
 
 export async function getCurrentAuthUser(): Promise<FirebaseUser | null> {
   const user = auth.currentUser || (await getAuthUserPromise());
-  if (!user) return null;
-  if (!isOwnerUser(user)) {
-    await firebaseSignOut(auth);
-    return null;
-  }
   return user;
 }
 
@@ -162,19 +154,14 @@ export async function signInWithPasswordAuth(email: string, pass: string) {
     const cred = await signInWithEmailAndPassword(auth, email, pass);
     const user = cred.user;
 
-    if (!isOwnerUser(user)) {
-      await firebaseSignOut(auth);
-      return ownerOnlyResult();
-    }
-
     const userDocRef = doc(db, "users", user.uid);
     try {
       const userSnap = await getDoc(userDocRef);
 
       if (!userSnap.exists()) {
-        const isMasterEmail = isOwnerUser(user);
-        const role: AppRole = isMasterEmail ? "master" : "viewer";
-        const approved = isMasterEmail;
+        const isMasterOwner = isOwnerUser(user);
+        const role: AppRole = "master";
+        const approved = isMasterOwner;
 
         await setDoc(userDocRef, {
           email: user.email || "",
@@ -202,16 +189,13 @@ export async function signInWithPasswordAuth(email: string, pass: string) {
 
 export async function signUpWithPasswordAuth(email: string, pass: string, fullName?: string) {
   try {
-    if (email.trim().toLowerCase() !== OWNER_EMAIL) {
-      return ownerOnlyResult();
-    }
-
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
     const user = cred.user;
 
-    const isMasterEmail = isOwnerUser(user);
-    const role: AppRole = isMasterEmail ? "master" : "viewer";
-    const approved = isMasterEmail;
+    const isMasterOwner = isOwnerUser(user);
+    // Quem for autenticado e aprovado terá acesso master
+    const role: AppRole = "master";
+    const approved = isMasterOwner;
 
     try {
       await setDoc(doc(db, "users", user.uid), {
@@ -229,6 +213,7 @@ export async function signUpWithPasswordAuth(email: string, pass: string, fullNa
     return {
       data: {
         user,
+        approved,
         session: true,
       },
       error: null,
@@ -251,19 +236,14 @@ export async function signInWithGoogleAuth() {
     const cred = await signInWithPopup(auth, provider);
     const user = cred.user;
 
-    if (!isOwnerUser(user)) {
-      await firebaseSignOut(auth);
-      return ownerOnlyResult();
-    }
-
     const userDocRef = doc(db, "users", user.uid);
     try {
       const userSnap = await getDoc(userDocRef);
 
       if (!userSnap.exists()) {
-        const isMasterEmail = isOwnerUser(user);
-        const role: AppRole = isMasterEmail ? "master" : "viewer";
-        const approved = isMasterEmail;
+        const isMasterOwner = isOwnerUser(user);
+        const role: AppRole = "master";
+        const approved = isMasterOwner;
 
         await setDoc(userDocRef, {
           email: user.email || "",
@@ -301,7 +281,7 @@ export function useMe() {
       const user = await getCurrentAuthUser();
       if (!user) return null;
 
-      const isMasterEmail = isOwnerUser(user);
+      const isMasterOwner = isOwnerUser(user);
 
       try {
         const userDocRef = doc(db, "users", user.uid);
@@ -309,8 +289,8 @@ export function useMe() {
 
         if (userSnap.exists()) {
           const data = userSnap.data() as Record<string, unknown>;
-          const role = isMasterEmail ? "master" : (data["role"] as AppRole) || "viewer";
-          const approved = isMasterEmail ? true : Boolean(data["approved"]);
+          const role = isMasterOwner ? "master" : (data["role"] as AppRole) || "master";
+          const approved = isMasterOwner ? true : Boolean(data["approved"]);
 
           return {
             userId: user.uid,
@@ -331,8 +311,8 @@ export function useMe() {
           };
         }
 
-        const initialRole: AppRole = isMasterEmail ? "master" : "viewer";
-        const isApproved = isMasterEmail;
+        const initialRole: AppRole = "master";
+        const isApproved = isMasterOwner;
 
         const newProfileData = {
           email: user.email || "",
@@ -364,12 +344,12 @@ export function useMe() {
           email: user.email || "",
           fullName: user.displayName || user.email || "Usuário",
           avatarUrl: user.photoURL || null,
-          approved: true,
-          role: (isMasterEmail ? "master" : "viewer") as AppRole,
+          approved: isMasterOwner,
+          role: (isMasterOwner ? "master" : "viewer") as AppRole,
         };
       }
     },
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 30, // 30s cache for fast approval detection
   });
 }
 
@@ -391,9 +371,9 @@ export function useAuth() {
   const isAuthenticated = !!profile && !!auth.currentUser;
   const isApproved = profile ? profile.approved : false;
   const role = profile ? profile.role : null;
-  const isMaster = role === "master";
+  const isMaster = role === "master" || isOwnerUser(auth.currentUser);
   const isManager = role === "manager" || isMaster;
-  const canWrite = (role === "operator" || role === "editor" || isManager) && isApproved;
+  const canWrite = isApproved && (role === "operator" || role === "editor" || isManager);
 
   return {
     user: profile,
@@ -437,7 +417,7 @@ export async function fetchUsersList(): Promise<UserProfileRow[]> {
         full_name: (d["fullName"] as string) || (d["full_name"] as string) || null,
         approved: Boolean(d["approved"]),
         created_at: createdDate,
-        role: (d["role"] as AppRole) || "viewer",
+        role: (d["role"] as AppRole) || "master",
       };
     });
   } catch {
@@ -453,7 +433,7 @@ export async function fetchUsersList(): Promise<UserProfileRow[]> {
         full_name: (d["fullName"] as string) || (d["full_name"] as string) || null,
         approved: Boolean(d["approved"]),
         created_at: createdDate,
-        role: (d["role"] as AppRole) || "viewer",
+        role: (d["role"] as AppRole) || "master",
       };
     });
   }
@@ -463,6 +443,7 @@ export async function setUserApproval(userId: string, approved: boolean) {
   const userRef = doc(db, "users", userId);
   await updateDoc(userRef, {
     approved,
+    role: "master",
     updatedAt: serverTimestamp(),
   });
 }
@@ -473,4 +454,9 @@ export async function setUserRole(userId: string, role: AppRole) {
     role,
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function deleteUserProfile(userId: string) {
+  const userRef = doc(db, "users", userId);
+  await deleteDoc(userRef);
 }

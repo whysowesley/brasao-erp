@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Boxes,
@@ -23,7 +23,7 @@ import {
 
 import { BrasaoLogo } from "@/components/BrasaoLogo";
 import { useBranding } from "@/lib/branding";
-import { ROLE_LABEL, signOutAuth, useMe } from "@/lib/auth";
+import { ROLE_LABEL, fetchUsersList, signOutAuth, useMe } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
@@ -58,11 +58,6 @@ const financeiroItems = [
   { title: "Relatórios / DRE", url: "/financeiro/relatorios", icon: FileSpreadsheet },
 ];
 
-const secondary = [
-  { title: "Importar", url: "/importar", icon: Upload },
-  { title: "Configurações", url: "/configuracoes", icon: Settings },
-];
-
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
@@ -77,10 +72,33 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const systemItems: Array<{ title: string; url: string; icon: LucideIcon }> = [
+  const isMaster = me?.role === "master";
+
+  const { data: allUsers } = useQuery({
+    queryKey: ["users_list"],
+    queryFn: fetchUsersList,
+    enabled: isMaster,
+    staleTime: 1000 * 30,
+  });
+
+  const pendingCount = allUsers?.filter((u) => !u.approved).length ?? 0;
+
+  const systemItems: Array<{
+    title: string;
+    url: string;
+    icon: LucideIcon;
+    badgeCount?: number;
+  }> = [
     { title: "Importar", url: "/importar", icon: Upload },
-    ...(me?.role === "master" ? [{ title: "Usuários", url: "/usuarios", icon: Users }] : []),
-    { title: "Configurações", url: "/configuracoes", icon: Settings },
+    ...(isMaster
+      ? [{ title: "Usuários", url: "/usuarios", icon: Users, badgeCount: pendingCount }]
+      : []),
+    {
+      title: "Configurações",
+      url: "/configuracoes",
+      icon: Settings,
+      badgeCount: isMaster ? pendingCount : 0,
+    },
   ];
 
   async function signOut() {
@@ -155,9 +173,16 @@ export function AppSidebar() {
               {systemItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <Link to={item.url} className="flex items-center gap-2">
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                    <Link to={item.url} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </div>
+                      {Boolean(item.badgeCount && item.badgeCount > 0) && (
+                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white shadow-xs">
+                          {item.badgeCount}
+                        </span>
+                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

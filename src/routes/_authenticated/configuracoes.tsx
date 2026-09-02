@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { PageHeader } from "@/components/PageHeader";
 import { BrandingSettingsCard } from "@/components/BrandingSettingsCard";
+import { UserApprovalCard } from "@/components/UserApprovalCard";
 import { useCategories, useProducts, useSuppliers } from "@/lib/data";
 import { useAuth, ROLE_LABEL } from "@/lib/auth";
 
@@ -12,12 +13,12 @@ export const Route = createFileRoute("/_authenticated/configuracoes")({
       {
         name: "description",
         content:
-          "Configurações gerais do sistema: Identidade Visual / Branding da empresa, perfil de usuário, regras de cálculo de estoque e estatísticas.",
+          "Configurações gerais do sistema: Identidade Visual / Branding da empresa, aprovação de novos usuários, perfil e regras de cálculo.",
       },
       { property: "og:title", content: "Configurações | Brasão" },
       {
         property: "og:description",
-        content: "Identidade visual, regras de cálculo e parâmetros do sistema.",
+        content: "Identidade visual, aprovação de contas de usuários e parâmetros do sistema.",
       },
     ],
   }),
@@ -40,13 +41,20 @@ function ConfiguracoesPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <PageHeader
         title="Configurações do Sistema"
-        description="Gerencie a identidade visual, veja parâmetros de estoque e informações de acesso."
+        description="Aprove novos usuários, gerencie a identidade visual da empresa e confira os parâmetros do sistema."
       />
 
-      {/* Seção 1: Identidade Visual e Branding */}
+      {/* Seção 1: Aprovação e Gerenciamento de Usuários (Apenas Master) */}
+      {isMaster && (
+        <section className="rounded-xl border bg-card p-5 shadow-card">
+          <UserApprovalCard />
+        </section>
+      )}
+
+      {/* Seção 2: Identidade Visual e Branding */}
       <BrandingSettingsCard />
 
-      {/* Seção 2: Estatísticas Rápidas de Cadastro */}
+      {/* Seção 3: Estatísticas Rápidas de Cadastro */}
       <div className="grid gap-4 sm:grid-cols-3">
         {stats.map((s) => (
           <div key={s.label} className="rounded-lg border bg-card p-4 shadow-card">
@@ -56,7 +64,7 @@ function ConfiguracoesPage() {
         ))}
       </div>
 
-      {/* Seção 3: Usuário Logado & Permissões */}
+      {/* Seção 4: Usuário Logado & Permissões */}
       <section className="rounded-lg border bg-card p-5 shadow-card">
         <h2 className="text-sm font-semibold">Sessão e Permissões</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 text-sm">
@@ -88,7 +96,7 @@ function ConfiguracoesPage() {
         </div>
       </section>
 
-      {/* Seção 4: Regras de Cálculo */}
+      {/* Seção 5: Regras de Cálculo */}
       <section className="rounded-lg border bg-card p-5 shadow-card">
         <h2 className="text-sm font-semibold">Regras de Cálculo de Estoque</h2>
         <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
