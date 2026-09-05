@@ -367,7 +367,7 @@ function RelatoriosPage() {
           return {
             Data: s.date,
             Canal: cfg?.label || s.channel,
-            Tipo: cfg?.category === "balcao" ? "Balcão / Salão" : "Delivery",
+            Tipo: cfg?.category === "balcao_salao" ? "Balcão / Salão" : "Delivery",
             "Faturamento (R$)": s.amount,
             "Qtd Pedidos": s.orders_count || 0,
             Observações: s.notes || "",

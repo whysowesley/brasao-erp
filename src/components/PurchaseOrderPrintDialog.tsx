@@ -43,7 +43,7 @@ export interface PurchaseOrderItemData {
 
 export interface PurchaseOrderData {
   id: string;
-  number?: number;
+  number?: number | null;
   supplier_id?: string | null;
   supplier_name?: string | null;
   suppliers?: { name: string; phone?: string; email?: string } | null;

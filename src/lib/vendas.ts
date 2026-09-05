@@ -49,19 +49,19 @@ export async function fetchSalesForDate(date: string): Promise<DailySaleRecord[]
       const data = d.data();
       return {
         id: d.id,
-        date: data.date,
-        channel: data.channel,
-        channel_category: data.channel_category,
-        amount: Number(data.amount) || 0,
-        orders_count: data.orders_count ? Number(data.orders_count) : null,
-        notes: data.notes || null,
-        user_name: data.user_name || null,
-        created_at: (data.created_at as { toDate?: () => Date })?.toDate
-          ? (data.created_at as { toDate: () => Date }).toDate().toISOString()
-          : (data.created_at as string) || new Date().toISOString(),
-        updated_at: (data.updated_at as { toDate?: () => Date })?.toDate
-          ? (data.updated_at as { toDate: () => Date }).toDate().toISOString()
-          : (data.updated_at as string) || null,
+        date: data["date"],
+        channel: data["channel"],
+        channel_category: data["channel_category"],
+        amount: Number(data["amount"]) || 0,
+        orders_count: data["orders_count"] ? Number(data["orders_count"]) : null,
+        notes: data["notes"] || null,
+        user_name: data["user_name"] || null,
+        created_at: (data["created_at"] as { toDate?: () => Date })?.toDate
+          ? (data["created_at"] as { toDate: () => Date }).toDate().toISOString()
+          : (data["created_at"] as string) || new Date().toISOString(),
+        updated_at: (data["updated_at"] as { toDate?: () => Date })?.toDate
+          ? (data["updated_at"] as { toDate: () => Date }).toDate().toISOString()
+          : (data["updated_at"] as string) || null,
       };
     });
   } catch (err) {
@@ -81,8 +81,8 @@ export function getTodayDateString(): string {
 export function getMonthLabel(monthKey: string): string {
   if (!monthKey || !monthKey.includes("-")) return monthKey;
   const [yearStr, monthStr] = monthKey.split("-");
-  const monthNum = parseInt(monthStr, 10) - 1;
-  const date = new Date(parseInt(yearStr, 10), monthNum, 1);
+  const monthNum = parseInt(monthStr!, 10) - 1;
+  const date = new Date(parseInt(yearStr!, 10), monthNum, 1);
   const name = date.toLocaleDateString("pt-BR", { month: "long" });
   return `${name.charAt(0).toUpperCase() + name.slice(1)} de ${yearStr}`;
 }
@@ -110,18 +110,20 @@ export function useDailySales(monthKey?: string) {
       const snap = await getDocs(q);
       const records: DailySaleRecord[] = snap.docs.map((docSnap) => {
         const d = docSnap.data();
-        const chKey = d.channel as SalesChannelKey;
+        const chKey = d["channel"] as SalesChannelKey;
         const config = SALES_CHANNELS[chKey];
         return {
           id: docSnap.id,
-          date: String(d.date || ""),
+          date: String(d["date"] || ""),
           channel: chKey,
-          channel_category: config ? config.category : d.channel_category || "delivery",
-          amount: Number(d.amount) || 0,
-          orders_count: d.orders_count != null ? Number(d.orders_count) : null,
-          notes: d.notes || null,
-          created_at: d.created_at?.toDate ? d.created_at.toDate().toISOString() : d.created_at,
-          user_name: d.user_name || "Operador",
+          channel_category: config ? config.category : d["channel_category"] || "delivery",
+          amount: Number(d["amount"]) || 0,
+          orders_count: d["orders_count"] != null ? Number(d["orders_count"]) : null,
+          notes: d["notes"] || null,
+          created_at: d["created_at"]?.toDate
+            ? d["created_at"].toDate().toISOString()
+            : d["created_at"],
+          user_name: d["user_name"] || "Operador",
         };
       });
 
@@ -287,8 +289,8 @@ export function computeMonthSalesMetrics(
   monthKey: string,
 ): MonthSalesMetrics {
   const [yearStr, monthStr] = (monthKey || getCurrentMonthKey()).split("-");
-  const year = parseInt(yearStr, 10);
-  const month = parseInt(monthStr, 10);
+  const year = parseInt(yearStr!, 10);
+  const month = parseInt(monthStr!, 10);
 
   // Total de dias no mês
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -323,7 +325,7 @@ export function computeMonthSalesMetrics(
     const dayStr = String(d).padStart(2, "0");
     const dateStr = `${monthKey}-${dayStr}`;
     const dayDate = new Date(year, month - 1, d);
-    const dayOfWeek = WEEKDAYS[dayDate.getDay()];
+    const dayOfWeek = WEEKDAYS[dayDate.getDay()]!;
 
     const recs = dateMap.get(dateStr) || [];
 
@@ -398,10 +400,12 @@ export function computeMonthSalesMetrics(
 
   if (daysWithSales.length > 0) {
     const sorted = [...daysWithSales].sort((a, b) => b.totalDay - a.totalDay);
-    bestDay = { date: sorted[0].date, amount: sorted[0].totalDay };
+    const highest = sorted[0]!;
+    const lowest = sorted[sorted.length - 1]!;
+    bestDay = { date: highest.date, amount: highest.totalDay };
     lowestDay = {
-      date: sorted[sorted.length - 1].date,
-      amount: sorted[sorted.length - 1].totalDay,
+      date: lowest.date,
+      amount: lowest.totalDay,
     };
   }
 
@@ -441,19 +445,19 @@ export function useDailySalesRange(startDate?: string, endDate?: string) {
           const data = d.data();
           return {
             id: d.id,
-            date: data.date,
-            channel: data.channel,
-            channel_category: data.channel_category,
-            amount: Number(data.amount) || 0,
-            orders_count: data.orders_count ? Number(data.orders_count) : null,
-            notes: data.notes || null,
-            user_name: data.user_name || null,
-            created_at: (data.created_at as { toDate?: () => Date })?.toDate
-              ? (data.created_at as { toDate: () => Date }).toDate().toISOString()
-              : (data.created_at as string) || new Date().toISOString(),
-            updated_at: (data.updated_at as { toDate?: () => Date })?.toDate
-              ? (data.updated_at as { toDate: () => Date }).toDate().toISOString()
-              : (data.updated_at as string) || null,
+            date: data["date"],
+            channel: data["channel"],
+            channel_category: data["channel_category"],
+            amount: Number(data["amount"]) || 0,
+            orders_count: data["orders_count"] ? Number(data["orders_count"]) : null,
+            notes: data["notes"] || null,
+            user_name: data["user_name"] || null,
+            created_at: (data["created_at"] as { toDate?: () => Date })?.toDate
+              ? (data["created_at"] as { toDate: () => Date }).toDate().toISOString()
+              : (data["created_at"] as string) || new Date().toISOString(),
+            updated_at: (data["updated_at"] as { toDate?: () => Date })?.toDate
+              ? (data["updated_at"] as { toDate: () => Date }).toDate().toISOString()
+              : (data["updated_at"] as string) || null,
           };
         });
       } catch (err) {

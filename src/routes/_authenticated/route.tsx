@@ -26,7 +26,7 @@ function AuthenticatedLayout() {
   const canWrite = useCanWrite();
 
   // Só ativa a sincronização em tempo real se o usuário já estiver aprovado
-  useRealtimeSync();
+  useRealtimeSync(isApproved || isMaster);
 
   if (isLoading) {
     return (

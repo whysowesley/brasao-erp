@@ -5,7 +5,6 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
-  onAuthStateChanged,
   type User as FirebaseUser,
 } from "firebase/auth";
 import {
@@ -120,29 +119,9 @@ export function getFriendlyAuthErrorMessage(
   }
 }
 
-let authUserPromise: Promise<FirebaseUser | null> | null = null;
-export function getAuthUserPromise(): Promise<FirebaseUser | null> {
-  if (!authUserPromise) {
-    authUserPromise = new Promise((resolve) => {
-      const unsubscribe = onAuthStateChanged(
-        auth,
-        (user) => {
-          unsubscribe();
-          resolve(user);
-        },
-        () => {
-          unsubscribe();
-          resolve(null);
-        },
-      );
-    });
-  }
-  return authUserPromise;
-}
-
 export async function getCurrentAuthUser(): Promise<FirebaseUser | null> {
-  const user = auth.currentUser || (await getAuthUserPromise());
-  return user;
+  await auth.authStateReady();
+  return auth.currentUser;
 }
 
 export async function getInitialSessionAuth(): Promise<FirebaseUser | null> {
@@ -160,7 +139,7 @@ export async function signInWithPasswordAuth(email: string, pass: string) {
 
       if (!userSnap.exists()) {
         const isMasterOwner = isOwnerUser(user);
-        const role: AppRole = "master";
+        const role: AppRole = isMasterOwner ? "master" : "viewer";
         const approved = isMasterOwner;
 
         await setDoc(userDocRef, {
@@ -193,8 +172,7 @@ export async function signUpWithPasswordAuth(email: string, pass: string, fullNa
     const user = cred.user;
 
     const isMasterOwner = isOwnerUser(user);
-    // Quem for autenticado e aprovado terá acesso master
-    const role: AppRole = "master";
+    const role: AppRole = isMasterOwner ? "master" : "viewer";
     const approved = isMasterOwner;
 
     try {
@@ -242,7 +220,7 @@ export async function signInWithGoogleAuth() {
 
       if (!userSnap.exists()) {
         const isMasterOwner = isOwnerUser(user);
-        const role: AppRole = "master";
+        const role: AppRole = isMasterOwner ? "master" : "viewer";
         const approved = isMasterOwner;
 
         await setDoc(userDocRef, {
@@ -289,7 +267,7 @@ export function useMe() {
 
         if (userSnap.exists()) {
           const data = userSnap.data() as Record<string, unknown>;
-          const role = isMasterOwner ? "master" : (data["role"] as AppRole) || "master";
+          const role = isMasterOwner ? "master" : (data["role"] as AppRole) || "viewer";
           const approved = isMasterOwner ? true : Boolean(data["approved"]);
 
           return {
@@ -311,7 +289,7 @@ export function useMe() {
           };
         }
 
-        const initialRole: AppRole = "master";
+        const initialRole: AppRole = isMasterOwner ? "master" : "viewer";
         const isApproved = isMasterOwner;
 
         const newProfileData = {
@@ -371,7 +349,7 @@ export function useAuth() {
   const isAuthenticated = !!profile && !!auth.currentUser;
   const isApproved = profile ? profile.approved : false;
   const role = profile ? profile.role : null;
-  const isMaster = role === "master" || isOwnerUser(auth.currentUser);
+  const isMaster = isOwnerUser(auth.currentUser) || (isApproved && role === "master");
   const isManager = role === "manager" || isMaster;
   const canWrite = isApproved && (role === "operator" || role === "editor" || isManager);
 
@@ -417,7 +395,7 @@ export async function fetchUsersList(): Promise<UserProfileRow[]> {
         full_name: (d["fullName"] as string) || (d["full_name"] as string) || null,
         approved: Boolean(d["approved"]),
         created_at: createdDate,
-        role: (d["role"] as AppRole) || "master",
+        role: (d["role"] as AppRole) || "viewer",
       };
     });
   } catch {
@@ -433,7 +411,7 @@ export async function fetchUsersList(): Promise<UserProfileRow[]> {
         full_name: (d["fullName"] as string) || (d["full_name"] as string) || null,
         approved: Boolean(d["approved"]),
         created_at: createdDate,
-        role: (d["role"] as AppRole) || "master",
+        role: (d["role"] as AppRole) || "viewer",
       };
     });
   }
@@ -443,7 +421,7 @@ export async function setUserApproval(userId: string, approved: boolean) {
   const userRef = doc(db, "users", userId);
   await updateDoc(userRef, {
     approved,
-    role: "master",
+    role: approved ? "manager" : "viewer",
     updatedAt: serverTimestamp(),
   });
 }

@@ -66,7 +66,7 @@ export function UserApprovalCard() {
       qc.invalidateQueries({ queryKey: ["users_list"] });
       qc.invalidateQueries({ queryKey: ["users"] });
       if (variables.approved) {
-        toast.success("Usuário aprovado com sucesso com acesso Master!");
+        toast.success("Usuário aprovado com acesso de Gerente.");
       } else {
         toast.info("Acesso do usuário revogado.");
       }
@@ -126,7 +126,7 @@ export function UserApprovalCard() {
               Aprovação e Gerenciamento de Usuários
             </h2>
             <p className="text-xs text-muted-foreground">
-              Aprove novos cadastros de conta e controle quem possui acesso Master ao sistema.
+              Aprove novos cadastros e controle o nível de acesso de cada usuário.
             </p>
           </div>
         </div>
@@ -198,7 +198,7 @@ export function UserApprovalCard() {
                     onClick={() => approveMutation.mutate({ id: u.id, approved: true })}
                   >
                     <Check className="h-3.5 w-3.5" />
-                    Aprovar Acesso Master
+                    Aprovar Acesso
                   </Button>
 
                   <Button
@@ -247,7 +247,7 @@ export function UserApprovalCard() {
               Usuários com Acesso Liberado ({activeUsers.length})
             </h3>
             <p className="text-xs text-muted-foreground">
-              Usuários que já podem acessar todas as funções master de estoque e financeiro.
+              Usuários que já podem acessar o sistema conforme o papel definido.
             </p>
           </div>
 
@@ -293,7 +293,7 @@ export function UserApprovalCard() {
 
                     <TableCell>
                       <Select
-                        value={u.role || "master"}
+                        value={u.role || "viewer"}
                         onValueChange={(val) =>
                           setRoleMutation.mutate({ id: u.id, role: val as AppRole })
                         }
@@ -347,7 +347,7 @@ export function UserApprovalCard() {
                             onClick={() => {
                               if (
                                 confirm(
-                                  `Deseja remover permanentemente o usuário ${u.full_name || u.email}?`,
+                                  `Deseja remover o perfil de ${u.full_name || u.email}? A conta de login não será excluída e poderá solicitar acesso novamente.`,
                                 )
                               ) {
                                 deleteMutation.mutate(u.id);

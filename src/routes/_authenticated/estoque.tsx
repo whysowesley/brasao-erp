@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowUpDown, Calendar, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -227,7 +227,7 @@ function EstoquePage() {
     }
   }
 
-  const Th = ({ k, children, align }: { k: SortKey; children: string; align?: "right" }) => (
+  const Th = ({ k, children, align }: { k: SortKey; children: ReactNode; align?: "right" }) => (
     <TableHead className={align === "right" ? "text-right" : undefined}>
       <button
         onClick={() => toggleSort(k)}

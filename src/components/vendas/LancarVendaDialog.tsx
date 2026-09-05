@@ -150,7 +150,7 @@ export function LancarVendaDialog({
       delivery_anota_ai: numAnotaAi,
       delivery_99: num99,
       delivery_sw_fast: numSwFast,
-      orders_count: ordersCount ? Number(ordersCount) : undefined,
+      ...(ordersCount ? { orders_count: Number(ordersCount) } : {}),
       notes,
     };
 
@@ -158,7 +158,7 @@ export function LancarVendaDialog({
       await saveFullDaySales.mutateAsync({
         form,
         existingRecords: currentDayRecords.length > 0 ? currentDayRecords : existingRecords,
-        userName: user?.displayName || user?.email || "Administrador",
+        userName: user?.fullName || user?.email || "Administrador",
       });
 
       const [y, m, d] = date.split("-");

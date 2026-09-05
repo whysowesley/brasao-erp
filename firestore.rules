@@ -1,41 +1,122 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
     function isOwner() {
-      return request.auth != null
-        && (
-          (request.auth.token.email != null && request.auth.token.email.lower() == 'wesleyjunio197@gmail.com')
-          || (request.auth.token.email != null && request.auth.token.email.lower().matches('.*wesley.*'))
-          || (request.auth.token.email != null && request.auth.token.email.lower().matches('.*brasao.*'))
-        );
+      return isAuthenticated()
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() == 'wesleyjunio197@gmail.com';
     }
 
     function isApprovedUser() {
-      return request.auth != null && (
+      return isAuthenticated() && (
         isOwner() ||
         (
           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          (
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true ||
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master'
-          )
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true
         )
       );
     }
 
-    // Permite que usuários autenticados leiam e criem seu próprio perfil de usuário.
-    // Atualização de aprovação ou alteração de papéis é permitida para administradores aprovados ou proprietário.
-    match /users/{userId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow update, delete: if isApprovedUser() || isOwner();
+    function isAdmin() {
+      return isOwner() || (
+        isApprovedUser() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master'
+      );
     }
 
-    // Todas as outras coleções do ERP (produtos, contagens, pedidos, fornecedores, lançamentos financeiros, etc.)
-    // exigem estritamente que o usuário esteja autenticado E aprovado.
-    match /{document=**} {
-      allow read, write: if isApprovedUser();
+    function canWrite() {
+      return isOwner() || (
+        isApprovedUser() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in
+          ['master', 'manager', 'editor', 'operator']
+      );
+    }
+
+    function hasAuthenticatedEmail() {
+      return request.auth.token.email != null
+        && request.resource.data.email is string
+        && request.resource.data.email.lower() == request.auth.token.email.lower();
+    }
+
+    function isOwnerProfile() {
+      return resource.data.email is string
+        && resource.data.email.lower() == 'wesleyjunio197@gmail.com';
+    }
+
+    match /users/{userId} {
+      allow get: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isAuthenticated()
+        && request.auth.uid == userId
+        && hasAuthenticatedEmail()
+        && request.resource.data.keys().hasAll(['email', 'role', 'approved'])
+        && (
+          (isOwner() && request.resource.data.approved == true && request.resource.data.role == 'master') ||
+          (!isOwner() && request.resource.data.approved == false && request.resource.data.role == 'viewer')
+        );
+      allow update, delete: if isOwner() || (isAdmin() && !isOwnerProfile());
+    }
+
+    match /settings/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if canWrite();
+    }
+
+    match /products/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
+    match /categories/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
+    match /suppliers/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
+    match /units/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
+    match /stock_movements/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
+    match /stock_counts/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
+    match /purchase_orders/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
+    match /system_counters/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
+    match /financial_transactions/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
+    match /financial_categories/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
+    match /cost_centers/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
+    match /payment_methods/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
+    match /daily_sales/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
     }
   }
 }
-

@@ -113,7 +113,9 @@ function VendasPage() {
 
   // Navegação de mês
   function handlePrevMonth() {
-    const [y, m] = selectedMonth.split("-").map(Number);
+    const [year = "", month = ""] = selectedMonth.split("-");
+    const y = Number(year);
+    const m = Number(month);
     const prevDate = new Date(y, m - 2, 1);
     const newY = prevDate.getFullYear();
     const newM = String(prevDate.getMonth() + 1).padStart(2, "0");
@@ -121,7 +123,9 @@ function VendasPage() {
   }
 
   function handleNextMonth() {
-    const [y, m] = selectedMonth.split("-").map(Number);
+    const [year = "", month = ""] = selectedMonth.split("-");
+    const y = Number(year);
+    const m = Number(month);
     const nextDate = new Date(y, m, 1);
     const newY = nextDate.getFullYear();
     const newM = String(nextDate.getMonth() + 1).padStart(2, "0");

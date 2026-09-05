@@ -15,8 +15,8 @@ const COLLECTIONS = [
   "suppliers",
   "categories",
   "units",
-  "users",
   "settings",
+  "daily_sales",
 ] as const;
 
 /**
@@ -24,11 +24,13 @@ const COLLECTIONS = [
  * Qualquer alteração no estoque, contagem, movimentação, pedidos ou financeiro
  * feita em qualquer sessão/dispositivo invalida as queries ativas e atualiza a UI.
  */
-export function useRealtimeSync() {
+export function useRealtimeSync(enabled = true) {
   const qc = useQueryClient();
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
+
     const unsubs: Unsubscribe[] = [];
 
     const notifyChange = () => {
@@ -77,5 +79,5 @@ export function useRealtimeSync() {
         }
       });
     };
-  }, [qc]);
+  }, [enabled, qc]);
 }

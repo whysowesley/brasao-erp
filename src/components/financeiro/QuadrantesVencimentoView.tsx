@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -175,12 +175,15 @@ export function QuadrantesVencimentoView({
   }, [allTransactions, todayStr]);
 
   // Função para obter a data chave de agendamento de cada transação
-  const getTxTargetDate = (tx: FinancialTransaction): string => {
-    if (dateCriterion === "expected_or_due") {
-      return tx.expected_payment_date || tx.due_date;
-    }
-    return tx.due_date;
-  };
+  const getTxTargetDate = useCallback(
+    (tx: FinancialTransaction): string => {
+      if (dateCriterion === "expected_or_due") {
+        return tx.expected_payment_date || tx.due_date;
+      }
+      return tx.due_date;
+    },
+    [dateCriterion],
+  );
 
   // Agrupamento vertical por data (dia 1, 2, 3...)
   const groupedByDay = useMemo(() => {
@@ -244,7 +247,7 @@ export function QuadrantesVencimentoView({
   }, [
     mappedTransactions,
     monthDays,
-    dateCriterion,
+    getTxTargetDate,
     searchTerm,
     supplierFilter,
     statusFilter,

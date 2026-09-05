@@ -21,12 +21,14 @@ import { Route as AuthenticatedImportarRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedPedidosRouteImport } from './routes/_authenticated/pedidos'
 import { Route as AuthenticatedSugestoesRouteImport } from './routes/_authenticated/sugestoes'
 import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticated/usuarios'
+import { Route as AuthenticatedVendasRouteImport } from './routes/_authenticated/vendas'
 import { Route as AuthenticatedFinanceiroIndexRouteImport } from './routes/_authenticated/financeiro.index'
 import { Route as AuthenticatedFinanceiroContasPagarRouteImport } from './routes/_authenticated/financeiro.contas-pagar'
 import { Route as AuthenticatedFinanceiroContasReceberRouteImport } from './routes/_authenticated/financeiro.contas-receber'
 import { Route as AuthenticatedFinanceiroLancamentosRouteImport } from './routes/_authenticated/financeiro.lancamentos'
 import { Route as AuthenticatedFinanceiroMesesRouteImport } from './routes/_authenticated/financeiro.meses'
 import { Route as AuthenticatedFinanceiroRelatoriosRouteImport } from './routes/_authenticated/financeiro.relatorios'
+import { Route as AuthenticatedFinanceiroVencimentosRouteImport } from './routes/_authenticated/financeiro.vencimentos'
 import { Route as AuthenticatedProdutosIdRouteImport } from './routes/_authenticated/produtos.$id'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -90,6 +92,11 @@ const AuthenticatedUsuariosRoute = AuthenticatedUsuariosRouteImport.update({
   path: '/usuarios',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedVendasRoute = AuthenticatedVendasRouteImport.update({
+  id: '/vendas',
+  path: '/vendas',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedFinanceiroIndexRoute =
   AuthenticatedFinanceiroIndexRouteImport.update({
     id: '/financeiro/',
@@ -126,6 +133,12 @@ const AuthenticatedFinanceiroRelatoriosRoute =
     path: '/financeiro/relatorios',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedFinanceiroVencimentosRoute =
+  AuthenticatedFinanceiroVencimentosRouteImport.update({
+    id: '/financeiro/vencimentos',
+    path: '/financeiro/vencimentos',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProdutosIdRoute = AuthenticatedProdutosIdRouteImport.update({
   id: '/produtos/$id',
   path: '/produtos/$id',
@@ -144,11 +157,13 @@ export interface FileRoutesByFullPath {
   '/pedidos': typeof AuthenticatedPedidosRoute
   '/sugestoes': typeof AuthenticatedSugestoesRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
+  '/vendas': typeof AuthenticatedVendasRoute
   '/financeiro/contas-pagar': typeof AuthenticatedFinanceiroContasPagarRoute
   '/financeiro/contas-receber': typeof AuthenticatedFinanceiroContasReceberRoute
   '/financeiro/lancamentos': typeof AuthenticatedFinanceiroLancamentosRoute
   '/financeiro/meses': typeof AuthenticatedFinanceiroMesesRoute
   '/financeiro/relatorios': typeof AuthenticatedFinanceiroRelatoriosRoute
+  '/financeiro/vencimentos': typeof AuthenticatedFinanceiroVencimentosRoute
   '/produtos/$id': typeof AuthenticatedProdutosIdRoute
   '/financeiro/': typeof AuthenticatedFinanceiroIndexRoute
 }
@@ -163,12 +178,14 @@ export interface FileRoutesByTo {
   '/pedidos': typeof AuthenticatedPedidosRoute
   '/sugestoes': typeof AuthenticatedSugestoesRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
+  '/vendas': typeof AuthenticatedVendasRoute
   '/': typeof AuthenticatedIndexRoute
   '/financeiro/contas-pagar': typeof AuthenticatedFinanceiroContasPagarRoute
   '/financeiro/contas-receber': typeof AuthenticatedFinanceiroContasReceberRoute
   '/financeiro/lancamentos': typeof AuthenticatedFinanceiroLancamentosRoute
   '/financeiro/meses': typeof AuthenticatedFinanceiroMesesRoute
   '/financeiro/relatorios': typeof AuthenticatedFinanceiroRelatoriosRoute
+  '/financeiro/vencimentos': typeof AuthenticatedFinanceiroVencimentosRoute
   '/produtos/$id': typeof AuthenticatedProdutosIdRoute
   '/financeiro': typeof AuthenticatedFinanceiroIndexRoute
 }
@@ -185,12 +202,14 @@ export interface FileRoutesById {
   '/_authenticated/pedidos': typeof AuthenticatedPedidosRoute
   '/_authenticated/sugestoes': typeof AuthenticatedSugestoesRoute
   '/_authenticated/usuarios': typeof AuthenticatedUsuariosRoute
+  '/_authenticated/vendas': typeof AuthenticatedVendasRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/financeiro/contas-pagar': typeof AuthenticatedFinanceiroContasPagarRoute
   '/_authenticated/financeiro/contas-receber': typeof AuthenticatedFinanceiroContasReceberRoute
   '/_authenticated/financeiro/lancamentos': typeof AuthenticatedFinanceiroLancamentosRoute
   '/_authenticated/financeiro/meses': typeof AuthenticatedFinanceiroMesesRoute
   '/_authenticated/financeiro/relatorios': typeof AuthenticatedFinanceiroRelatoriosRoute
+  '/_authenticated/financeiro/vencimentos': typeof AuthenticatedFinanceiroVencimentosRoute
   '/_authenticated/produtos/$id': typeof AuthenticatedProdutosIdRoute
   '/_authenticated/financeiro/': typeof AuthenticatedFinanceiroIndexRoute
 }
@@ -208,11 +227,13 @@ export interface FileRouteTypes {
     | '/pedidos'
     | '/sugestoes'
     | '/usuarios'
+    | '/vendas'
     | '/financeiro/contas-pagar'
     | '/financeiro/contas-receber'
     | '/financeiro/lancamentos'
     | '/financeiro/meses'
     | '/financeiro/relatorios'
+    | '/financeiro/vencimentos'
     | '/produtos/$id'
     | '/financeiro/'
   fileRoutesByTo: FileRoutesByTo
@@ -227,12 +248,14 @@ export interface FileRouteTypes {
     | '/pedidos'
     | '/sugestoes'
     | '/usuarios'
+    | '/vendas'
     | '/'
     | '/financeiro/contas-pagar'
     | '/financeiro/contas-receber'
     | '/financeiro/lancamentos'
     | '/financeiro/meses'
     | '/financeiro/relatorios'
+    | '/financeiro/vencimentos'
     | '/produtos/$id'
     | '/financeiro'
   id:
@@ -248,12 +271,14 @@ export interface FileRouteTypes {
     | '/_authenticated/pedidos'
     | '/_authenticated/sugestoes'
     | '/_authenticated/usuarios'
+    | '/_authenticated/vendas'
     | '/_authenticated/'
     | '/_authenticated/financeiro/contas-pagar'
     | '/_authenticated/financeiro/contas-receber'
     | '/_authenticated/financeiro/lancamentos'
     | '/_authenticated/financeiro/meses'
     | '/_authenticated/financeiro/relatorios'
+    | '/_authenticated/financeiro/vencimentos'
     | '/_authenticated/produtos/$id'
     | '/_authenticated/financeiro/'
   fileRoutesById: FileRoutesById
@@ -349,6 +374,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUsuariosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/vendas': {
+      id: '/_authenticated/vendas'
+      path: '/vendas'
+      fullPath: '/vendas'
+      preLoaderRoute: typeof AuthenticatedVendasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/financeiro/': {
       id: '/_authenticated/financeiro/'
       path: '/financeiro'
@@ -391,6 +423,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFinanceiroRelatoriosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/financeiro/vencimentos': {
+      id: '/_authenticated/financeiro/vencimentos'
+      path: '/financeiro/vencimentos'
+      fullPath: '/financeiro/vencimentos'
+      preLoaderRoute: typeof AuthenticatedFinanceiroVencimentosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/produtos/$id': {
       id: '/_authenticated/produtos/$id'
       path: '/produtos/$id'
@@ -411,12 +450,14 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPedidosRoute: typeof AuthenticatedPedidosRoute
   AuthenticatedSugestoesRoute: typeof AuthenticatedSugestoesRoute
   AuthenticatedUsuariosRoute: typeof AuthenticatedUsuariosRoute
+  AuthenticatedVendasRoute: typeof AuthenticatedVendasRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedFinanceiroContasPagarRoute: typeof AuthenticatedFinanceiroContasPagarRoute
   AuthenticatedFinanceiroContasReceberRoute: typeof AuthenticatedFinanceiroContasReceberRoute
   AuthenticatedFinanceiroLancamentosRoute: typeof AuthenticatedFinanceiroLancamentosRoute
   AuthenticatedFinanceiroMesesRoute: typeof AuthenticatedFinanceiroMesesRoute
   AuthenticatedFinanceiroRelatoriosRoute: typeof AuthenticatedFinanceiroRelatoriosRoute
+  AuthenticatedFinanceiroVencimentosRoute: typeof AuthenticatedFinanceiroVencimentosRoute
   AuthenticatedProdutosIdRoute: typeof AuthenticatedProdutosIdRoute
   AuthenticatedFinanceiroIndexRoute: typeof AuthenticatedFinanceiroIndexRoute
 }
@@ -431,6 +472,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPedidosRoute: AuthenticatedPedidosRoute,
   AuthenticatedSugestoesRoute: AuthenticatedSugestoesRoute,
   AuthenticatedUsuariosRoute: AuthenticatedUsuariosRoute,
+  AuthenticatedVendasRoute: AuthenticatedVendasRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedFinanceiroContasPagarRoute:
     AuthenticatedFinanceiroContasPagarRoute,
@@ -441,6 +483,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedFinanceiroMesesRoute: AuthenticatedFinanceiroMesesRoute,
   AuthenticatedFinanceiroRelatoriosRoute:
     AuthenticatedFinanceiroRelatoriosRoute,
+  AuthenticatedFinanceiroVencimentosRoute:
+    AuthenticatedFinanceiroVencimentosRoute,
   AuthenticatedProdutosIdRoute: AuthenticatedProdutosIdRoute,
   AuthenticatedFinanceiroIndexRoute: AuthenticatedFinanceiroIndexRoute,
 }
