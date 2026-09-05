@@ -42,8 +42,10 @@ import {
   computeProduct,
   formatQty,
   futureStatusFor,
+  getDayOfWeekFromDate,
   sumDailyConsumption,
 } from "@/lib/inventory";
+import { usePostOperationMode } from "@/lib/post-operation";
 
 type FormState = {
   description: string;
@@ -122,6 +124,7 @@ export function ProductDialog({
   const [daily, setDaily] = useState<DailyFormState>(emptyDaily);
   const [saving, setSaving] = useState(false);
   const { data: rules } = useRules();
+  const [isPostOperation] = usePostOperationMode();
 
   const preview = (() => {
     const current = num(form.current_stock);
@@ -143,8 +146,21 @@ export function ProductDialog({
         active: true,
         category_id: null,
         supplier_id: null,
+        daily_consumption: {
+          seg: num(daily.seg),
+          ter: num(daily.ter),
+          qua: num(daily.qua),
+          qui: num(daily.qui),
+          sex: num(daily.sex),
+          sab: num(daily.sab),
+          dom: num(daily.dom),
+          seg2: num(daily.seg2),
+        },
       },
       rules ?? DEFAULT_RULES,
+      0,
+      getDayOfWeekFromDate(),
+      isPostOperation,
     );
     const futureStatus = futureStatusFor(
       c.futureStock,
@@ -156,6 +172,8 @@ export function ProductDialog({
       consumption,
       suggestedPurchase: c.suggestedPurchase,
       futureStock: c.futureStock,
+      projectedCycleEndStock: c.projectedCycleEndStock,
+      remainingDaysLabel: c.remainingDaysLabel,
       status: c.status,
       futureStatus,
     };
@@ -630,9 +648,14 @@ export function ProductDialog({
           </div>
         </div>
 
-        <div className="grid gap-3 rounded-lg border bg-muted/40 p-3 sm:grid-cols-5 items-center">
+        <div className="grid gap-3 rounded-lg border bg-muted/40 p-3 sm:grid-cols-6 items-center">
           <Preview label="Estoque atual" value={preview.current} unit={form.unit} />
           <Preview label="Consumo semanal" value={preview.consumption} unit={form.unit} />
+          <Preview
+            label={`Saldo 2ª (${preview.remainingDaysLabel})`}
+            value={preview.projectedCycleEndStock}
+            unit={form.unit}
+          />
           <Preview label="Compra sugerida" value={preview.suggestedPurchase} unit={form.unit} />
           <Preview label="Estoque futuro" value={preview.futureStock} unit={form.unit} />
           <div>

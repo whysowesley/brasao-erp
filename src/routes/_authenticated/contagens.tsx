@@ -17,9 +17,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { recordStockCount, useCounts, useInvalidateAll, useProducts } from "@/lib/data";
-import { formatDateTime, formatQty } from "@/lib/inventory";
+import { recordStockCount, useCounts, useInvalidateAll, useProducts, useRules } from "@/lib/data";
+import {
+  computeProduct,
+  DEFAULT_RULES,
+  formatDateTime,
+  formatQty,
+  getDayOfWeekFromDate,
+} from "@/lib/inventory";
+import { usePostOperationMode } from "@/lib/post-operation";
 import { usePurchasePlan } from "@/lib/purchase-plan";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/_authenticated/contagens")({
   head: () => ({
@@ -43,7 +52,9 @@ export const Route = createFileRoute("/_authenticated/contagens")({
 function ContagensPage() {
   const { data: products } = useProducts();
   const { data: counts } = useCounts();
+  const { data: rules } = useRules();
   const invalidate = useInvalidateAll();
+  const [isPostOperation, setIsPostOperation] = usePostOperationMode();
   const [search, setSearch] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
@@ -98,6 +109,26 @@ function ContagensPage() {
         description="Informe a quantidade encontrada. A diferença é calculada e registrada no histórico."
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-1 text-xs cursor-pointer shadow-xs hover:bg-muted/40 transition-colors"
+              onClick={() => setIsPostOperation(!isPostOperation)}
+              title="Pós-operação: o dia de hoje já encerrou e foi consumido. O estoque contado atenderá a partir de amanhã até a 2ª feira. Ex: Sábado à noite conta 2 dias de consumo (Dom e Seg) em vez de 3."
+            >
+              <Switch
+                id="post-op-contagens"
+                checked={isPostOperation}
+                onCheckedChange={setIsPostOperation}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <Label
+                htmlFor="post-op-contagens"
+                className="cursor-pointer font-medium select-none text-[11px] leading-tight text-foreground"
+              >
+                {isPostOperation
+                  ? "Pós-operação (Hoje já usado)"
+                  : "Pré-operação (Hoje ainda será usado)"}
+              </Label>
+            </div>
             <WhatsAppStockImportDialog
               onApplyToTable={(newValues) => {
                 setValues((prev) => ({ ...prev, ...newValues }));
@@ -143,10 +174,18 @@ function ContagensPage() {
             <TableBody>
               {rows.map((p) => {
                 const raw = values[p.id] ?? "";
-                const diff =
-                  raw.trim() === ""
-                    ? null
-                    : (Number(raw.replace(",", ".")) || 0) - Number(p.current_stock);
+                const hasCount = raw.trim() !== "";
+                const countedNum = hasCount
+                  ? Number(raw.replace(",", ".")) || 0
+                  : Number(p.current_stock);
+                const diff = hasCount ? countedNum - Number(p.current_stock) : null;
+                const computedItem = computeProduct(
+                  { ...p, current_stock: countedNum },
+                  rules ?? DEFAULT_RULES,
+                  0,
+                  getDayOfWeekFromDate(),
+                  isPostOperation,
+                );
                 return (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.description}</TableCell>
@@ -171,9 +210,15 @@ function ContagensPage() {
                     <TableCell className="text-right">
                       <PlanInput
                         className="num ml-auto h-8 w-24 text-right"
-                        value={plan[p.id] ?? p.suggestedPurchase}
+                        value={plan[p.id] ?? computedItem.suggestedPurchase}
                         onChange={(val) => setPlanned(p.id, val)}
                       />
+                      <div
+                        className="text-[10px] text-muted-foreground mt-0.5"
+                        title={`Saldo 2ª: ${formatQty(computedItem.projectedCycleEndStock, p.unit)} (${computedItem.remainingDaysLabel})`}
+                      >
+                        sug: {formatQty(computedItem.suggestedPurchase, p.unit)}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

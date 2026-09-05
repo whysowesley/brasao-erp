@@ -61,6 +61,7 @@ import {
   type ComputedProduct,
   type DayOfWeek,
 } from "@/lib/inventory";
+import { usePostOperationMode } from "@/lib/post-operation";
 import { usePurchasePlan } from "@/lib/purchase-plan";
 
 export const Route = createFileRoute("/_authenticated/estoque")({
@@ -120,11 +121,16 @@ function EstoquePage() {
   /** Quantidade que o usuário pretende comprar — compartilhada com as outras telas. */
   const { plan, setPlanned, clearPlan } = usePurchasePlan();
 
-  // Recalcula o status e métricas dos produtos com base no dia referencial de ciclo selecionado
+  // Flag de momento da contagem: pós-operação (fechamento, dia de hoje já usado) vs pré-operação
+  const [isPostOperation, setIsPostOperation] = usePostOperationMode();
+
+  // Recalcula o status e métricas dos produtos com base no dia referencial e momento da contagem
   const recomputedProducts = useMemo(() => {
     if (!products) return [];
-    return products.map((p) => computeProduct(p, rules ?? DEFAULT_RULES, 0, effectiveRefDay));
-  }, [products, rules, effectiveRefDay]);
+    return products.map((p) =>
+      computeProduct(p, rules ?? DEFAULT_RULES, 0, effectiveRefDay, isPostOperation),
+    );
+  }, [products, rules, effectiveRefDay, isPostOperation]);
 
   const buyQty = useCallback((p: ComputedProduct) => plan[p.id] ?? p.suggestedPurchase, [plan]);
 
@@ -296,28 +302,51 @@ function EstoquePage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-auto">
-          <span className="text-xs font-medium text-foreground whitespace-nowrap">
-            Dia Referencial:
-          </span>
-          <Select
-            value={selectedRefDay}
-            onValueChange={(val) => setSelectedRefDay(val as DayOfWeek | "auto")}
-          >
-            <SelectTrigger className="h-8 w-48 bg-background text-xs font-medium">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">
-                Hoje (Automático - {DAYS_OF_WEEK.find((d) => d.key === todayDayOfWeek)?.label})
-              </SelectItem>
-              {DAYS_OF_WEEK.map((d) => (
-                <SelectItem key={d.key} value={d.key}>
-                  {d.label}
+        <div className="flex flex-wrap items-center gap-3 self-end sm:self-auto">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-foreground whitespace-nowrap">
+              Dia Referencial:
+            </span>
+            <Select
+              value={selectedRefDay}
+              onValueChange={(val) => setSelectedRefDay(val as DayOfWeek | "auto")}
+            >
+              <SelectTrigger className="h-8 w-44 bg-background text-xs font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">
+                  Hoje (Automático - {DAYS_OF_WEEK.find((d) => d.key === todayDayOfWeek)?.label})
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                {DAYS_OF_WEEK.map((d) => (
+                  <SelectItem key={d.key} value={d.key}>
+                    {d.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div
+            className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-1 text-xs cursor-pointer shadow-xs hover:bg-muted/40 transition-colors"
+            onClick={() => setIsPostOperation(!isPostOperation)}
+            title="Pós-operação: o dia de hoje já encerrou e foi consumido. O estoque contado atenderá a partir de amanhã até a 2ª feira. Ex: Sábado à noite conta 2 dias de consumo (Dom e Seg) em vez de 3."
+          >
+            <Switch
+              id="post-op-estoque"
+              checked={isPostOperation}
+              onCheckedChange={setIsPostOperation}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <Label
+              htmlFor="post-op-estoque"
+              className="cursor-pointer font-medium select-none text-[11px] leading-tight text-foreground"
+            >
+              {isPostOperation
+                ? "Pós-operação (Hoje já usado)"
+                : "Pré-operação (Hoje ainda será usado)"}
+            </Label>
+          </div>
         </div>
       </div>
 
@@ -403,7 +432,7 @@ function EstoquePage() {
                   <div className="flex flex-col items-end">
                     <span>Consumo Restante Dias</span>
                     <span className="text-[10px] font-normal text-muted-foreground">
-                      ({effectiveRefDay.toUpperCase()}→Seg 2)
+                      ({getRemainingDaysLabel(effectiveRefDay, isPostOperation)})
                     </span>
                   </div>
                 </TableHead>

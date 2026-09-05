@@ -9,6 +9,7 @@ export type PurchaseRules = {
   safety_margin_percent: number;
   default_lead_time_days: number;
   attention_threshold_percent: number;
+  is_post_operation?: boolean;
 };
 
 export const DEFAULT_RULES: PurchaseRules = {
@@ -16,6 +17,7 @@ export const DEFAULT_RULES: PurchaseRules = {
   safety_margin_percent: 0,
   default_lead_time_days: 0,
   attention_threshold_percent: 20,
+  is_post_operation: true,
 };
 
 export type StockStatus = "critico" | "atencao" | "normal";
@@ -80,20 +82,33 @@ export function getDayOfWeekFromDate(d: Date = new Date()): DayOfWeek {
   }
 }
 
-/** Retorna os dias restantes no ciclo de 8 dias a partir de um dia referencial até a 2ª feira (seg2) */
-export function getRemainingCycleDays(refDay: DayOfWeek): DayOfWeek[] {
+/**
+ * Retorna os dias restantes no ciclo de 8 dias a partir de um dia referencial até a 2ª feira (seg2).
+ * Quando isPostOperation = true (contagem pós-operação / fechamento / noite), o consumo do próprio dia vigente
+ * já aconteceu. Logo, os dias restantes a serem supridos começam a partir do dia seguinte!
+ * Exemplo: se hoje é Sábado e é pós-operação, restam apenas Domingo e Segunda (2 dias, não 3).
+ */
+export function getRemainingCycleDays(refDay: DayOfWeek, isPostOperation = false): DayOfWeek[] {
   const idx = DAYS_CYCLE_ORDER.indexOf(refDay);
   if (idx === -1) return [...DAYS_CYCLE_ORDER];
-  return DAYS_CYCLE_ORDER.slice(idx);
+  const startIdx = isPostOperation ? idx + 1 : idx;
+  if (startIdx >= DAYS_CYCLE_ORDER.length) {
+    return [];
+  }
+  return DAYS_CYCLE_ORDER.slice(startIdx);
 }
 
-/** Retorna um texto legível dos dias restantes, ex: 'Sex a Seg (4 dias)' */
-export function getRemainingDaysLabel(refDay: DayOfWeek): string {
-  const days = getRemainingCycleDays(refDay);
-  const first = DAYS_OF_WEEK.find((d) => d.key === days[0])?.short ?? "Hoje";
+/** Retorna um texto legível dos dias restantes, ex: 'Dom a Seg (2 dias - Pós-operação)' */
+export function getRemainingDaysLabel(refDay: DayOfWeek, isPostOperation = false): string {
+  const days = getRemainingCycleDays(refDay, isPostOperation);
+  if (days.length === 0) {
+    return "0 dias restantes (Ciclo atual concluído)";
+  }
+  const first = DAYS_OF_WEEK.find((d) => d.key === days[0])?.short ?? "Amanhã";
   const last = DAYS_OF_WEEK.find((d) => d.key === days[days.length - 1])?.short ?? "SEG 2";
-  if (days.length === 1) return `${first} (1 dia)`;
-  return `${first} a ${last} (${days.length} dias)`;
+  const suffix = isPostOperation ? " (Pós-operação)" : "";
+  if (days.length === 1) return `${first} (1 dia)${suffix}`;
+  return `${first} a ${last} (${days.length} dias)${suffix}`;
 }
 
 export const DEFAULT_DAILY_CONSUMPTION: DailyConsumption = {
@@ -192,6 +207,8 @@ export type ComputedProduct = ProductRow & {
   remainingDaysLabel: string;
   remainingConsumption: number;
   projectedCycleEndStock: number;
+  targetTurnover: number;
+  isPostOperation: boolean;
 };
 
 const round = (n: number) => Math.round((n + Number.EPSILON) * 1000) / 1000;
@@ -201,6 +218,7 @@ export function computeProduct(
   rules: PurchaseRules = DEFAULT_RULES,
   incoming = 0,
   refDay: DayOfWeek = getDayOfWeekFromDate(),
+  isPostOperation: boolean = rules.is_post_operation ?? true,
 ): ComputedProduct {
   const weeks = p.coverage_weeks ?? rules.coverage_weeks ?? 1;
   const consumption = Number(p.avg_weekly_consumption) || 0;
@@ -209,23 +227,41 @@ export function computeProduct(
   const safety = Number(p.safety_stock) || 0;
   const margin = 1 + (rules.safety_margin_percent || 0) / 100;
 
-  // Cálculo referencial do dia (ex: Sexta-feira -> calcula Sex, Sáb, Dom e Seg2)
+  // Cálculo referencial do dia:
+  // Se isPostOperation = true (ex: Sábado à noite), o sábado já encerrou e foi consumido.
+  // Logo, o consumo restante a cobrir é apenas Domingo e Segunda (2 dias).
   const daily = getDailyConsumptionFromProduct(p);
-  const remainingDays = getRemainingCycleDays(refDay);
+  const remainingDays = getRemainingCycleDays(refDay, isPostOperation);
   let remainingConsumption = 0;
   for (const dayKey of remainingDays) {
     remainingConsumption += Number(daily[dayKey]) || 0;
   }
   remainingConsumption = round(remainingConsumption);
-  const remainingDaysLabel = getRemainingDaysLabel(refDay);
+  const remainingDaysLabel = getRemainingDaysLabel(refDay, isPostOperation);
+
+  // Saldo de estoque previsto que vai ficar para segunda-feira (Estoque Atual - Consumo Restante dos dias)
   const projectedCycleEndStock = round(current - remainingConsumption);
 
-  // Sugestão de reposição e estoque futuro
-  const rawSuggestion = (desired - current + consumption * weeks) * margin + safety - incoming;
+  // Giro da semana / necessidade do ciclo (consumo semanal * semanas de cobertura)
+  // Caso o produto possua estoque desejado superior configurado, respeita a meta desejada
+  const baseGiro = desired > 0 ? Math.max(consumption * weeks, desired) : consumption * weeks;
+  const targetTurnover = round(baseGiro * margin + safety);
+
+  // Compra sugerida:
+  // Giro necessário da semana menos o saldo de estoque previsto para segunda-feira,
+  // descontando eventuais pedidos já pendentes de entrega (incoming).
+  //
+  // Exemplo da regra de negócio pós-operação:
+  // Se o estoque atual de Maminha for 60kg e hoje é sábado pós-operação (consumo semanal de 80kg):
+  // O consumo restante é de 2 dias (Dom + Seg = 20kg).
+  // Saldo previsto para 2ª feira = 60kg - 20kg = 40kg.
+  // Como o giro semanal é 80kg, a compra sugerida é 80kg - 40kg = 40kg.
+  // (40kg compra + 40kg saldo = 80kg do giro da semana).
+  const rawSuggestion = targetTurnover - projectedCycleEndStock - incoming;
   const suggestedPurchase = round(Math.max(0, rawSuggestion));
 
-  // O estoque futuro é o saldo da 2ª segunda + o valor a comprar para a próxima semana
-  const futureStock = round(projectedCycleEndStock + suggestedPurchase);
+  // O estoque futuro é o saldo projetado da 2ª feira + pedidos pendentes + compra sugerida
+  const futureStock = round(projectedCycleEndStock + incoming + suggestedPurchase);
   const projectedStock = projectedCycleEndStock;
 
   // Status do estoque: só é crítico se for igual ou menor que zero (<= 0)
@@ -256,6 +292,8 @@ export function computeProduct(
     remainingDaysLabel,
     remainingConsumption,
     projectedCycleEndStock,
+    targetTurnover,
+    isPostOperation,
   };
 }
 

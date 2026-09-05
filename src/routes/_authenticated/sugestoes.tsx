@@ -33,7 +33,16 @@ import {
   useRules,
   useSuppliers,
 } from "@/lib/data";
-import { formatQty, futureStatusFor } from "@/lib/inventory";
+import {
+  computeProduct,
+  DEFAULT_RULES,
+  DAYS_OF_WEEK,
+  formatQty,
+  futureStatusFor,
+  getDayOfWeekFromDate,
+  type DayOfWeek,
+} from "@/lib/inventory";
+import { usePostOperationMode } from "@/lib/post-operation";
 import { usePurchasePlan } from "@/lib/purchase-plan";
 
 export const Route = createFileRoute("/_authenticated/sugestoes")({
@@ -65,13 +74,29 @@ function SugestoesPage() {
   const { data: rules } = useRules();
   const [saving, setSaving] = useState(false);
 
+  // Referencial do dia para cálculo de ciclo (Segunda a Segunda)
+  const [selectedRefDay, setSelectedRefDay] = useState<DayOfWeek | "auto">("auto");
+  const todayDayOfWeek = getDayOfWeekFromDate();
+  const effectiveRefDay = selectedRefDay === "auto" ? todayDayOfWeek : selectedRefDay;
+
+  // Flag de momento da contagem: pós-operação (fechamento, dia de hoje já usado) vs pré-operação
+  const [isPostOperation, setIsPostOperation] = usePostOperationMode();
+
+  // Recalcula métricas e sugestões dos produtos com base no dia referencial e no momento da contagem
+  const recomputedProducts = useMemo(() => {
+    if (!products) return [];
+    return products.map((p) =>
+      computeProduct(p, rules ?? DEFAULT_RULES, 0, effectiveRefDay, isPostOperation),
+    );
+  }, [products, rules, effectiveRefDay, isPostOperation]);
+
   // Filtros
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const [showAllStock, setShowAllStock] = useState<boolean>(false);
   const [search, setSearch] = useState("");
 
   const rows = useMemo(() => {
-    let list = products ?? [];
+    let list = recomputedProducts;
 
     if (supplierFilter !== "all") {
       list = list.filter((p) => (p.supplier_id || "sem-fornecedor") === supplierFilter);
@@ -91,7 +116,7 @@ function SugestoesPage() {
     }
 
     return list;
-  }, [products, supplierFilter, showAllStock, search]);
+  }, [recomputedProducts, supplierFilter, showAllStock, search]);
 
   const allChecked = rows.length > 0 && rows.every((r) => selected[r.id]);
   const chosen = rows.filter((r) => selected[r.id]);
@@ -146,7 +171,7 @@ function SugestoesPage() {
     <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="Sugestões de Compra"
-        description="Produtos que precisam de reposição, com sugestão calculada automaticamente e suporte a inclusão de itens com dígito 0."
+        description="Produtos que precisam de reposição. A compra sugerida analisa o saldo que restará na 2ª feira (estoque atual menos o consumo restante até a entrega) e sugere a quantidade necessária para suprir o giro da semana."
         actions={
           <Button onClick={generateOrders} disabled={saving || chosen.length === 0}>
             <ShoppingCart className="h-4 w-4" />
@@ -157,9 +182,9 @@ function SugestoesPage() {
 
       {/* Barra de Filtros */}
       <div className="mb-4 flex flex-col gap-4 rounded-lg border bg-card p-4 shadow-card md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-1 flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="flex flex-1 flex-wrap items-center gap-4">
           {/* Fornecedor */}
-          <div className="w-full sm:w-64">
+          <div className="w-full sm:w-56">
             <Label className="mb-1 block text-xs font-medium text-muted-foreground">
               Fornecedor
             </Label>
@@ -176,6 +201,60 @@ function SugestoesPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Dia Referencial do Ciclo */}
+          <div className="w-full sm:w-56">
+            <Label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Dia Referencial do Ciclo
+            </Label>
+            <Select
+              value={selectedRefDay}
+              onValueChange={(val) => setSelectedRefDay(val as DayOfWeek | "auto")}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Dia de referência" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">
+                  Hoje (Automático - {DAYS_OF_WEEK.find((d) => d.key === todayDayOfWeek)?.label})
+                </SelectItem>
+                {DAYS_OF_WEEK.map((d) => (
+                  <SelectItem key={d.key} value={d.key}>
+                    {d.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Momento da Contagem: Pós-operação (Fechamento) vs Pré-operação */}
+          <div className="w-full sm:w-auto">
+            <Label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Momento da Contagem
+            </Label>
+            <div
+              className="flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 h-10 shadow-xs cursor-pointer hover:bg-muted/30 transition-colors"
+              onClick={() => setIsPostOperation(!isPostOperation)}
+              title="Quando ativo (Pós-operação), o dia de hoje já encerrou e foi consumido. O estoque contado atenderá a partir de amanhã até a 2ª feira. Ex: Sábado à noite conta 2 dias de consumo (Dom e Seg) em vez de 3."
+            >
+              <Switch
+                id="post-op-sugestoes"
+                checked={isPostOperation}
+                onCheckedChange={setIsPostOperation}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold leading-tight text-foreground select-none">
+                  {isPostOperation ? "Pós-operação (Fechamento)" : "Pré-operação (Abertura)"}
+                </span>
+                <span className="text-[10px] text-muted-foreground leading-none select-none">
+                  {isPostOperation
+                    ? "Dia de hoje já consumido"
+                    : "Dia de hoje ainda será consumido"}
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Flag Opcional: Exibir estoque completo mesmo com sugestão 0 */}
@@ -209,7 +288,7 @@ function SugestoesPage() {
 
       <div className="rounded-lg border bg-card shadow-card">
         <div className="overflow-x-auto">
-          <Table className="min-w-[800px]">
+          <Table className="min-w-[900px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">
@@ -223,7 +302,8 @@ function SugestoesPage() {
                 <TableHead>Produto</TableHead>
                 <TableHead>Fornecedor</TableHead>
                 <TableHead className="text-right">Estoque Atual</TableHead>
-                <TableHead className="text-right">Consumo Semanal</TableHead>
+                <TableHead className="text-right">Saldo p/ 2ª Feira</TableHead>
+                <TableHead className="text-right">Giro Semanal</TableHead>
                 <TableHead className="text-right">Compra Sugerida</TableHead>
                 <TableHead className="text-right">Quero Comprar</TableHead>
                 <TableHead className="text-right">Estoque Futuro</TableHead>
@@ -261,6 +341,24 @@ function SugestoesPage() {
                     <TableCell className="num text-right">
                       {formatQty(p.current_stock, p.unit)}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <div
+                        className={`text-xs font-semibold ${
+                          (p.projectedCycleEndStock ?? 0) <= 0
+                            ? "text-rose-600 dark:text-rose-400 font-bold"
+                            : "text-emerald-700 dark:text-emerald-400"
+                        }`}
+                        title={`Consumo restante (${p.remainingDaysLabel}): ${formatQty(p.remainingConsumption, p.unit)}`}
+                      >
+                        {formatQty(p.projectedCycleEndStock, p.unit)}
+                      </div>
+                      <div
+                        className="text-[10px] text-muted-foreground"
+                        title={p.remainingDaysLabel}
+                      >
+                        (-{formatQty(p.remainingConsumption, p.unit)} em {p.remainingDaysCount}d)
+                      </div>
+                    </TableCell>
                     <TableCell className="num text-right">
                       {formatQty(p.avg_weekly_consumption, p.unit)}
                     </TableCell>
@@ -286,7 +384,7 @@ function SugestoesPage() {
               })}
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
+                  <TableCell colSpan={11} className="py-10 text-center text-muted-foreground">
                     {showAllStock
                       ? "Nenhum produto encontrado para os filtros selecionados."
                       : "Nenhum produto precisa de reposição no momento. Ative 'Exibir estoque completo' para visualizar todos os itens."}
