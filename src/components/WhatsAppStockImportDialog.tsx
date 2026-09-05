@@ -48,6 +48,7 @@ import { formatQty } from "@/lib/inventory";
 import {
   parseWhatsAppStockMessage,
   unitsAreCompatible,
+  saveWhatsAppAlias,
   type ParsedStockItem,
 } from "@/lib/whatsapp-stock-parser";
 
@@ -125,9 +126,16 @@ export function WhatsAppStockImportDialog({
     setItems([]);
   };
 
-  // Alterar produto associado
+  // Alterar produto associado e memorizar como apelido
   const handleSelectProduct = (itemId: string, productId: string) => {
     const product = (products ?? []).find((p) => p.id === productId) || null;
+    const currentItem = items.find((it) => it.id === itemId);
+
+    // Memoriza o termo como apelido para futuras contagens
+    if (productId !== "none" && currentItem?.rawName) {
+      saveWhatsAppAlias(currentItem.rawName, productId);
+    }
+
     setItems((prev) =>
       prev.map((item) => {
         if (item.id !== itemId) return item;
@@ -568,9 +576,22 @@ export function WhatsAppStockImportDialog({
                                 )}
                               </div>
                               {suggestedProduct && (
-                                <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-400">
-                                  Sugestão: {suggestedProduct.description}. Confirme no seletor.
-                                </p>
+                                <div className="mt-1 flex items-center justify-between gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-800 dark:text-amber-300">
+                                  <span className="truncate">
+                                    Sugestão: <strong>{suggestedProduct.description}</strong>
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-5 shrink-0 border-amber-500/30 bg-background px-1.5 text-[10px] font-medium text-amber-800 hover:bg-amber-500/20 dark:text-amber-200"
+                                    onClick={() =>
+                                      handleSelectProduct(item.id, suggestedProduct.id)
+                                    }
+                                  >
+                                    Vincular
+                                  </Button>
+                                </div>
                               )}
                               {hasUnitMismatch && product && (
                                 <p className="mt-1 text-[10px] text-destructive">

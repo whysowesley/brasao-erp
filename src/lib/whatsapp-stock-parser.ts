@@ -26,6 +26,133 @@ export function normalizeString(str: string): string {
     .trim();
 }
 
+export const PORTUGUESE_STOPWORDS = new Set([
+  "de",
+  "do",
+  "da",
+  "dos",
+  "das",
+  "em",
+  "no",
+  "na",
+  "nos",
+  "nas",
+  "com",
+  "sem",
+  "para",
+  "pra",
+  "pro",
+  "p",
+  "c",
+  "e",
+  "a",
+  "o",
+  "as",
+  "os",
+  "um",
+  "uma",
+  "uns",
+  "umas",
+  "tipo",
+]);
+
+export const COMMON_ABBREVIATIONS: Record<string, string> = {
+  mussa: "mussarela",
+  muçarela: "mussarela",
+  muss: "mussarela",
+  refri: "refrigerante",
+  pza: "pizza",
+  hamb: "hamburguer",
+  burguer: "hamburguer",
+  burger: "hamburguer",
+  frang: "frango",
+  bat: "batata",
+  choc: "chocolate",
+  cond: "condensado",
+  req: "requeijao",
+  catup: "catupiry",
+  calab: "calabresa",
+  maio: "maionese",
+  parm: "parmesao",
+  pres: "presunto",
+  desc: "descartavel",
+  alv: "alvejante",
+  det: "detergente",
+  ceb: "cebola",
+  tom: "tomate",
+  cen: "cenoura",
+  pao: "pao",
+};
+
+/**
+ * Reduz palavras comuns no plural para singular para comparação culinária assertiva
+ */
+export function singularizeWord(word: string): string {
+  if (word.length <= 3) return word;
+  if (word.endsWith("coes")) return word.slice(0, -4) + "cao";
+  if (word.endsWith("oes")) return word.slice(0, -3) + "ao";
+  if (word.endsWith("res") || word.endsWith("zes") || word.endsWith("nes"))
+    return word.slice(0, -2);
+  if (
+    word.endsWith("ais") ||
+    word.endsWith("eis") ||
+    word.endsWith("ois") ||
+    word.endsWith("uis")
+  ) {
+    return word.slice(0, -2) + "l";
+  }
+  if (word.endsWith("s") && !word.endsWith("ss") && !word.endsWith("is") && !word.endsWith("us")) {
+    return word.slice(0, -1);
+  }
+  return word;
+}
+
+/**
+ * Transforma uma string em lista de tokens limpos, sem preposições e no singular
+ */
+export function cleanTokens(str: string): string[] {
+  const norm = normalizeString(str);
+  return norm
+    .split(" ")
+    .map((w) => w.trim())
+    .filter(Boolean)
+    .filter((w) => !PORTUGUESE_STOPWORDS.has(w))
+    .map((w) => COMMON_ABBREVIATIONS[w] || w)
+    .map(singularizeWord);
+}
+
+/**
+ * Retorna uma versão canônica da string sem acentos, sem preposições e normalizada
+ */
+export function cleanCanonical(str: string): string {
+  return cleanTokens(str).join(" ");
+}
+
+const STORAGE_KEY_WHATSAPP_ALIASES = "galeteria_whatsapp_learned_aliases";
+
+export function getSavedWhatsAppAliases(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_WHATSAPP_ALIASES);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveWhatsAppAlias(rawName: string, productId: string) {
+  if (typeof window === "undefined" || !rawName || !productId) return;
+  try {
+    const key = cleanCanonical(rawName);
+    if (!key) return;
+    const current = getSavedWhatsAppAliases();
+    current[key] = productId;
+    localStorage.setItem(STORAGE_KEY_WHATSAPP_ALIASES, JSON.stringify(current));
+  } catch (err) {
+    console.warn("Falha ao salvar alias do WhatsApp:", err);
+  }
+}
+
 const UNIT_ALIASES: Record<string, string> = {
   un: "UN",
   und: "UN",
@@ -115,7 +242,8 @@ function cleanProductDescription(desc: string): string {
 }
 
 /**
- * Calcula similaridade entre duas strings usando Dice's Coefficient (0 a 1)
+ * Calcula similaridade entre duas strings com remoção de preposições,
+ * singularização e análise de contenção de termos culinários.
  */
 function calculateSimilarity(str1: string, str2: string): number {
   const s1 = normalizeString(str1);
@@ -124,25 +252,48 @@ function calculateSimilarity(str1: string, str2: string): number {
   if (s1 === s2) return 1.0;
   if (!s1 || !s2) return 0.0;
 
-  if (s1.includes(s2) || s2.includes(s1)) {
-    const minLen = Math.min(s1.length, s2.length);
-    const maxLen = Math.max(s1.length, s2.length);
-    return 0.8 + (minLen / maxLen) * 0.2;
+  const canon1 = cleanCanonical(str1);
+  const canon2 = cleanCanonical(str2);
+  if (canon1 && canon2 && canon1 === canon2) {
+    return 1.0;
   }
 
-  // Token overlap
-  const tokens1 = new Set(s1.split(" ").filter(Boolean));
-  const tokens2 = new Set(s2.split(" ").filter(Boolean));
+  // Tokenização limpa (sem preposições, singularizada e com abreviações expandidas)
+  const tokens1 = cleanTokens(str1);
+  const tokens2 = cleanTokens(str2);
 
-  let overlap = 0;
-  for (const t of tokens1) {
-    if (tokens2.has(t)) overlap++;
+  if (tokens1.length > 0 && tokens2.length > 0) {
+    const set1 = new Set(tokens1);
+    const set2 = new Set(tokens2);
+
+    let overlap = 0;
+    for (const t of set1) {
+      if (set2.has(t)) overlap++;
+    }
+
+    // Se todos os termos da mensagem digitada (ex: "copo cafe") estão contidos no produto:
+    const containmentRaw = overlap / set1.size;
+    if (containmentRaw === 1.0) {
+      const ratio = set1.size / set2.size;
+      return 0.88 + ratio * 0.1; // 0.88 a 0.98
+    }
+
+    if (containmentRaw >= 0.66 && set1.size >= 2) {
+      return 0.83;
+    }
+
+    const tokenScore = (2 * overlap) / (set1.size + set2.size);
+    if (tokenScore > 0.7) return tokenScore;
   }
 
-  const tokenScore = (2 * overlap) / (tokens1.size + tokens2.size);
-  if (tokenScore > 0.7) return tokenScore;
+  // Substring no texto canônico
+  if (canon1 && canon2 && (canon1.includes(canon2) || canon2.includes(canon1))) {
+    const minLen = Math.min(canon1.length, canon2.length);
+    const maxLen = Math.max(canon1.length, canon2.length);
+    return 0.82 + (minLen / maxLen) * 0.15;
+  }
 
-  // Bigram similarity
+  // Similaridade de Bigramas
   const getBigrams = (str: string) => {
     const bigrams = new Set<string>();
     for (let i = 0; i < str.length - 1; i++) {
@@ -151,8 +302,8 @@ function calculateSimilarity(str1: string, str2: string): number {
     return bigrams;
   };
 
-  const b1 = getBigrams(s1);
-  const b2 = getBigrams(s2);
+  const b1 = getBigrams(canon1 || s1);
+  const b2 = getBigrams(canon2 || s2);
   let intersection = 0;
   for (const b of b1) {
     if (b2.has(b)) intersection++;
@@ -272,15 +423,36 @@ export function findBestProductMatch(
     return { matchedProduct: null, matchScore: 0, matchType: "none" };
   }
 
+  const canonRaw = cleanCanonical(rawName);
+
+  // 1. Verificar se há apelido aprendido anteriormente pelo usuário no WhatsApp
+  const learnedAliases = getSavedWhatsAppAliases();
+  if (canonRaw && learnedAliases[canonRaw]) {
+    const targetId = learnedAliases[canonRaw];
+    const learnedProduct = products.find((p) => p.id === targetId);
+    if (learnedProduct) {
+      return {
+        matchedProduct: learnedProduct,
+        matchScore: 1.0,
+        matchType: "exact",
+      };
+    }
+  }
+
   let bestProduct: ProductRow | null = null;
   let bestScore = 0;
 
   for (const p of products) {
     const normDesc = normalizeString(p.description);
     const cleanDesc = cleanProductDescription(p.description);
+    const canonDesc = cleanCanonical(p.description);
 
-    // 1. Correspondência exata perfeita
-    if (normDesc === normRaw || cleanDesc === normRaw) {
+    // 2. Correspondência exata direta ou canônica perfeita (ex: "copo café" vs "Copo de café")
+    if (
+      normDesc === normRaw ||
+      cleanDesc === normRaw ||
+      (canonDesc && canonRaw && canonDesc === canonRaw)
+    ) {
       return {
         matchedProduct: p,
         matchScore: 1.0,
@@ -288,7 +460,7 @@ export function findBestProductMatch(
       };
     }
 
-    // 2. Correspondência exata por código se informado
+    // 3. Correspondência exata por código se informado
     if (p.code !== null && String(p.code) === normRaw) {
       return {
         matchedProduct: p,
@@ -297,9 +469,9 @@ export function findBestProductMatch(
       };
     }
 
-    // 3. Similaridade ponderada
-    const score1 = calculateSimilarity(normRaw, normDesc);
-    const score2 = calculateSimilarity(normRaw, cleanDesc);
+    // 4. Similaridade ponderada
+    const score1 = calculateSimilarity(rawName, p.description);
+    const score2 = calculateSimilarity(rawName, cleanDesc);
     const score = Math.max(score1, score2);
 
     if (score > bestScore) {
@@ -308,7 +480,13 @@ export function findBestProductMatch(
     }
   }
 
-  if (bestScore >= 0.85) {
+  if (bestScore >= 0.95) {
+    return {
+      matchedProduct: bestProduct,
+      matchScore: bestScore,
+      matchType: "exact",
+    };
+  } else if (bestScore >= 0.8) {
     return {
       matchedProduct: bestProduct,
       matchScore: bestScore,
@@ -355,9 +533,11 @@ export function parseWhatsAppStockMessage(text: string, products: ProductRow[]):
       matchedProduct,
       matchScore,
       matchType,
-      // Alterações de estoque exigem confirmação manual para qualquer
-      // correspondência que não seja exata.
-      selectedProductId: matchType === "exact" ? (matchedProduct?.id ?? null) : null,
+      // Auto-selecionar se a correspondência for exata ou de alta confiança (>= 80%)
+      selectedProductId:
+        matchType === "exact" || (matchType === "high" && matchScore >= 0.8)
+          ? (matchedProduct?.id ?? null)
+          : null,
     });
   });
 
