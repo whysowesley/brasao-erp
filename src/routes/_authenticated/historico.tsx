@@ -91,8 +91,12 @@ function HistoricoPage() {
       </div>
 
       <div className="rounded-lg border bg-card shadow-card">
+        <div className="sm:hidden flex items-center justify-between px-3 py-2 text-[11px] text-muted-foreground bg-muted/40 border-b">
+          <span>Arraste para o lado para ver o histórico completo</span>
+          <span className="font-mono text-[10px] text-primary">↔ deslize</span>
+        </div>
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Data / hora</TableHead>

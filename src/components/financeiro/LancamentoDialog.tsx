@@ -81,6 +81,9 @@ export function LancamentoDialog({
   const [costCenterId, setCostCenterId] = useState<string>("none");
   const [supplierId, setSupplierId] = useState<string>("none");
   const [paymentMethodId, setPaymentMethodId] = useState<string>("none");
+  const [expectedPaymentDate, setExpectedPaymentDate] = useState<Date | undefined>(undefined);
+  const [issueDate, setIssueDate] = useState<Date | undefined>(undefined);
+  const [code, setCode] = useState<string>("");
   const [notes, setNotes] = useState("");
   const [documentUrl, setDocumentUrl] = useState("");
 
@@ -103,6 +106,23 @@ export function LancamentoDialog({
       } catch {
         setDueDate(new Date());
       }
+      try {
+        setExpectedPaymentDate(
+          transactionToEdit.expected_payment_date
+            ? parseISO(transactionToEdit.expected_payment_date)
+            : undefined,
+        );
+      } catch {
+        setExpectedPaymentDate(undefined);
+      }
+      try {
+        setIssueDate(
+          transactionToEdit.issue_date ? parseISO(transactionToEdit.issue_date) : undefined,
+        );
+      } catch {
+        setIssueDate(undefined);
+      }
+      setCode(transactionToEdit.code ? String(transactionToEdit.code) : "");
       setCategoryId(transactionToEdit.category_id || "none");
       setCostCenterId(transactionToEdit.cost_center_id || "none");
       setSupplierId(transactionToEdit.supplier_id || "none");
@@ -115,6 +135,9 @@ export function LancamentoDialog({
       setDescription("");
       setAmount("");
       setDueDate(new Date());
+      setExpectedPaymentDate(undefined);
+      setIssueDate(undefined);
+      setCode("");
       setCategoryId("none");
       setCostCenterId("none");
       setSupplierId("none");
@@ -145,6 +168,11 @@ export function LancamentoDialog({
     }
 
     const formattedDueDate = format(dueDate, "yyyy-MM-dd");
+    const formattedExpectedDate = expectedPaymentDate
+      ? format(expectedPaymentDate, "yyyy-MM-dd")
+      : null;
+    const formattedIssueDate = issueDate ? format(issueDate, "yyyy-MM-dd") : null;
+    const parsedCode = code ? parseInt(code, 10) || null : null;
     const selectedSupplier = suppliers.find((s) => s.id === supplierId);
 
     try {
@@ -155,6 +183,9 @@ export function LancamentoDialog({
           type: tipo,
           amount: parsedAmount,
           due_date: formattedDueDate,
+          expected_payment_date: formattedExpectedDate,
+          issue_date: formattedIssueDate,
+          code: parsedCode,
           category_id: categoryId !== "none" ? categoryId : null,
           cost_center_id: costCenterId !== "none" ? costCenterId : null,
           supplier_id: supplierId !== "none" ? supplierId : null,
@@ -170,6 +201,9 @@ export function LancamentoDialog({
           type: tipo,
           amount: parsedAmount,
           due_date: formattedDueDate,
+          expected_payment_date: formattedExpectedDate,
+          issue_date: formattedIssueDate,
+          code: parsedCode,
           category_id: categoryId !== "none" ? categoryId : null,
           cost_center_id: costCenterId !== "none" ? costCenterId : null,
           supplier_id: supplierId !== "none" ? supplierId : null,
@@ -295,11 +329,11 @@ export function LancamentoDialog({
               </div>
             </div>
 
-            {/* Vencimento e Categoria */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {/* Vencimento, Nova Data (Postergada) e Emissão */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label>
-                  Data de Vencimento <span className="text-rose-500">*</span>
+                  Dia de Vencimento <span className="text-rose-500">*</span>
                 </Label>
                 <Popover>
                   <PopoverTrigger asChild>
@@ -327,6 +361,89 @@ export function LancamentoDialog({
                 </Popover>
               </div>
 
+              <div className="space-y-1.5">
+                <Label className="flex items-center justify-between">
+                  <span>Nova Data Pgto</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">
+                    (Postergada)
+                  </span>
+                </Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="tx-expected-date-btn"
+                      variant="outline"
+                      className={`w-full justify-start text-left font-normal ${
+                        expectedPaymentDate ? "text-blue-700 dark:text-blue-400 font-medium" : ""
+                      }`}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                      {expectedPaymentDate ? (
+                        format(expectedPaymentDate, "dd/MM/yyyy", { locale: ptBR })
+                      ) : (
+                        <span className="text-muted-foreground">Mesma do vencimento</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-2" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={expectedPaymentDate}
+                      onSelect={(d) => setExpectedPaymentDate(d)}
+                      initialFocus
+                    />
+                    {expectedPaymentDate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs mt-1"
+                        onClick={() => setExpectedPaymentDate(undefined)}
+                      >
+                        Limpar data postergada
+                      </Button>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="flex items-center justify-between">
+                  <span>Emissão / Código</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">(Opcional)</span>
+                </Label>
+                <div className="flex gap-1.5">
+                  <Input
+                    placeholder="Doc/Cód"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    className="w-24 text-xs font-mono"
+                  />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="flex-1 justify-start text-left font-normal text-xs px-2"
+                        title="Data de emissão"
+                      >
+                        <CalendarIcon className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
+                        {issueDate ? format(issueDate, "dd/MM/yy") : "Emissão"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-2" align="end">
+                      <Calendar
+                        mode="single"
+                        selected={issueDate}
+                        onSelect={(d) => setIssueDate(d)}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+            </div>
+
+            {/* Categoria e Fornecedor */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1">
                   <Tag className="h-3.5 w-3.5 text-muted-foreground" />

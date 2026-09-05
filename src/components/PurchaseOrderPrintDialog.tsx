@@ -5,7 +5,10 @@ import {
   Download,
   FileText,
   Grid2X2,
+  Grid3X3,
+  Image as ImageIcon,
   ListFilter,
+  Loader2,
   Maximize2,
   Printer,
   Share2,
@@ -63,9 +66,13 @@ export function PurchaseOrderPrintDialog({
   triggerButton,
 }: PurchaseOrderPrintDialogProps) {
   const [open, setOpen] = useState(false);
-  const [layoutMode, setLayoutMode] = useState<"auto" | "single" | "two-columns">("auto");
+  const [layoutMode, setLayoutMode] = useState<"auto" | "single" | "two-columns" | "three-columns">(
+    "auto",
+  );
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [showCheckboxes, setShowCheckboxes] = useState(true);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isCapturingImage, setIsCapturingImage] = useState(false);
   const printContainerRef = useRef<HTMLDivElement>(null);
   const { branding } = useBranding();
 
@@ -98,15 +105,128 @@ export function PurchaseOrderPrintDialog({
     return items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
   }, [items]);
 
-  // Escolhe automaticamente se divide em 2 colunas para caber em 1 tela quando tiver mais de 8 itens
+  // Escolhe automaticamente se divide em 2 ou 3 colunas para caber em 1 tela perfeitamente sem rolar
   const effectiveLayout = useMemo(() => {
+    if (layoutMode === "three-columns") return "three-columns";
     if (layoutMode === "two-columns") return "two-columns";
     if (layoutMode === "single") return "single";
-    return items.length > 8 ? "two-columns" : "single";
+    if (items.length > 20) return "three-columns";
+    if (items.length > 7) return "two-columns";
+    return "single";
   }, [layoutMode, items.length]);
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!printContainerRef.current) return;
+    setIsGeneratingPdf(true);
+    const toastId = toast.loading("Gerando PDF em alta definição...");
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+
+      const element = printContainerRef.current;
+      const prevZoom = element.style.zoom;
+      element.style.zoom = "100%";
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+
+      element.style.zoom = prevZoom;
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const margin = 8;
+      const imgWidth = pdfWidth - margin * 2;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      if (imgHeight <= pdfHeight - margin * 2) {
+        pdf.addImage(imgData, "PNG", margin, margin, imgWidth, imgHeight);
+      } else {
+        const ratio = (pdfHeight - margin * 2) / imgHeight;
+        pdf.addImage(imgData, "PNG", margin, margin, imgWidth * ratio, pdfHeight - margin * 2);
+      }
+
+      const safeSupplier = supplierName.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 20);
+      pdf.save(`Pedido_${orderNumberStr}_${safeSupplier}.pdf`);
+      toast.success("PDF baixado com sucesso!", { id: toastId });
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao gerar PDF: " + (err as Error).message, { id: toastId });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleCopyImage = async () => {
+    if (!printContainerRef.current) return;
+    setIsCapturingImage(true);
+    const toastId = toast.loading("Capturando imagem do pedido em tela única...");
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const element = printContainerRef.current;
+      const prevZoom = element.style.zoom;
+      element.style.zoom = "100%";
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+
+      element.style.zoom = prevZoom;
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          toast.error("Não foi possível gerar a imagem.", { id: toastId });
+          return;
+        }
+        try {
+          if (navigator.clipboard && window.ClipboardItem) {
+            await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+            toast.success(
+              "Imagem copiada para a área de transferência! Só colar no WhatsApp (Ctrl+V).",
+              { id: toastId },
+            );
+          } else {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `Pedido_${orderNumberStr}.png`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast.success("Imagem PNG baixada!", { id: toastId });
+          }
+        } catch {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `Pedido_${orderNumberStr}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+          toast.success("Imagem PNG baixada com sucesso!", { id: toastId });
+        }
+      }, "image/png");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao capturar imagem: " + (err as Error).message, { id: toastId });
+    } finally {
+      setIsCapturingImage(false);
+    }
   };
 
   const handleCopyWhatsApp = () => {
@@ -145,7 +265,7 @@ export function PurchaseOrderPrintDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-h-[96vh] max-w-4xl overflow-hidden p-0 sm:max-h-[92vh]">
+      <DialogContent className="max-h-[96vh] max-w-5xl overflow-hidden p-0 sm:max-h-[92vh]">
         <DialogHeader className="border-b bg-muted/30 px-6 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -194,9 +314,21 @@ export function PurchaseOrderPrintDialog({
                       ? "bg-primary font-medium text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
-                  title="2 Colunas compactas (ótimo para print em 1 tela)"
+                  title="2 Colunas compactas (ótimo para pedidos médios)"
                 >
                   <Grid2X2 className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLayoutMode("three-columns")}
+                  className={`rounded px-2 py-1 transition-colors ${
+                    layoutMode === "three-columns"
+                      ? "bg-primary font-medium text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="3 Colunas ultra-compactas (ótimo para hortifrúti/muitos produtos em 1 tela)"
+                >
+                  <Grid3X3 className="h-3.5 w-3.5" />
                 </button>
               </div>
 
@@ -248,7 +380,12 @@ export function PurchaseOrderPrintDialog({
             className="printable-purchase-order mx-auto rounded-lg border bg-card p-6 text-card-foreground shadow-sm transition-all duration-150 sm:p-8"
             style={{
               zoom: `${zoomLevel}%`,
-              maxWidth: effectiveLayout === "two-columns" ? "880px" : "780px",
+              maxWidth:
+                effectiveLayout === "three-columns"
+                  ? "980px"
+                  : effectiveLayout === "two-columns"
+                    ? "880px"
+                    : "780px",
             }}
           >
             {/* Cabeçalho do Pedido */}
@@ -333,29 +470,39 @@ export function PurchaseOrderPrintDialog({
                 </span>
               </div>
 
-              {effectiveLayout === "two-columns" ? (
-                /* Layout em 2 Colunas Compactas */
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {effectiveLayout === "three-columns" || effectiveLayout === "two-columns" ? (
+                /* Layout em Colunas Compactas para Caber em 1 Tela */
+                <div
+                  className={`grid gap-1.5 sm:gap-2 ${
+                    effectiveLayout === "three-columns"
+                      ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3"
+                      : "grid-cols-1 sm:grid-cols-2"
+                  }`}
+                >
                   {items.map((it) => (
                     <div
                       key={it.id}
-                      className="flex items-center justify-between rounded border bg-card/60 px-3 py-1.5 text-xs shadow-xs"
+                      className={`flex items-center justify-between rounded border bg-card/60 shadow-xs transition-colors hover:bg-muted/30 ${
+                        effectiveLayout === "three-columns"
+                          ? "px-2 py-1 text-[11px]"
+                          : "px-3 py-1.5 text-xs"
+                      }`}
                     >
-                      <div className="flex items-center gap-2 overflow-hidden pr-2">
+                      <div className="flex items-center gap-1.5 overflow-hidden pr-1.5">
                         {showCheckboxes && (
-                          <div className="h-3.5 w-3.5 shrink-0 rounded-xs border border-muted-foreground/40 bg-background" />
+                          <div className="h-3 w-3 shrink-0 rounded-xs border border-muted-foreground/40 bg-background" />
                         )}
-                        <span className="font-mono text-[11px] text-muted-foreground">
+                        <span className="font-mono text-[10px] text-muted-foreground shrink-0">
                           #{String(it.index).padStart(2, "0")}
                         </span>
                         <span
-                          className="truncate font-semibold text-foreground"
+                          className="truncate font-medium text-foreground"
                           title={it.resolvedDescription}
                         >
                           {it.resolvedDescription}
                         </span>
                       </div>
-                      <div className="shrink-0 text-right">
+                      <div className="shrink-0 text-right whitespace-nowrap">
                         <span className="font-mono font-bold text-primary">
                           {formatQty(it.quantity)}
                         </span>{" "}
@@ -446,8 +593,8 @@ export function PurchaseOrderPrintDialog({
         <DialogFooter className="gap-2 border-t bg-muted/30 px-6 py-3 sm:justify-between">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>
-              Dica: Use <strong>Ajustar / 2 Colunas</strong> para enquadrar perfeitamente em 1
-              print.
+              Dica: Use <strong>2 ou 3 Colunas</strong> para enquadrar perfeitamente em 1 tela para
+              print ou PDF.
             </span>
           </div>
 
@@ -456,11 +603,46 @@ export function PurchaseOrderPrintDialog({
               type="button"
               variant="outline"
               size="sm"
+              onClick={handleCopyImage}
+              disabled={isCapturingImage}
+              className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+              title="Copia a imagem direta para a área de transferência para colar no WhatsApp (Ctrl+V)"
+            >
+              {isCapturingImage ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ImageIcon className="h-4 w-4 text-primary" />
+              )}
+              Copiar Imagem (WhatsApp)
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadPdf}
+              disabled={isGeneratingPdf}
+              className="gap-1.5 border-blue-600/30 text-blue-700 hover:bg-blue-50 dark:text-blue-400"
+              title="Baixar arquivo PDF de alta definição"
+            >
+              {isGeneratingPdf ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              )}
+              Baixar PDF
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={handleCopyWhatsApp}
               className="gap-1.5 border-emerald-600/30 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400"
+              title="Copiar lista de itens em texto formatado para o WhatsApp"
             >
               <Share2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              Copiar WhatsApp
+              Copiar Texto
             </Button>
 
             <Button
@@ -469,7 +651,7 @@ export function PurchaseOrderPrintDialog({
               className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
             >
               <Printer className="h-4 w-4" />
-              Imprimir / Salvar PDF
+              Imprimir
             </Button>
           </div>
         </DialogFooter>

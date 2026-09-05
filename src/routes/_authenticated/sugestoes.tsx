@@ -209,7 +209,7 @@ function SugestoesPage() {
 
       <div className="rounded-lg border bg-card shadow-card">
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="min-w-[800px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">
@@ -240,7 +240,14 @@ function SugestoesPage() {
                     : p.suggestedPurchase > 0
                       ? p.suggestedPurchase
                       : 0;
-                const future = Number(p.current_stock) + wanted - Number(p.avg_weekly_consumption);
+                // Estoque Futuro = Saldo da 2ª Segunda + Valor a comprar para a próxima semana
+                const future =
+                  Math.round(
+                    ((p.projectedCycleEndStock ?? Number(p.current_stock)) +
+                      wanted +
+                      Number.EPSILON) *
+                      1000,
+                  ) / 1000;
                 return (
                   <TableRow key={p.id} data-state={selected[p.id] ? "selected" : undefined}>
                     <TableCell>

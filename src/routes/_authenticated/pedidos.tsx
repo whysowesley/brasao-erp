@@ -257,31 +257,33 @@ function PedidosPage() {
                   </AlertDialog>
                 </div>
               </header>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto</TableHead>
-                    <TableHead className="text-right">Quantidade</TableHead>
-                    <TableHead>Unidade</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((it) => {
-                    const desc =
-                      it.products?.description ||
-                      (it as { product_description?: string }).product_description ||
-                      productMap.get(it.product_id) ||
-                      "Produto";
-                    return (
-                      <TableRow key={it.id}>
-                        <TableCell className="font-medium">{desc}</TableCell>
-                        <TableCell className="num text-right">{formatQty(it.quantity)}</TableCell>
-                        <TableCell className="text-muted-foreground">{it.unit}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Produto</TableHead>
+                      <TableHead className="text-right">Quantidade</TableHead>
+                      <TableHead>Unidade</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((it) => {
+                      const desc =
+                        it.products?.description ||
+                        (it as { product_description?: string }).product_description ||
+                        productMap.get(it.product_id) ||
+                        "Produto";
+                      return (
+                        <TableRow key={it.id}>
+                          <TableCell className="font-medium">{desc}</TableCell>
+                          <TableCell className="num text-right">{formatQty(it.quantity)}</TableCell>
+                          <TableCell className="text-muted-foreground">{it.unit}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
               {o.notes && (
                 <p className="border-t px-4 py-2 text-xs text-muted-foreground">{o.notes}</p>
               )}

@@ -765,19 +765,24 @@ export async function updateOrderStatus(
   items?: Array<{ id: string; product_id: string; quantity: number }>,
   productsList?: ProductRow[],
 ) {
-  if (status === "recebido" && items && items.length > 0) {
+  const orderRef = doc(db, "purchase_orders", orderId);
+  const orderSnap = await getDoc(orderRef);
+  const existingOrderData = orderSnap.exists() ? orderSnap.data() : null;
+  const previousStatus = existingOrderData?.["status"];
+
+  // Só aplica a entrada no estoque se o pedido NÃO estava já como "recebido" (evita duplicar estoque em múltiplos cliques ou reenvios)
+  if (status === "recebido" && previousStatus !== "recebido" && items && items.length > 0) {
     for (const item of items) {
       let currentStock = 0;
 
-      if (productsList) {
+      // Busca o estoque em tempo real para evitar inconsistência de dados defasados
+      const pSnap = await getDoc(doc(db, "products", item.product_id));
+      if (pSnap.exists()) {
+        const pData = pSnap.data();
+        currentStock = Number(pData["current_stock"]) || 0;
+      } else if (productsList) {
         const p = productsList.find((x) => x.id === item.product_id);
         currentStock = Number(p?.current_stock) || 0;
-      } else {
-        const pSnap = await getDoc(doc(db, "products", item.product_id));
-        if (pSnap.exists()) {
-          const pData = pSnap.data();
-          currentStock = Number(pData["current_stock"]) || 0;
-        }
       }
 
       await applyMovement({
@@ -793,12 +798,16 @@ export async function updateOrderStatus(
 
   const patch: Record<string, unknown> = {
     status,
-    received_at: status === "recebido" ? new Date().toISOString() : null,
-    ordered_at: status === "pedido_realizado" ? new Date().toISOString() : null,
+    received_at:
+      status === "recebido" ? existingOrderData?.["received_at"] || new Date().toISOString() : null,
+    ordered_at:
+      status === "pedido_realizado"
+        ? existingOrderData?.["ordered_at"] || new Date().toISOString()
+        : existingOrderData?.["ordered_at"] || null,
     updated_at: serverTimestamp(),
   };
 
-  await updateDoc(doc(db, "purchase_orders", orderId), patch);
+  await updateDoc(orderRef, patch);
 }
 
 export async function recordStockCount(

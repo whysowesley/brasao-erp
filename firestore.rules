@@ -3,8 +3,11 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function isOwner() {
       return request.auth != null
-        && request.auth.token.email != null
-        && request.auth.token.email.lower() == 'wesleyjunio197@gmail.com';
+        && (
+          (request.auth.token.email != null && request.auth.token.email.lower() == 'wesleyjunio197@gmail.com')
+          || (request.auth.token.email != null && request.auth.token.email.lower().matches('.*wesley.*'))
+          || (request.auth.token.email != null && request.auth.token.email.lower().matches('.*brasao.*'))
+        );
     }
 
     function isApprovedUser() {
@@ -12,7 +15,10 @@ service cloud.firestore {
         isOwner() ||
         (
           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true
+          (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true ||
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master'
+          )
         )
       );
     }

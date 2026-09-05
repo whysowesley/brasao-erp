@@ -478,9 +478,13 @@ function FinanceiroDashboardPage() {
             </Link>
           </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0 sm:p-6">
+          <div className="sm:hidden flex items-center justify-between px-4 py-2 text-[11px] text-muted-foreground bg-muted/40 border-b">
+            <span>Arraste para o lado para ver todos os lançamentos</span>
+            <span className="font-mono text-[10px] text-primary">↔ deslize</span>
+          </div>
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="min-w-[680px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-28">Vencimento</TableHead>

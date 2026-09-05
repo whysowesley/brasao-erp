@@ -46,6 +46,56 @@ export const DAYS_OF_WEEK: Array<{ key: DayOfWeek; label: string; short: string 
   { key: "seg2", label: "Segunda-feira (2)", short: "SEG 2" },
 ];
 
+export const DAYS_CYCLE_ORDER: DayOfWeek[] = [
+  "seg",
+  "ter",
+  "qua",
+  "qui",
+  "sex",
+  "sab",
+  "dom",
+  "seg2",
+];
+
+/** Mapeia a data real para o dia do ciclo de 8 dias (Segunda a Segunda) */
+export function getDayOfWeekFromDate(d: Date = new Date()): DayOfWeek {
+  const day = d.getDay();
+  switch (day) {
+    case 1:
+      return "seg";
+    case 2:
+      return "ter";
+    case 3:
+      return "qua";
+    case 4:
+      return "qui";
+    case 5:
+      return "sex";
+    case 6:
+      return "sab";
+    case 0:
+      return "dom";
+    default:
+      return "seg";
+  }
+}
+
+/** Retorna os dias restantes no ciclo de 8 dias a partir de um dia referencial até a 2ª feira (seg2) */
+export function getRemainingCycleDays(refDay: DayOfWeek): DayOfWeek[] {
+  const idx = DAYS_CYCLE_ORDER.indexOf(refDay);
+  if (idx === -1) return [...DAYS_CYCLE_ORDER];
+  return DAYS_CYCLE_ORDER.slice(idx);
+}
+
+/** Retorna um texto legível dos dias restantes, ex: 'Sex a Seg (4 dias)' */
+export function getRemainingDaysLabel(refDay: DayOfWeek): string {
+  const days = getRemainingCycleDays(refDay);
+  const first = DAYS_OF_WEEK.find((d) => d.key === days[0])?.short ?? "Hoje";
+  const last = DAYS_OF_WEEK.find((d) => d.key === days[days.length - 1])?.short ?? "SEG 2";
+  if (days.length === 1) return `${first} (1 dia)`;
+  return `${first} a ${last} (${days.length} dias)`;
+}
+
 export const DEFAULT_DAILY_CONSUMPTION: DailyConsumption = {
   seg: 0,
   ter: 0,
@@ -137,6 +187,11 @@ export type ComputedProduct = ProductRow & {
   futureStock: number;
   status: StockStatus;
   futureStatus: StockStatus;
+  referenceDay: DayOfWeek;
+  remainingDaysCount: number;
+  remainingDaysLabel: string;
+  remainingConsumption: number;
+  projectedCycleEndStock: number;
 };
 
 const round = (n: number) => Math.round((n + Number.EPSILON) * 1000) / 1000;
@@ -145,6 +200,7 @@ export function computeProduct(
   p: ProductRow,
   rules: PurchaseRules = DEFAULT_RULES,
   incoming = 0,
+  refDay: DayOfWeek = getDayOfWeekFromDate(),
 ): ComputedProduct {
   const weeks = p.coverage_weeks ?? rules.coverage_weeks ?? 1;
   const consumption = Number(p.avg_weekly_consumption) || 0;
@@ -153,22 +209,36 @@ export function computeProduct(
   const safety = Number(p.safety_stock) || 0;
   const margin = 1 + (rules.safety_margin_percent || 0) / 100;
 
-  const projectedStock = round(current - consumption * weeks);
+  // Cálculo referencial do dia (ex: Sexta-feira -> calcula Sex, Sáb, Dom e Seg2)
+  const daily = getDailyConsumptionFromProduct(p);
+  const remainingDays = getRemainingCycleDays(refDay);
+  let remainingConsumption = 0;
+  for (const dayKey of remainingDays) {
+    remainingConsumption += Number(daily[dayKey]) || 0;
+  }
+  remainingConsumption = round(remainingConsumption);
+  const remainingDaysLabel = getRemainingDaysLabel(refDay);
+  const projectedCycleEndStock = round(current - remainingConsumption);
 
+  // Sugestão de reposição e estoque futuro
   const rawSuggestion = (desired - current + consumption * weeks) * margin + safety - incoming;
   const suggestedPurchase = round(Math.max(0, rawSuggestion));
-  const futureStock = round(current + suggestedPurchase - consumption * weeks);
 
+  // O estoque futuro é o saldo da 2ª segunda + o valor a comprar para a próxima semana
+  const futureStock = round(projectedCycleEndStock + suggestedPurchase);
+  const projectedStock = projectedCycleEndStock;
+
+  // Status do estoque: só é crítico se for igual ou menor que zero (<= 0)
   let status: StockStatus = "normal";
-  if (projectedStock < 0 || (consumption > 0 && current < consumption)) {
+  if (projectedCycleEndStock <= 0) {
     status = "critico";
   } else if (
     current <= Number(p.min_stock) * (1 + (rules.attention_threshold_percent || 0) / 100) ||
-    projectedStock < Number(p.min_stock)
+    projectedCycleEndStock < Number(p.min_stock)
   ) {
     status = "atencao";
   }
-  if (consumption === 0 && suggestedPurchase === 0) status = "normal";
+  if (remainingConsumption === 0 && current > 0) status = "normal";
 
   const futureStatus = futureStatusFor(futureStock, Number(p.min_stock), rules);
 
@@ -181,6 +251,11 @@ export function computeProduct(
     futureStock,
     status,
     futureStatus,
+    referenceDay: refDay,
+    remainingDaysCount: remainingDays.length,
+    remainingDaysLabel,
+    remainingConsumption,
+    projectedCycleEndStock,
   };
 }
 

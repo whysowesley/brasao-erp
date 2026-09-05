@@ -66,6 +66,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 
 import {
   useFinancialTransactions,
@@ -74,6 +76,7 @@ import {
   usePaymentMethods,
   useDeleteFinancialTransaction,
   useReversePayment,
+  useMoveFinancialTransactionDay,
   resolveTransactionStatus,
   getTransactionDisplayTitle,
   getTodayString,
@@ -138,6 +141,7 @@ function LancamentosPage() {
   // Mutações
   const deleteMutation = useDeleteFinancialTransaction();
   const reverseMutation = useReversePayment();
+  const moveDayMutation = useMoveFinancialTransactionDay();
 
   // Resolve intervalo de datas pelo Preset
   const { startDate, endDate } = useMemo(() => {
@@ -511,11 +515,16 @@ function LancamentosPage() {
 
       {/* Tabela Principal */}
       <div className="rounded-lg border border-border bg-card shadow-sm">
+        <div className="sm:hidden flex items-center justify-between px-3 py-2 text-[11px] text-muted-foreground bg-muted/40 border-b">
+          <span>Arraste para o lado para ver todas as colunas</span>
+          <span className="font-mono text-[10px] text-primary">↔ deslize</span>
+        </div>
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="min-w-[880px]">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-28">Vencimento</TableHead>
+                <TableHead className="w-28">Dia de Vencimento</TableHead>
+                <TableHead className="w-32">Nova Data Pgto (Postergada)</TableHead>
                 <TableHead>Descrição</TableHead>
                 <TableHead className="w-24">Tipo</TableHead>
                 <TableHead>Categoria</TableHead>
@@ -530,14 +539,17 @@ function LancamentosPage() {
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={9}>
+                    <TableCell colSpan={10}>
                       <Skeleton className="h-8 w-full" />
                     </TableCell>
                   </TableRow>
                 ))
               ) : transactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-32 text-center text-sm text-muted-foreground">
+                  <TableCell
+                    colSpan={10}
+                    className="h-32 text-center text-sm text-muted-foreground"
+                  >
                     Nenhum lançamento financeiro encontrado com os filtros selecionados.
                   </TableCell>
                 </TableRow>
@@ -546,10 +558,13 @@ function LancamentosPage() {
                   const status = resolveTransactionStatus(t.status, t.due_date, today);
                   const isReceita = t.type === "receita";
                   const isPago = status === "pago";
+                  const hasPostponedDate = Boolean(
+                    t.expected_payment_date && t.expected_payment_date !== t.due_date,
+                  );
 
                   return (
                     <TableRow key={t.id} className="hover:bg-muted/30">
-                      {/* Vencimento */}
+                      {/* Dia de Vencimento (Original) */}
                       <TableCell className="text-xs font-medium">
                         <div>
                           <span>{format(parseISO(t.due_date), "dd/MM/yyyy")}</span>
@@ -559,6 +574,57 @@ function LancamentosPage() {
                             </p>
                           )}
                         </div>
+                      </TableCell>
+
+                      {/* Nova Data Pgto (Postergada / Previsão) */}
+                      <TableCell className="text-xs">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={!canWrite}
+                              className={`h-7 px-2 text-xs font-medium ${
+                                hasPostponedDate
+                                  ? "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}
+                              title="Clique para alterar a data postergada de pagamento"
+                            >
+                              <Calendar className="mr-1 h-3 w-3" />
+                              {t.expected_payment_date
+                                ? format(parseISO(t.expected_payment_date), "dd/MM/yyyy")
+                                : "—"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-3" align="start">
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold">Nova Data de Pagamento:</p>
+                              <CalendarPicker
+                                mode="single"
+                                selected={
+                                  t.expected_payment_date
+                                    ? parseISO(t.expected_payment_date)
+                                    : parseISO(t.due_date)
+                                }
+                                onSelect={async (newDate) => {
+                                  if (newDate) {
+                                    const formatted = format(newDate, "yyyy-MM-dd");
+                                    await moveDayMutation.mutateAsync({
+                                      id: t.id,
+                                      targetDate: formatted,
+                                      mode: "expected",
+                                    });
+                                    toast.success(
+                                      `Data reagendada para ${format(newDate, "dd/MM/yyyy")}!`,
+                                    );
+                                  }
+                                }}
+                                initialFocus
+                              />
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       </TableCell>
 
                       {/* Descrição & Detalhes */}

@@ -17,7 +17,9 @@ import {
   TrendingDown,
   TrendingUp,
   Calendar,
+  CalendarDays,
   FileSpreadsheet,
+  CircleDollarSign,
   type LucideIcon,
 } from "lucide-react";
 
@@ -39,7 +41,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-const operacaoItems = [
+const estoqueItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Produtos", url: "/estoque", icon: Boxes },
   { title: "Contagens", url: "/contagens", icon: ClipboardList },
@@ -53,20 +55,29 @@ const financeiroItems = [
   { title: "Dashboard Financeiro", url: "/financeiro", icon: Landmark },
   { title: "Fluxo de Caixa", url: "/financeiro/lancamentos", icon: ArrowLeftRight },
   { title: "Contas a Pagar", url: "/financeiro/contas-pagar", icon: TrendingDown },
+  { title: "Vencimentos por Dia", url: "/financeiro/vencimentos", icon: CalendarDays },
   { title: "Contas a Receber", url: "/financeiro/contas-receber", icon: TrendingUp },
   { title: "Visão Mensal", url: "/financeiro/meses", icon: Calendar },
   { title: "Relatórios / DRE", url: "/financeiro/relatorios", icon: FileSpreadsheet },
 ];
 
+const vendasItems = [{ title: "Vendas por Canal", url: "/vendas", icon: CircleDollarSign }];
+
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const { branding } = useBranding();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const isActive = (url: string) => {
     if (url === "/") return pathname === "/";
     if (url === "/financeiro") return pathname === "/financeiro" || pathname === "/financeiro/";
+    if (url === "/vendas") return pathname === "/vendas" || pathname.startsWith("/vendas");
     return pathname === url || pathname.startsWith(url + "/");
+  };
+  const handleNavClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
   };
   const { data: me } = useMe();
   const navigate = useNavigate();
@@ -115,7 +126,7 @@ export function AppSidebar() {
           <BrasaoLogo size="md" className="shrink-0" />
           {!collapsed && (
             <div className="leading-tight">
-              <p className="font-serif text-sm font-bold tracking-wide text-sidebar-foreground truncate max-w-[170px]">
+              <p className="text-sm font-semibold tracking-tight text-sidebar-foreground truncate max-w-[170px]">
                 {branding.companyName || "Galeteria Brasão"}
               </p>
               <p className="text-[11px] font-medium text-sidebar-foreground/70 truncate max-w-[170px]">
@@ -127,15 +138,19 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Operação */}
+        {/* Estoque */}
         <SidebarGroup>
-          <SidebarGroupLabel>Operação</SidebarGroupLabel>
+          <SidebarGroupLabel>Estoque</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {operacaoItems.map((item) => (
+              {estoqueItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <Link to={item.url} className="flex items-center gap-2">
+                    <Link
+                      to={item.url}
+                      onClick={handleNavClick}
+                      className="flex items-center gap-2"
+                    >
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
@@ -154,7 +169,34 @@ export function AppSidebar() {
               {financeiroItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <Link to={item.url} className="flex items-center gap-2">
+                    <Link
+                      to={item.url}
+                      onClick={handleNavClick}
+                      className="flex items-center gap-2"
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Vendas */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Vendas</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {vendasItems.map((item) => (
+                <SidebarMenuItem key={item.url}>
+                  <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                    <Link
+                      to={item.url}
+                      onClick={handleNavClick}
+                      className="flex items-center gap-2"
+                    >
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
@@ -173,7 +215,11 @@ export function AppSidebar() {
               {systemItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <Link to={item.url} className="flex items-center justify-between gap-2">
+                    <Link
+                      to={item.url}
+                      onClick={handleNavClick}
+                      className="flex items-center justify-between gap-2"
+                    >
                       <div className="flex items-center gap-2">
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>

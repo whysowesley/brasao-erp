@@ -459,8 +459,12 @@ function ContasReceberPage() {
         </TabsList>
 
         <div className="mt-4 rounded-lg border border-border bg-card shadow-sm">
+          <div className="sm:hidden flex items-center justify-between px-3 py-2 text-[11px] text-muted-foreground bg-muted/40 border-b">
+            <span>Arraste para o lado para ver todas as colunas</span>
+            <span className="font-mono text-[10px] text-primary">↔ deslize</span>
+          </div>
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="min-w-[720px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-28">Previsão</TableHead>

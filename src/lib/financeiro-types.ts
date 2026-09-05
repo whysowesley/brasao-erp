@@ -34,6 +34,10 @@ export interface FinancialTransaction {
   type: TipoTransacao;
   amount: number;
   due_date: string; // YYYY-MM-DD
+  expected_payment_date?: string | null; // Data Prevista Pgmt / Nova Data Pagamento (postergada) YYYY-MM-DD
+  issue_date?: string | null; // Data de emissão YYYY-MM-DD
+  code?: string | number | null; // Código ou identificador
+  order_index?: number | null; // Ordem vertical customizável
   payment_date: string | null; // YYYY-MM-DD
   paid_amount: number | null;
   status: StatusTransacao;
@@ -72,6 +76,10 @@ export interface CreateFinancialTransactionInput {
   type: TipoTransacao;
   amount: number;
   due_date: string;
+  expected_payment_date?: string | null | undefined;
+  issue_date?: string | null | undefined;
+  code?: string | number | null | undefined;
+  order_index?: number | null | undefined;
   payment_date?: string | null | undefined;
   paid_amount?: number | null | undefined;
   status?: StatusTransacao | undefined;
@@ -94,6 +102,10 @@ export interface UpdateFinancialTransactionInput {
   type?: TipoTransacao | undefined;
   amount?: number | undefined;
   due_date?: string | undefined;
+  expected_payment_date?: string | null | undefined;
+  issue_date?: string | null | undefined;
+  code?: string | number | null | undefined;
+  order_index?: number | null | undefined;
   payment_date?: string | null | undefined;
   paid_amount?: number | null | undefined;
   status?: StatusTransacao | undefined;

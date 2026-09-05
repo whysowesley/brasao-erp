@@ -111,17 +111,17 @@ function AuthenticatedLayout() {
       <div className="flex min-h-screen w-full bg-background">
         <AppSidebar />
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-card/90 px-4 backdrop-blur">
-            <SidebarTrigger />
+          <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-card/95 px-3 sm:px-4 backdrop-blur">
+            <SidebarTrigger className="h-9 w-9 touch-manipulation" />
             <div className="h-5 w-px bg-border" />
             <div className="flex items-center gap-2 min-w-0">
               <BrasaoLogo size="xs" className="shrink-0 md:hidden" />
-              <p className="text-sm font-medium text-muted-foreground truncate">
+              <p className="text-xs sm:text-sm font-medium text-muted-foreground truncate">
                 {branding.companyName || "Galeteria Brasão"} · Gestão Integrada
               </p>
             </div>
           </header>
-          <main className="flex-1 px-4 py-6 md:px-8">
+          <main className="flex-1 px-3 py-4 sm:px-6 sm:py-6 md:px-8">
             <Outlet />
           </main>
         </div>

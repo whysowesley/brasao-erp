@@ -47,10 +47,10 @@ export function BrasaoLogo({
       </div>
       {showText && (
         <div className="flex flex-col text-left leading-none">
-          <span className="font-serif text-sm font-extrabold tracking-wider text-amber-500 uppercase">
+          <span className="text-xs font-bold tracking-wider text-amber-500 uppercase">
             {branding.companyName ? branding.companyName.split(" ")[0] : "Galeteria"}
           </span>
-          <span className="font-serif text-base font-black tracking-widest text-foreground uppercase">
+          <span className="text-sm font-extrabold tracking-tight text-foreground uppercase">
             {branding.companyName ? branding.companyName.split(" ").slice(1).join(" ") : "Brasão"}
           </span>
         </div>

@@ -1,6 +1,6 @@
 {
   "name": "Brasão ERP",
-  "description": "Sistema integrado de gestão para Galeteria Brasão: Estoque, Compras e Módulo Financeiro & Fluxo de Caixa.",
+  "description": "Sistema integrado de gestão para Galeteria Brasão: Estoque, Compras, Financeiro e Módulo de Vendas por Canal.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

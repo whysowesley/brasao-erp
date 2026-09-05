@@ -1,6 +1,6 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowUpDown, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
+import { ArrowUpDown, Calendar, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/PageHeader";
@@ -8,6 +8,7 @@ import { PlanInput } from "@/components/PlanInput";
 import { ProductDialog } from "@/components/ProductDialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import { WhatsAppStockImportDialog } from "@/components/WhatsAppStockImportDialog";
+import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,7 +50,17 @@ import {
   useRules,
   useSuppliers,
 } from "@/lib/data";
-import { formatQty, futureStatusFor, type ComputedProduct } from "@/lib/inventory";
+import {
+  formatQty,
+  futureStatusFor,
+  computeProduct,
+  DEFAULT_RULES,
+  DAYS_OF_WEEK,
+  getDayOfWeekFromDate,
+  getRemainingDaysLabel,
+  type ComputedProduct,
+  type DayOfWeek,
+} from "@/lib/inventory";
 import { usePurchasePlan } from "@/lib/purchase-plan";
 
 export const Route = createFileRoute("/_authenticated/estoque")({
@@ -90,6 +101,11 @@ function EstoquePage() {
   const { data: rules } = useRules();
   const invalidate = useInvalidateAll();
 
+  // Referencial do dia para cálculo de ciclo (Segunda a Segunda)
+  const [selectedRefDay, setSelectedRefDay] = useState<DayOfWeek | "auto">("auto");
+  const todayDayOfWeek = getDayOfWeekFromDate();
+  const effectiveRefDay = selectedRefDay === "auto" ? todayDayOfWeek : selectedRefDay;
+
   const [search, setSearch] = useState("");
   const [supplier, setSupplier] = useState("todos");
   const [category, setCategory] = useState("todas");
@@ -104,24 +120,45 @@ function EstoquePage() {
   /** Quantidade que o usuário pretende comprar — compartilhada com as outras telas. */
   const { plan, setPlanned, clearPlan } = usePurchasePlan();
 
-  const buyQty = (p: ComputedProduct) => plan[p.id] ?? p.suggestedPurchase;
-  const futureWithBuy = (p: ComputedProduct) =>
-    Number(p.current_stock) + buyQty(p) - Number(p.avg_weekly_consumption);
-  /** Status projetado em tempo real conforme a quantidade que será comprada (só fica crítico se <= 0). */
-  const futureStatus = (p: ComputedProduct) =>
-    futureStatusFor(futureWithBuy(p), Number(p.min_stock), rules);
+  // Recalcula o status e métricas dos produtos com base no dia referencial de ciclo selecionado
+  const recomputedProducts = useMemo(() => {
+    if (!products) return [];
+    return products.map((p) => computeProduct(p, rules ?? DEFAULT_RULES, 0, effectiveRefDay));
+  }, [products, rules, effectiveRefDay]);
+
+  const buyQty = useCallback((p: ComputedProduct) => plan[p.id] ?? p.suggestedPurchase, [plan]);
+
+  // O estoque futuro é o saldo da 2ª segunda + o valor a comprar para a próxima semana
+  const futureWithBuy = useCallback(
+    (p: ComputedProduct) =>
+      Math.round(
+        ((p.projectedCycleEndStock ?? Number(p.current_stock) - p.remainingConsumption) +
+          buyQty(p) +
+          Number.EPSILON) *
+          1000,
+      ) / 1000,
+    [buyQty],
+  );
+
+  /** Status do estoque em tempo real conforme o estoque futuro (só fica crítico se <= 0). */
+  const stockStatus = useCallback(
+    (p: ComputedProduct) => futureStatusFor(futureWithBuy(p), Number(p.min_stock), rules),
+    [futureWithBuy, rules],
+  );
 
   const rows = useMemo(() => {
-    let list = products ?? [];
+    let list = recomputedProducts;
     if (search.trim())
       list = list.filter((p) => p.description.toLowerCase().includes(search.trim().toLowerCase()));
     if (supplier !== "todos") list = list.filter((p) => p.supplier_id === supplier);
     if (category !== "todas") list = list.filter((p) => p.category_id === category);
-    if (status !== "todos") list = list.filter((p) => p.status === status);
+    if (status !== "todos") list = list.filter((p) => stockStatus(p) === status);
 
     const sorted = [...list].sort((a, b) => {
       const dir = sort.dir === "asc" ? 1 : -1;
-      if (sort.key === "status") return (statusOrder[a.status] - statusOrder[b.status]) * dir;
+      if (sort.key === "status")
+        return (statusOrder[stockStatus(a)] - statusOrder[stockStatus(b)]) * dir;
+      if (sort.key === "futureStock") return (futureWithBuy(a) - futureWithBuy(b)) * dir;
       const av = a[sort.key] as string | number;
       const bv = b[sort.key] as string | number;
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
@@ -134,7 +171,17 @@ function EstoquePage() {
         a.supplierName.localeCompare(b.supplierName, "pt-BR") ||
         a.description.localeCompare(b.description, "pt-BR"),
     );
-  }, [products, search, supplier, category, status, sort, groupBySupplier]);
+  }, [
+    recomputedProducts,
+    search,
+    supplier,
+    category,
+    status,
+    sort,
+    groupBySupplier,
+    futureWithBuy,
+    stockStatus,
+  ]);
 
   const toggleSort = (key: SortKey) =>
     setSort((s) => ({ key, dir: s.key === key && s.dir === "asc" ? "desc" : "asc" }));
@@ -224,6 +271,56 @@ function EstoquePage() {
         }
       />
 
+      {/* Barra de Controle do Ciclo de Giro (Segunda a Segunda) */}
+      <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/5 p-3 shadow-xs">
+        <div className="flex items-start sm:items-center gap-2.5">
+          <div className="p-1.5 bg-primary/10 rounded-md text-primary mt-0.5 sm:mt-0">
+            <Calendar className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                Cálculo de Criticidade pelo Ciclo (Seg a Seg)
+              </span>
+              <Badge
+                variant="outline"
+                className="border-primary/40 bg-background text-[11px] font-semibold text-primary"
+              >
+                {getRemainingDaysLabel(effectiveRefDay)}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              O estoque crítico é calculado com base no consumo estimado entre o dia referencial e o
+              fechamento da próxima segunda-feira.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          <span className="text-xs font-medium text-foreground whitespace-nowrap">
+            Dia Referencial:
+          </span>
+          <Select
+            value={selectedRefDay}
+            onValueChange={(val) => setSelectedRefDay(val as DayOfWeek | "auto")}
+          >
+            <SelectTrigger className="h-8 w-48 bg-background text-xs font-medium">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">
+                Hoje (Automático - {DAYS_OF_WEEK.find((d) => d.key === todayDayOfWeek)?.label})
+              </SelectItem>
+              {DAYS_OF_WEEK.map((d) => (
+                <SelectItem key={d.key} value={d.key}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <div className="mb-4 grid gap-3 md:grid-cols-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -285,8 +382,12 @@ function EstoquePage() {
       </div>
 
       <div className="rounded-lg border bg-card shadow-card">
+        <div className="sm:hidden flex items-center justify-between px-3 py-2 text-[11px] text-muted-foreground bg-muted/40 border-b">
+          <span>Arraste para o lado para ver todas as métricas</span>
+          <span className="font-mono text-[10px] text-primary">↔ deslize</span>
+        </div>
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="min-w-[960px]">
             <TableHeader>
               <TableRow>
                 <Th k="description">Produto</Th>
@@ -296,15 +397,29 @@ function EstoquePage() {
                 <Th k="unit">Embalagem</Th>
                 <Th k="supplierName">Fornecedor</Th>
                 <Th k="avg_weekly_consumption" align="right">
-                  Consumo Médio Semanal
+                  Consumo Semanal
                 </Th>
+                <TableHead className="text-right">
+                  <div className="flex flex-col items-end">
+                    <span>Consumo Restante Dias</span>
+                    <span className="text-[10px] font-normal text-muted-foreground">
+                      ({effectiveRefDay.toUpperCase()}→Seg 2)
+                    </span>
+                  </div>
+                </TableHead>
                 <Th k="suggestedPurchase" align="right">
                   Compra Sugerida
                 </Th>
                 <TableHead className="text-right">Quero Comprar</TableHead>
-                <TableHead className="text-right">Estoque Futuro</TableHead>
-                <Th k="status">Status</Th>
-                <TableHead>Status Futuro</TableHead>
+                <Th k="futureStock" align="right">
+                  <div className="flex flex-col items-end">
+                    <span>Estoque Futuro</span>
+                    <span className="text-[10px] font-normal text-muted-foreground">
+                      (Saldo 2ª + Comprar)
+                    </span>
+                  </div>
+                </Th>
+                <Th k="status">Status do Estoque</Th>
                 <TableHead>Observação</TableHead>
                 <TableHead className="w-20" />
               </TableRow>
@@ -351,9 +466,24 @@ function EstoquePage() {
                       <Input
                         defaultValue={String(p.avg_weekly_consumption)}
                         onBlur={(e) => quickSaveConsumption(p, e.target.value)}
-                        className="num ml-auto h-8 w-24 text-right"
+                        className="num ml-auto h-8 w-20 text-right"
                         inputMode="decimal"
                       />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="text-xs font-semibold text-foreground">
+                        Consumo: {formatQty(p.remainingConsumption, p.unit)}
+                      </div>
+                      <div
+                        className={`text-[11px] font-semibold ${
+                          (p.projectedCycleEndStock ?? 0) <= 0
+                            ? "text-rose-600 dark:text-rose-400 font-bold"
+                            : "text-emerald-700 dark:text-emerald-400"
+                        }`}
+                        title="Saldo previsto na 2ª feira (Estoque Atual - Consumo Restante)"
+                      >
+                        Saldo 2ª: {formatQty(p.projectedCycleEndStock, p.unit)}
+                      </div>
                     </TableCell>
                     <TableCell className="num text-right font-semibold">
                       {p.suggestedPurchase > 0 ? formatQty(p.suggestedPurchase, p.unit) : "—"}
@@ -369,10 +499,7 @@ function EstoquePage() {
                       {formatQty(futureWithBuy(p), p.unit)}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={p.status} />
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={futureStatus(p)} />
+                      <StatusBadge status={stockStatus(p)} />
                     </TableCell>
                     <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">
                       {p.notes ?? ""}

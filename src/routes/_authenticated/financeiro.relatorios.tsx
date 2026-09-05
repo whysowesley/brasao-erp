@@ -67,6 +67,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 
 import {
   useFinancialTransactions,
@@ -77,6 +78,8 @@ import {
   getTodayString,
 } from "@/lib/financeiro";
 import { useSuppliers } from "@/lib/data";
+import { useDailySalesRange } from "@/lib/vendas";
+import { SALES_CHANNELS, type SalesChannelKey } from "@/lib/vendas-types";
 import type { FinancialTransaction, StatusTransacao, TipoTransacao } from "@/lib/financeiro-types";
 
 export const Route = createFileRoute("/_authenticated/financeiro/relatorios")({
@@ -180,6 +183,30 @@ function RelatoriosPage() {
     endDate,
   });
 
+  // Integração com Vendas por Canal da Galeteria
+  const [includeSalesInDRE, setIncludeSalesInDRE] = useState<boolean>(true);
+  const { data: salesRecords = [] } = useDailySalesRange(startDate, endDate);
+
+  const channelSalesSummary = useMemo(() => {
+    const totals: Record<SalesChannelKey, number> = {
+      balcao_salao: 0,
+      delivery_ifood: 0,
+      delivery_anota_ai: 0,
+      delivery_99: 0,
+      delivery_sw_fast: 0,
+    };
+    let totalSales = 0;
+    for (const s of salesRecords) {
+      const amt = Number(s.amount) || 0;
+      const ch = s.channel as SalesChannelKey;
+      if (totals[ch] !== undefined) {
+        totals[ch] += amt;
+      }
+      totalSales += amt;
+    }
+    return { totals, totalSales };
+  }, [salesRecords]);
+
   // Métricas do Período
   const metrics = useMemo(() => {
     let recReal = 0;
@@ -215,27 +242,44 @@ function RelatoriosPage() {
       }
     }
 
-    const resultadoReal = recReal - despReal;
-    const resultadoPrev = recPrev - despPrev;
-    const margemReal = recReal > 0 ? (resultadoReal / recReal) * 100 : 0;
+    const totalVendasCanais = includeSalesInDRE ? channelSalesSummary.totalSales : 0;
+    const finalRecReal = recReal + totalVendasCanais;
+    const finalRecPrev = recPrev + totalVendasCanais;
+
+    const resultadoReal = finalRecReal - despReal;
+    const resultadoPrev = finalRecPrev - despPrev;
+    const margemReal = finalRecReal > 0 ? (resultadoReal / finalRecReal) * 100 : 0;
 
     return {
-      recReal,
-      recPrev,
+      recReal: finalRecReal,
+      recPrev: finalRecPrev,
       despReal,
       despPrev,
       resultadoReal,
       resultadoPrev,
       margemReal,
-      totalPago,
+      totalPago: totalPago + totalVendasCanais,
       totalPendente,
+      totalVendasCanais,
+      recTransacoes: recReal,
     };
-  }, [transactions]);
+  }, [transactions, includeSalesInDRE, channelSalesSummary]);
 
   // DRE Simplificado: Agrupamento por Categoria
   const dreData = useMemo(() => {
     const receitasPorCat: Record<string, { name: string; amount: number; paid: number }> = {};
     const despesasPorCat: Record<string, { name: string; amount: number; paid: number }> = {};
+
+    // Adiciona linhas dos canais de vendas ao DRE quando ativado
+    if (includeSalesInDRE && channelSalesSummary.totalSales > 0) {
+      for (const [chKey, amt] of Object.entries(channelSalesSummary.totals)) {
+        if (amt > 0) {
+          const cfg = SALES_CHANNELS[chKey as SalesChannelKey];
+          const name = `Vendas: ${cfg?.label || chKey}`;
+          receitasPorCat[name] = { name, amount: amt, paid: amt };
+        }
+      }
+    }
 
     for (const t of transactions) {
       if (t.status === "cancelado") continue;
@@ -265,7 +309,7 @@ function RelatoriosPage() {
       listaReceitas,
       listaDespesas,
     };
-  }, [transactions]);
+  }, [transactions, includeSalesInDRE, channelSalesSummary]);
 
   // Gráfico de Despesas por Categoria
   const pieCategoryData = useMemo(() => {
@@ -316,6 +360,23 @@ function RelatoriosPage() {
       const worksheet = XLSX.utils.json_to_sheet(rows);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Financeiro");
+
+      if (includeSalesInDRE && salesRecords.length > 0) {
+        const salesRows = salesRecords.map((s) => {
+          const cfg = SALES_CHANNELS[s.channel as SalesChannelKey];
+          return {
+            Data: s.date,
+            Canal: cfg?.label || s.channel,
+            Tipo: cfg?.category === "balcao" ? "Balcão / Salão" : "Delivery",
+            "Faturamento (R$)": s.amount,
+            "Qtd Pedidos": s.orders_count || 0,
+            Observações: s.notes || "",
+            Responsável: s.user_name || "",
+          };
+        });
+        const salesWorksheet = XLSX.utils.json_to_sheet(salesRows);
+        XLSX.utils.book_append_sheet(workbook, salesWorksheet, "Vendas_Por_Canal");
+      }
 
       const fileName = `Relatorio_Financeiro_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`;
       XLSX.writeFile(workbook, fileName);
@@ -475,7 +536,11 @@ function RelatoriosPage() {
           value={metrics.recReal}
           variant="success"
           iconType="receita"
-          subtitle={`Previsto: ${formatCurrency(metrics.recPrev)}`}
+          subtitle={
+            includeSalesInDRE && metrics.totalVendasCanais > 0
+              ? `Canais: ${formatCurrency(metrics.totalVendasCanais)} | Outros: ${formatCurrency(metrics.recTransacoes)}`
+              : `Previsto: ${formatCurrency(metrics.recPrev)}`
+          }
         />
 
         <FinanceiroStatCard
@@ -511,11 +576,29 @@ function RelatoriosPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* DRE Simplificado */}
         <Card className="lg:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">DRE Simplificado</CardTitle>
-            <CardDescription>
-              Demonstração do Resultado do Exercício agrupada por categorias no período
-            </CardDescription>
+          <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <CardTitle className="text-base font-semibold">DRE Simplificado</CardTitle>
+              <CardDescription>
+                Demonstração do Resultado do Exercício agrupada por categorias no período
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2 rounded-md bg-muted/60 px-2.5 py-1.5 border border-border/70 self-start sm:self-auto">
+              <Switch
+                id="include-sales-dre"
+                checked={includeSalesInDRE}
+                onCheckedChange={setIncludeSalesInDRE}
+              />
+              <Label
+                htmlFor="include-sales-dre"
+                className="text-xs font-medium cursor-pointer flex items-center gap-1.5"
+              >
+                <span className="text-muted-foreground">Vendas Galeteria:</span>
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                  {formatCurrency(channelSalesSummary.totalSales)}
+                </span>
+              </Label>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Bloco de Receitas */}

@@ -184,7 +184,7 @@ function Dashboard() {
             </Button>
           </header>
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="min-w-[560px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Produto</TableHead>
@@ -275,7 +275,7 @@ function Dashboard() {
           </Button>
         </header>
         <div className="overflow-x-auto">
-          <Table>
+          <Table className="min-w-[620px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Fornecedor</TableHead>

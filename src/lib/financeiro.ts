@@ -145,6 +145,10 @@ export function useFinancialTransactions(filters?: FinancialFilters) {
           type: (data["type"] || "despesa") as TipoTransacao,
           amount: Number(data["amount"]) || 0,
           due_date: (data["due_date"] as string) || today,
+          expected_payment_date: (data["expected_payment_date"] as string) || null,
+          issue_date: (data["issue_date"] as string) || null,
+          code: (data["code"] as string | number) ?? null,
+          order_index: typeof data["order_index"] === "number" ? data["order_index"] : null,
           payment_date: (data["payment_date"] as string) || null,
           paid_amount:
             data["paid_amount"] !== undefined && data["paid_amount"] !== null
@@ -294,6 +298,10 @@ export function useFinancialTransaction(id: string | null) {
         type: (data["type"] || "despesa") as TipoTransacao,
         amount: Number(data["amount"]) || 0,
         due_date: (data["due_date"] as string) || today,
+        expected_payment_date: (data["expected_payment_date"] as string) || null,
+        issue_date: (data["issue_date"] as string) || null,
+        code: (data["code"] as string | number) ?? null,
+        order_index: typeof data["order_index"] === "number" ? data["order_index"] : null,
         payment_date: (data["payment_date"] as string) || null,
         paid_amount:
           data["paid_amount"] !== undefined && data["paid_amount"] !== null
@@ -649,6 +657,10 @@ export async function createFinancialTransaction(
   const basePayload = {
     description: input.description?.trim() || null,
     type: input.type,
+    expected_payment_date: input.expected_payment_date || null,
+    issue_date: input.issue_date || null,
+    code: input.code ?? null,
+    order_index: typeof input.order_index === "number" ? input.order_index : null,
     category_id: input.category_id || null,
     category_name: categoryName,
     cost_center_id: input.cost_center_id || null,
@@ -784,6 +796,11 @@ export async function updateFinancialTransaction(
   if (input.type !== undefined) updatePayload["type"] = input.type;
   if (input.amount !== undefined) updatePayload["amount"] = input.amount;
   if (input.due_date !== undefined) updatePayload["due_date"] = input.due_date;
+  if (input.expected_payment_date !== undefined)
+    updatePayload["expected_payment_date"] = input.expected_payment_date;
+  if (input.issue_date !== undefined) updatePayload["issue_date"] = input.issue_date;
+  if (input.code !== undefined) updatePayload["code"] = input.code;
+  if (input.order_index !== undefined) updatePayload["order_index"] = input.order_index;
   if (input.payment_date !== undefined) updatePayload["payment_date"] = input.payment_date;
   if (input.paid_amount !== undefined) updatePayload["paid_amount"] = input.paid_amount;
   if (input.status !== undefined) updatePayload["status"] = input.status;
@@ -803,6 +820,56 @@ export function useUpdateFinancialTransaction() {
   const invalidate = useInvalidateFinancial();
   return useMutation({
     mutationFn: updateFinancialTransaction,
+    onSuccess: invalidate,
+  });
+}
+
+/** Hook para mover transação de dia/quadrante facilmente (atualiza data prevista ou vencimento) */
+export function useMoveFinancialTransactionDay() {
+  const invalidate = useInvalidateFinancial();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      targetDate,
+      mode = "expected",
+    }: {
+      id: string;
+      targetDate: string;
+      mode?: "expected" | "due" | "both";
+    }) => {
+      const payload: Record<string, unknown> = {
+        updated_at: serverTimestamp(),
+      };
+      if (mode === "expected" || mode === "both") {
+        payload["expected_payment_date"] = targetDate;
+      }
+      if (mode === "due" || mode === "both") {
+        payload["due_date"] = targetDate;
+      }
+      await updateDoc(doc(db, "financial_transactions", id), payload);
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** Hook para reordenar linhas dentro de um quadrante ou entre quadrantes */
+export function useBatchUpdateTransactionOrder() {
+  const invalidate = useInvalidateFinancial();
+  return useMutation({
+    mutationFn: async (items: Array<{ id: string; order_index: number; targetDate?: string }>) => {
+      const batch = writeBatch(db);
+      for (const item of items) {
+        const updateData: Record<string, unknown> = {
+          order_index: item.order_index,
+          updated_at: serverTimestamp(),
+        };
+        if (item.targetDate) {
+          updateData["expected_payment_date"] = item.targetDate;
+        }
+        batch.update(doc(db, "financial_transactions", item.id), updateData);
+      }
+      await batch.commit();
+    },
     onSuccess: invalidate,
   });
 }

@@ -167,7 +167,7 @@ function AuthPage() {
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
           <BrasaoLogo size="hero" customSrc="/brasao-logo.jpeg" className="mb-1" />
           <div>
-            <h1 className="font-serif text-xl font-bold tracking-tight text-foreground">
+            <h1 className="text-xl font-bold tracking-tight text-foreground">
               {branding.companyName || "Galeteria Brasão"}
             </h1>
             <p className="text-xs font-medium text-muted-foreground">
