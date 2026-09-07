@@ -5,17 +5,18 @@ import {
   Plus,
   Search,
   Printer,
-  FileDown,
   Trash2,
   Pencil,
   Copy,
   Users,
-  Eye,
   CheckCircle2,
   Sparkles,
   DollarSign,
   TrendingDown,
-  Building,
+  History,
+  X,
+  ArrowUpDown,
+  Filter,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -66,6 +68,7 @@ import {
 import { HoleriteFormDialog } from "@/components/holerite/HoleriteFormDialog";
 import { HoleriteViewModal } from "@/components/holerite/HoleriteViewModal";
 import { EmployeeDialog } from "@/components/holerite/EmployeeDialog";
+import { EmployeeHistoryModal } from "@/components/holerite/EmployeeHistoryModal";
 
 export const Route = createFileRoute("/_authenticated/holerites")({
   head: () => ({
@@ -90,9 +93,10 @@ function HoleritesPage() {
   const saveEmployeeMutation = useSaveEmployee();
   const deleteEmployeeMutation = useDeleteEmployee();
 
-  // Estados de busca e filtro
+  // Estados de busca, ordenação e filtro
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMonth, setSelectedMonth] = useState<string>("ALL");
+  const [sortBy, setSortBy] = useState<"recent" | "name" | "val_desc" | "val_asc">("recent");
 
   // Diálogos
   const [formDialogOpen, setFormDialogOpen] = useState(false);
@@ -101,36 +105,94 @@ function HoleritesPage() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewingHolerite, setViewingHolerite] = useState<HoleriteData | null>(null);
 
+  // Modal de Histórico do Colaborador
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyTarget, setHistoryTarget] = useState<{
+    name: string;
+    cpf?: string;
+    code?: string;
+    cbo?: string;
+    companyName?: string;
+  } | null>(null);
+
   const [employeeDialogOpen, setEmployeeDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<EmployeeData | null>(null);
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteType, setDeleteType] = useState<"holerite" | "employee">("holerite");
 
-  // Meses únicos para filtro
+  // Meses únicos para filtro com contagem
   const availableMonths = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, number>();
     holerites.forEach((h) => {
-      if (h.reference_month) set.add(h.reference_month);
+      if (h.reference_month) {
+        map.set(h.reference_month, (map.get(h.reference_month) || 0) + 1);
+      }
     });
-    return Array.from(set);
+    return Array.from(map.entries()).map(([month, count]) => ({ month, count }));
   }, [holerites]);
 
-  // Lista filtrada de holerites
-  const filteredHolerites = useMemo(() => {
-    return holerites.filter((h) => {
-      const matchesSearch =
-        searchTerm === "" ||
-        h.employee_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        h.employee_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        h.cpf?.includes(searchTerm) ||
-        h.cbo?.toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchesMonth = selectedMonth === "ALL" || h.reference_month === selectedMonth;
-
-      return matchesSearch && matchesMonth;
+  // Lista de colaboradores únicos encontrados nos holerites para filtros rápidos (chips)
+  const quickEmployeeChips = useMemo(() => {
+    const map = new Map<string, { name: string; cpf?: string; count: number }>();
+    holerites.forEach((h) => {
+      const key = (h.employee_name || "").trim().toLowerCase();
+      if (!key) return;
+      if (!map.has(key)) {
+        map.set(key, { name: h.employee_name, cpf: h.cpf, count: 1 });
+      } else {
+        map.get(key)!.count += 1;
+      }
     });
-  }, [holerites, searchTerm, selectedMonth]);
+    return Array.from(map.values()).slice(0, 5);
+  }, [holerites]);
+
+  // Lista filtrada e ordenada de holerites por Nome, CPF e outros campos
+  const filteredHolerites = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const queryDigits = searchTerm.replace(/\D/g, "");
+
+    const list = holerites.filter((h) => {
+      // Filtro de mês
+      const matchesMonth = selectedMonth === "ALL" || h.reference_month === selectedMonth;
+      if (!matchesMonth) return false;
+
+      // Se não houver termo de busca, retorna todos do mês selecionado
+      if (!term) return true;
+
+      // 1. Busca por CPF: tanto digitado com pontuação quanto só números
+      const hCpfClean = (h.cpf || "").replace(/\D/g, "");
+      const matchesCpf =
+        (queryDigits.length >= 2 && hCpfClean.includes(queryDigits)) ||
+        (h.cpf && h.cpf.toLowerCase().includes(term));
+
+      // 2. Busca por Nome
+      const matchesName = h.employee_name?.toLowerCase().includes(term);
+
+      // 3. Busca por Código
+      const matchesCode = h.employee_code?.toLowerCase().includes(term);
+
+      // 4. Busca por CBO / Cargo
+      const matchesCbo = h.cbo?.toLowerCase().includes(term);
+
+      return matchesName || matchesCpf || matchesCode || matchesCbo;
+    });
+
+    // Ordenação
+    return list.sort((a, b) => {
+      if (sortBy === "name") {
+        return (a.employee_name || "").localeCompare(b.employee_name || "");
+      }
+      if (sortBy === "val_desc") {
+        return (b.net_salary || 0) - (a.net_salary || 0);
+      }
+      if (sortBy === "val_asc") {
+        return (a.net_salary || 0) - (b.net_salary || 0);
+      }
+      // "recent" (padrão): preserva ordem original ou data
+      return 0;
+    });
+  }, [holerites, searchTerm, selectedMonth, sortBy]);
 
   // Totais das métricas
   const totalVencimentos = useMemo(
@@ -145,6 +207,18 @@ function HoleritesPage() {
     () => filteredHolerites.reduce((acc, h) => acc + (h.net_salary || 0), 0),
     [filteredHolerites],
   );
+
+  // Abrir modal de histórico do colaborador
+  const handleOpenHistory = (target: {
+    name: string;
+    cpf?: string;
+    code?: string;
+    cbo?: string;
+    companyName?: string;
+  }) => {
+    setHistoryTarget(target);
+    setHistoryModalOpen(true);
+  };
 
   // Ações
   const handleOpenNew = () => {
@@ -330,33 +404,138 @@ function HoleritesPage() {
 
         {/* ABA: RECIBOS DE SALÁRIO */}
         <TabsContent value="holerites" className="space-y-4">
-          {/* Barra de Filtros */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border">
-            <div className="flex-1 relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por colaborador, código, CPF ou cargo..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 h-9 text-xs"
-              />
+          {/* Barra de Pesquisa Avançada no Topo */}
+          <div className="bg-card p-4 rounded-xl border shadow-xs space-y-3">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              {/* Campo de Pesquisa por Nome ou CPF */}
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Pesquisar colaborador por Nome ou CPF (ex: Carlos Silva ou 123.456...)..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 pr-9 h-10 text-sm bg-background"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground p-0.5 rounded"
+                    title="Limpar pesquisa"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filtro por Mês e Ordenação */}
+              <div className="flex items-center gap-2 shrink-0">
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger className="w-44 h-10 text-xs bg-background">
+                    <Filter className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+                    <SelectValue placeholder="Mês de Referência" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">Todos os Meses ({holerites.length})</SelectItem>
+                    {availableMonths.map(({ month, count }) => (
+                      <SelectItem key={month} value={month}>
+                        {month} ({count})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={sortBy}
+                  onValueChange={(v) => setSortBy(v as "recent" | "name" | "val_desc" | "val_asc")}
+                >
+                  <SelectTrigger className="w-44 h-10 text-xs bg-background">
+                    <ArrowUpDown className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+                    <SelectValue placeholder="Ordenar por" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="recent">Mais Recentes</SelectItem>
+                    <SelectItem value="name">Nome (A - Z)</SelectItem>
+                    <SelectItem value="val_desc">Maior Valor Líquido</SelectItem>
+                    <SelectItem value="val_asc">Menor Valor Líquido</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-44 h-9 text-xs bg-background">
-                  <SelectValue placeholder="Filtrar por Mês" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Todos os Meses</SelectItem>
-                  {availableMonths.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
-                    </SelectItem>
+            {/* Linha Informativa: Contador + Tags Rápidas de Colaboradores e Histórico */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t text-xs">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span className="font-medium text-foreground font-mono">
+                  {filteredHolerites.length} de {holerites.length}
+                </span>
+                <span>recibo(s) exibido(s)</span>
+                {searchTerm && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSearchTerm("")}
+                    className="h-6 px-1.5 text-[11px] text-amber-700 dark:text-amber-400 gap-1 hover:bg-amber-500/10"
+                  >
+                    <X className="h-3 w-3" />
+                    Limpar termo &quot;{searchTerm}&quot;
+                  </Button>
+                )}
+              </div>
+
+              {/* Colaboradores rápidos para filtrar num clique */}
+              {quickEmployeeChips.length > 0 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+                  <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                    Filtro Rápido:
+                  </span>
+                  {quickEmployeeChips.map((c) => (
+                    <button
+                      key={c.name}
+                      onClick={() => setSearchTerm(c.name)}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted hover:bg-muted/80 text-foreground border transition-colors whitespace-nowrap"
+                    >
+                      <span>{c.name}</span>
+                      <span className="text-[9px] font-bold text-muted-foreground">
+                        ({c.count})
+                      </span>
+                    </button>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              )}
             </div>
+
+            {/* Banner de atalho de histórico se houver termo digitado com resultado correspondente */}
+            {searchTerm.trim() !== "" && filteredHolerites.length > 0 && (
+              <div className="flex items-center justify-between p-2.5 bg-primary/5 border border-primary/20 rounded-lg text-xs">
+                <div className="flex items-center gap-2">
+                  <History className="h-4 w-4 text-primary shrink-0" />
+                  <span>
+                    Visualizando holerites de{" "}
+                    <strong className="text-foreground uppercase">
+                      {filteredHolerites[0].employee_name}
+                    </strong>
+                    {filteredHolerites[0].cpf && ` (CPF: ${filteredHolerites[0].cpf})`}
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    handleOpenHistory({
+                      name: filteredHolerites[0].employee_name,
+                      cpf: filteredHolerites[0].cpf,
+                      code: filteredHolerites[0].employee_code,
+                      cbo: filteredHolerites[0].cbo,
+                      companyName: filteredHolerites[0].company_name,
+                    })
+                  }
+                  className="h-7 px-2.5 text-xs font-semibold gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                >
+                  <History className="h-3.5 w-3.5" />
+                  Abrir Histórico Completo
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Tabela de Holerites */}
@@ -366,8 +545,9 @@ function HoleritesPage() {
                 Recibos de Pagamento Cadastrados
               </CardTitle>
               <CardDescription className="text-xs">
-                Clique em &quot;Visualizar / PDF&quot; para abrir a visualização idêntica ao print
-                com as duas vias (Colaborador e Empresa) prontas para impressão e exportação A4.
+                Clique em &quot;PDF / Imprimir&quot; para abrir a visualização e baixar o arquivo A4
+                com as 2 vias, ou em &quot;Histórico&quot; para consultar todos os meses do
+                colaborador.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
@@ -402,15 +582,19 @@ function HoleritesPage() {
                       >
                         <div className="flex flex-col items-center gap-2">
                           <ReceiptText className="h-8 w-8 text-muted-foreground/50" />
-                          <span>Nenhum recibo de salário encontrado.</span>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={handleOpenNew}
-                            className="text-xs mt-2"
-                          >
-                            Criar Primeiro Holerite
-                          </Button>
+                          <span>
+                            Nenhum recibo de salário encontrado para os filtros aplicados.
+                          </span>
+                          {searchTerm && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setSearchTerm("")}
+                              className="text-xs mt-1"
+                            >
+                              Limpar Pesquisa
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -459,6 +643,25 @@ function HoleritesPage() {
                             >
                               <Printer className="h-3 w-3" />
                               PDF / Imprimir
+                            </Button>
+
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                handleOpenHistory({
+                                  name: h.employee_name,
+                                  cpf: h.cpf,
+                                  code: h.employee_code,
+                                  cbo: h.cbo,
+                                  companyName: h.company_name,
+                                })
+                              }
+                              className="h-7 px-2 text-[11px] gap-1 border-primary/30 text-primary hover:bg-primary/10 font-medium"
+                              title="Ver histórico de todos os holerites deste colaborador"
+                            >
+                              <History className="h-3 w-3" />
+                              Histórico
                             </Button>
 
                             <Button
@@ -565,8 +768,26 @@ function HoleritesPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleCreateFromEmployee(e)}
+                              onClick={() =>
+                                handleOpenHistory({
+                                  name: e.name,
+                                  cpf: e.cpf,
+                                  code: e.code,
+                                  cbo: e.cbo,
+                                })
+                              }
                               className="h-7 px-2 text-[11px] gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                              title="Ver histórico de todos os holerites deste colaborador"
+                            >
+                              <History className="h-3 w-3" />
+                              Histórico
+                            </Button>
+
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCreateFromEmployee(e)}
+                              className="h-7 px-2 text-[11px] gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
                             >
                               <ReceiptText className="h-3 w-3" />
                               Gerar Holerite
@@ -606,6 +827,38 @@ function HoleritesPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Modal do Histórico Completo do Colaborador */}
+      <EmployeeHistoryModal
+        open={historyModalOpen}
+        onOpenChange={setHistoryModalOpen}
+        employeeName={historyTarget?.name || ""}
+        cpf={historyTarget?.cpf}
+        employeeCode={historyTarget?.code}
+        cbo={historyTarget?.cbo}
+        companyName={historyTarget?.companyName}
+        allHolerites={holerites}
+        onViewHolerite={handleView}
+        onEditHolerite={handleEdit}
+        onDuplicateHolerite={handleDuplicate}
+        onNewHolerite={(base) => {
+          if (base) {
+            handleDuplicate(base);
+          } else if (historyTarget) {
+            const empMatch = employees.find(
+              (em) =>
+                (historyTarget.cpf &&
+                  em.cpf.replace(/\D/g, "") === historyTarget.cpf?.replace(/\D/g, "")) ||
+                em.name.toLowerCase() === historyTarget.name.toLowerCase(),
+            );
+            if (empMatch) {
+              handleCreateFromEmployee(empMatch);
+            } else {
+              handleOpenNew();
+            }
+          }
+        }}
+      />
 
       {/* Diálogo de Criar/Editar Holerite */}
       <HoleriteFormDialog
