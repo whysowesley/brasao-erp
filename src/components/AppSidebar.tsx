@@ -20,6 +20,7 @@ import {
   CalendarDays,
   FileSpreadsheet,
   CircleDollarSign,
+  ReceiptText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -62,6 +63,8 @@ const financeiroItems = [
 ];
 
 const vendasItems = [{ title: "Vendas por Canal", url: "/vendas", icon: CircleDollarSign }];
+
+const rhItems = [{ title: "Holerites (Recibos)", url: "/holerites", icon: ReceiptText }];
 
 export function AppSidebar() {
   const { state, isMobile, setOpenMobile } = useSidebar();
@@ -190,6 +193,29 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {vendasItems.map((item) => (
+                <SidebarMenuItem key={item.url}>
+                  <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                    <Link
+                      to={item.url}
+                      onClick={handleNavClick}
+                      className="flex items-center gap-2"
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* RH & Pessoal */}
+        <SidebarGroup>
+          <SidebarGroupLabel>RH & Pessoal</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {rhItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
                     <Link

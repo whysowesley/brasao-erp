@@ -203,6 +203,45 @@
           "optional": true
         }
       }
+    },
+    "holerites": {
+      "description": "Recibos de pagamento de salário (Holerites) com proventos, descontos e duas vias para impressão",
+      "fields": {
+        "company_name": { "type": "string", "description": "Razão social da empresa (ex: 099 - GBM ALIMENTOS E BEBIDAS LTDA)" },
+        "cnpj": { "type": "string", "description": "CNPJ da empresa (ex: 57.772.207/0001-00)" },
+        "reference_month": { "type": "string", "description": "Mês/Ano de referência (ex: AGOSTO/2026)" },
+        "date": { "type": "string", "description": "Data de emissão/pagamento YYYY-MM-DD" },
+        "employee_code": { "type": "string", "description": "Código do funcionário" },
+        "employee_name": { "type": "string", "description": "Nome completo do funcionário" },
+        "cbo": { "type": "string", "description": "Código ou descrição do CBO / Cargo" },
+        "cpf": { "type": "string", "description": "CPF do funcionário" },
+        "worked_days": { "type": "string", "description": "Dias trabalhados ou referência" },
+        "emp": { "type": "string", "description": "Código da empresa", "optional": true },
+        "local": { "type": "string", "description": "Local de trabalho", "optional": true },
+        "depto": { "type": "string", "description": "Departamento", "optional": true },
+        "setor": { "type": "string", "description": "Setor", "optional": true },
+        "secao": { "type": "string", "description": "Seção", "optional": true },
+        "fl": { "type": "string", "description": "Folha", "optional": true },
+        "items": { "type": "array", "description": "Rubricas de proventos e descontos do holerite" },
+        "total_earnings": { "type": "number", "description": "Total de vencimentos/proventos" },
+        "total_deductions": { "type": "number", "description": "Total de descontos" },
+        "net_salary": { "type": "number", "description": "Valor líquido a receber" },
+        "notes": { "type": "string", "description": "Observações adicionais", "optional": true },
+        "created_at": { "type": "timestamp", "description": "Data de cadastro" },
+        "updated_at": { "type": "timestamp", "description": "Data de atualização" }
+      }
+    },
+    "employees": {
+      "description": "Cadastro simplificado de funcionários para preenchimento rápido de holerites",
+      "fields": {
+        "code": { "type": "string", "description": "Código do colaborador" },
+        "name": { "type": "string", "description": "Nome completo" },
+        "cpf": { "type": "string", "description": "CPF formatado" },
+        "cbo": { "type": "string", "description": "Cargo / CBO" },
+        "base_salary": { "type": "number", "description": "Salário contratual base", "optional": true },
+        "active": { "type": "boolean", "description": "Status ativo" },
+        "created_at": { "type": "timestamp", "description": "Data de cadastro" }
+      }
     }
   }
 }

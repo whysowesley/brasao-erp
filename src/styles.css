@@ -201,13 +201,14 @@
   nav,
   aside,
   button,
-  [data-radix-portal] > div:not(:has(#printable-purchase-order)),
+  [data-radix-portal] > div:not(:has(#printable-purchase-order)):not(:has(#printable-holerite)),
   [role="dialog"] > button {
     display: none !important;
   }
 
   .printable-purchase-order,
-  #printable-purchase-order {
+  #printable-purchase-order,
+  #printable-holerite {
     box-shadow: none !important;
     border: none !important;
     padding: 0 !important;
