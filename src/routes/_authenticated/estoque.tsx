@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowUpDown, Calendar, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -94,6 +94,59 @@ type SortKey =
   | "status";
 
 const statusOrder = { critico: 0, atencao: 1, normal: 2 } as const;
+
+function QuickNumericInput({
+  value,
+  onSave,
+  className,
+  placeholder,
+  ariaLabel,
+}: {
+  value: number | string;
+  onSave: (val: string) => Promise<void> | void;
+  className?: string;
+  placeholder?: string;
+  ariaLabel?: string;
+}) {
+  const [localValue, setLocalValue] = useState(String(value ?? "0"));
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setLocalValue(String(value ?? "0"));
+  }, [value]);
+
+  const handleCommit = async () => {
+    const cleanLocal = localValue.trim().replace(",", ".");
+    const currentStr = String(value ?? "0").trim();
+    if (cleanLocal === currentStr) return;
+    setIsSaving(true);
+    try {
+      await onSave(localValue);
+    } catch {
+      setLocalValue(currentStr);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Input
+      aria-label={ariaLabel}
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={handleCommit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      disabled={isSaving}
+      placeholder={placeholder}
+      inputMode="decimal"
+      className={`${className} ${isSaving ? "opacity-60 bg-muted/50" : ""}`}
+    />
+  );
+}
 
 function EstoquePage() {
   const { data: products, isLoading } = useProducts();
@@ -217,6 +270,7 @@ function EstoquePage() {
       toast.success(`Estoque de ${p.description} atualizado.`);
     } catch (e) {
       toast.error((e as Error).message);
+      throw e;
     }
   }
 
@@ -227,9 +281,10 @@ function EstoquePage() {
       await updateProductConsumption(p.id, v);
       clearPlan([p.id]);
       invalidate();
-      toast.success("Consumo médio semanal atualizado.");
+      toast.success(`Consumo semanal de ${p.description} atualizado para ${v} ${p.unit}.`);
     } catch (err) {
       toast.error((err as Error).message);
+      throw err;
     }
   }
 
@@ -482,21 +537,21 @@ function EstoquePage() {
                       <span className="ml-2 text-xs text-muted-foreground">{p.categoryName}</span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Input
-                        defaultValue={String(p.current_stock)}
-                        onBlur={(e) => quickSaveStock(p, e.target.value)}
+                      <QuickNumericInput
+                        value={p.current_stock}
+                        onSave={(val) => quickSaveStock(p, val)}
                         className="num ml-auto h-8 w-24 text-right"
-                        inputMode="decimal"
+                        ariaLabel={`Estoque atual de ${p.description}`}
                       />
                     </TableCell>
                     <TableCell className="text-muted-foreground">{p.unit}</TableCell>
                     <TableCell className="text-muted-foreground">{p.supplierName}</TableCell>
                     <TableCell className="text-right">
-                      <Input
-                        defaultValue={String(p.avg_weekly_consumption)}
-                        onBlur={(e) => quickSaveConsumption(p, e.target.value)}
-                        className="num ml-auto h-8 w-20 text-right"
-                        inputMode="decimal"
+                      <QuickNumericInput
+                        value={p.avg_weekly_consumption}
+                        onSave={(val) => quickSaveConsumption(p, val)}
+                        className="num ml-auto h-8 w-20 text-right font-medium"
+                        ariaLabel={`Consumo semanal de ${p.description}`}
                       />
                     </TableCell>
                     <TableCell className="text-right">

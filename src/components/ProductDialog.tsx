@@ -277,6 +277,25 @@ export function ProductDialog({
       seg2: num(updatedDaily.seg2),
     });
     setForm((f) => ({ ...f, avg_weekly_consumption: roundVal(sum) }));
+    setConstantDaily(roundVal(sum / 8));
+  };
+
+  // Atualização direta do Consumo Semanal Total (distribui automaticamente para os 8 dias)
+  const handleWeeklyTotalChange = (val: string) => {
+    setForm((f) => ({ ...f, avg_weekly_consumption: val }));
+    const totalNum = num(val);
+    const perDay = roundVal(totalNum / 8);
+    setConstantDaily(perDay);
+    setDaily({
+      seg: perDay,
+      ter: perDay,
+      qua: perDay,
+      qui: perDay,
+      sex: perDay,
+      sab: perDay,
+      dom: perDay,
+      seg2: perDay,
+    });
   };
 
   // Troca de modo de consumo
@@ -318,6 +337,8 @@ export function ProductDialog({
         seg2: num(daily.seg2),
       };
 
+      const calculatedWeeklyTotal = sumDailyConsumption(dailyObj);
+
       await saveProduct(
         {
           description: form.description,
@@ -325,12 +346,10 @@ export function ProductDialog({
           category_id: form.category_id || null,
           supplier_id: form.supplier_id || null,
           unit: form.unit,
-          avg_weekly_consumption: num(form.avg_weekly_consumption),
+          avg_weekly_consumption: calculatedWeeklyTotal,
           daily_consumption_mode: consumptionMode,
           daily_consumption: dailyObj,
-          ...(consumptionMode === "constant"
-            ? { constant_daily_consumption: num(constantDaily) }
-            : {}),
+          constant_daily_consumption: roundVal(calculatedWeeklyTotal / 8),
           min_stock: num(form.min_stock),
           desired_stock: num(form.desired_stock),
           safety_stock: num(form.safety_stock),
@@ -583,19 +602,50 @@ export function ProductDialog({
               </div>
             </div>
 
-            {/* Totalizador semanal calculado em tempo real */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between rounded-md bg-muted/60 px-3 py-2 border gap-1">
-              <div className="text-xs flex items-center gap-1.5">
-                <span className="text-muted-foreground">
-                  Consumo Total (Soma dos 8 dias — Seg a Seg):
-                </span>
-                <span className="font-bold text-foreground text-sm">
-                  {form.avg_weekly_consumption} {form.unit}/período
-                </span>
+            {/* Totalizador semanal calculado e editável em tempo real (Sincronizado com a tabela geral) */}
+            <div className="rounded-md bg-background border p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Label
+                    htmlFor="weekly-total-input"
+                    className="text-xs font-semibold text-foreground"
+                  >
+                    Consumo Semanal Total (Soma dos 8 dias — Seg a Seg)
+                  </Label>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-primary/5 text-primary border-primary/20"
+                  >
+                    Sincronizado com a Tabela
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Altere aqui para distribuir automaticamente para os 8 dias ou ajuste os dias acima
+                  para somar o total.
+                </p>
               </div>
-              <Badge variant="outline" className="text-[11px] font-normal w-fit">
-                Média: {roundVal(num(form.avg_weekly_consumption) / 8)} {form.unit}/dia
-              </Badge>
+
+              <div className="flex items-center gap-2">
+                <div className="relative w-32">
+                  <Input
+                    id="weekly-total-input"
+                    inputMode="decimal"
+                    value={form.avg_weekly_consumption}
+                    onChange={(e) => handleWeeklyTotalChange(e.target.value)}
+                    placeholder="0"
+                    className="num h-8 text-xs text-right pr-8 font-bold text-primary"
+                  />
+                  <span className="absolute right-2 top-2 text-[10px] font-semibold text-muted-foreground">
+                    {form.unit}
+                  </span>
+                </div>
+                <Badge
+                  variant="secondary"
+                  className="text-[11px] font-normal h-8 flex items-center"
+                >
+                  Média: {roundVal(num(form.avg_weekly_consumption) / 8)} {form.unit}/dia
+                </Badge>
+              </div>
             </div>
           </div>
 

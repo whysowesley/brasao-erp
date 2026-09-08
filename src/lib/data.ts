@@ -660,16 +660,25 @@ export async function updateProductConsumption(
   mode?: ConsumptionMode,
 ) {
   const productRef = doc(db, "products", productId);
+  const perDay = Math.round((avgWeeklyConsumption / 8 + Number.EPSILON) * 100) / 100;
+  const finalDaily: DailyConsumption = dailyConsumption ?? {
+    seg: perDay,
+    ter: perDay,
+    qua: perDay,
+    qui: perDay,
+    sex: perDay,
+    sab: perDay,
+    dom: perDay,
+    seg2: perDay,
+  };
+
   const data: Record<string, unknown> = {
     avg_weekly_consumption: avgWeeklyConsumption,
+    daily_consumption: finalDaily,
+    constant_daily_consumption: perDay,
+    daily_consumption_mode: mode ?? "constant",
     updated_at: serverTimestamp(),
   };
-  if (dailyConsumption) {
-    data["daily_consumption"] = dailyConsumption;
-  }
-  if (mode) {
-    data["daily_consumption_mode"] = mode;
-  }
   await updateDoc(productRef, data);
 }
 
