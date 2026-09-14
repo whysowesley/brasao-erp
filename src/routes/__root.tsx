@@ -78,13 +78,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Galeteria Brasão | Controle de Estoque, Compras & Financeiro" },
+      { title: "Brasão ERP | Galeteria Brasão" },
       {
         name: "description",
         content:
-          "Sistema interno da Galeteria Brasão para controle de estoque, contagens, compras e gestão financeira.",
+          "Sistema integrado de gestão para Galeteria Brasão: Estoque, Compras, Financeiro, Vendas por Canal, Controle de Presença e Emissão de Holerites.",
       },
-      { property: "og:title", content: "Galeteria Brasão | ERP" },
+      { property: "og:title", content: "Brasão ERP | Galeteria Brasão" },
+      {
+        property: "og:description",
+        content:
+          "Sistema integrado de gestão para Galeteria Brasão: Estoque, Compras, Financeiro, Vendas por Canal, Controle de Presença e Emissão de Holerites.",
+      },
       { property: "og:image", content: "/brasao-logo.jpeg" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

@@ -543,6 +543,14 @@ function EstoquePage() {
                         className="num ml-auto h-8 w-24 text-right"
                         ariaLabel={`Estoque atual de ${p.description}`}
                       />
+                      {isPostOperation && (p.todayConsumption ?? 0) > 0 && (
+                        <div
+                          className="text-[10px] text-muted-foreground mt-0.5"
+                          title={`Estoque disponível no fechamento de hoje após consumo de ${formatQty(p.todayConsumption ?? 0, p.unit)}`}
+                        >
+                          Pós-op: {formatQty(p.effectiveCurrentStock ?? p.current_stock, p.unit)}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{p.unit}</TableCell>
                     <TableCell className="text-muted-foreground">{p.supplierName}</TableCell>
@@ -564,7 +572,7 @@ function EstoquePage() {
                             ? "text-rose-600 dark:text-rose-400 font-bold"
                             : "text-emerald-700 dark:text-emerald-400"
                         }`}
-                        title="Saldo previsto na 2ª feira (Estoque Atual - Consumo Restante)"
+                        title="Saldo previsto na 2ª feira (Estoque Efetivo - Consumo Restante)"
                       >
                         Saldo 2ª: {formatQty(p.projectedCycleEndStock, p.unit)}
                       </div>

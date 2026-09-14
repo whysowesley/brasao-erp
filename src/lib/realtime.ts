@@ -17,6 +17,9 @@ const COLLECTIONS = [
   "units",
   "settings",
   "daily_sales",
+  "holerites",
+  "employees",
+  "presence_logs",
 ] as const;
 
 /**

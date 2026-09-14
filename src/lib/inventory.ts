@@ -209,6 +209,8 @@ export type ComputedProduct = ProductRow & {
   projectedCycleEndStock: number;
   targetTurnover: number;
   isPostOperation: boolean;
+  effectiveCurrentStock?: number;
+  todayConsumption?: number;
 };
 
 const round = (n: number) => Math.round((n + Number.EPSILON) * 1000) / 1000;
@@ -219,6 +221,7 @@ export function computeProduct(
   incoming = 0,
   refDay: DayOfWeek = getDayOfWeekFromDate(),
   isPostOperation: boolean = rules.is_post_operation ?? true,
+  isStockAlreadyPostOp: boolean = false,
 ): ComputedProduct {
   const weeks = p.coverage_weeks ?? rules.coverage_weeks ?? 1;
   const consumption = Number(p.avg_weekly_consumption) || 0;
@@ -228,9 +231,20 @@ export function computeProduct(
   const margin = 1 + (rules.safety_margin_percent || 0) / 100;
 
   // Cálculo referencial do dia:
-  // Se isPostOperation = true (ex: Sábado à noite), o sábado já encerrou e foi consumido.
-  // Logo, o consumo restante a cobrir é apenas Domingo e Segunda (2 dias).
+  // Se isPostOperation = true (ex: Segunda pós-operação / noite):
+  // O consumo do dia vigente já ocorreu na operação.
+  // Logo, os dias restantes a serem supridos começam a partir do dia seguinte (Terça a Segunda 2).
   const daily = getDailyConsumptionFromProduct(p);
+  const todayConsumption = round(Number(daily[refDay]) || 0);
+
+  // Se isPostOperation = true:
+  // Se o estoque informado (current) é o estoque registrado no sistema (isStockAlreadyPostOp = false),
+  // ele foi registrado antes do encerramento de hoje. Logo, o estoque disponível no fechamento é (current - todayConsumption).
+  // Se isStockAlreadyPostOp = true (ex: contagem física realizada presencialmente no fechamento da noite),
+  // o estoque informado já é o valor contado após a operação, portanto não se desconta novamente.
+  const effectiveCurrent =
+    isPostOperation && !isStockAlreadyPostOp ? round(current - todayConsumption) : current;
+
   const remainingDays = getRemainingCycleDays(refDay, isPostOperation);
   let remainingConsumption = 0;
   for (const dayKey of remainingDays) {
@@ -239,8 +253,8 @@ export function computeProduct(
   remainingConsumption = round(remainingConsumption);
   const remainingDaysLabel = getRemainingDaysLabel(refDay, isPostOperation);
 
-  // Saldo de estoque previsto que vai ficar para segunda-feira (Estoque Atual - Consumo Restante dos dias)
-  const projectedCycleEndStock = round(current - remainingConsumption);
+  // Saldo de estoque previsto que vai ficar para segunda-feira (Estoque Efetivo - Consumo Restante dos dias)
+  const projectedCycleEndStock = round(effectiveCurrent - remainingConsumption);
 
   // Giro da semana / necessidade do ciclo (consumo semanal * semanas de cobertura)
   // Caso o produto possua estoque desejado superior configurado, respeita a meta desejada
@@ -250,13 +264,6 @@ export function computeProduct(
   // Compra sugerida:
   // Giro necessário da semana menos o saldo de estoque previsto para segunda-feira,
   // descontando eventuais pedidos já pendentes de entrega (incoming).
-  //
-  // Exemplo da regra de negócio pós-operação:
-  // Se o estoque atual de Maminha for 60kg e hoje é sábado pós-operação (consumo semanal de 80kg):
-  // O consumo restante é de 2 dias (Dom + Seg = 20kg).
-  // Saldo previsto para 2ª feira = 60kg - 20kg = 40kg.
-  // Como o giro semanal é 80kg, a compra sugerida é 80kg - 40kg = 40kg.
-  // (40kg compra + 40kg saldo = 80kg do giro da semana).
   const rawSuggestion = targetTurnover - projectedCycleEndStock - incoming;
   const suggestedPurchase = round(Math.max(0, rawSuggestion));
 
@@ -294,6 +301,8 @@ export function computeProduct(
     projectedCycleEndStock,
     targetTurnover,
     isPostOperation,
+    effectiveCurrentStock: effectiveCurrent,
+    todayConsumption,
   };
 }
 

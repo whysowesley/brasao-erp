@@ -185,6 +185,7 @@ function ContagensPage() {
                   0,
                   getDayOfWeekFromDate(),
                   isPostOperation,
+                  hasCount,
                 );
                 return (
                   <TableRow key={p.id}>

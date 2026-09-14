@@ -18,6 +18,7 @@ import {
   TrendingUp,
   Calendar,
   CalendarDays,
+  CalendarCheck2,
   FileSpreadsheet,
   CircleDollarSign,
   ReceiptText,
@@ -63,6 +64,8 @@ const financeiroItems = [
 ];
 
 const vendasItems = [{ title: "Vendas por Canal", url: "/vendas", icon: CircleDollarSign }];
+
+const operacaoItems = [{ title: "Presença & Operação", url: "/presenca", icon: CalendarCheck2 }];
 
 const rhItems = [{ title: "Holerites (Recibos)", url: "/holerites", icon: ReceiptText }];
 
@@ -193,6 +196,29 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {vendasItems.map((item) => (
+                <SidebarMenuItem key={item.url}>
+                  <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                    <Link
+                      to={item.url}
+                      onClick={handleNavClick}
+                      className="flex items-center gap-2"
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Operação & Presença */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Operação &amp; Presença</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {operacaoItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
                     <Link
