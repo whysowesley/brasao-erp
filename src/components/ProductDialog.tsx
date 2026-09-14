@@ -707,7 +707,11 @@ export function ProductDialog({
             unit={form.unit}
           />
           <Preview label="Compra sugerida" value={preview.suggestedPurchase} unit={form.unit} />
-          <Preview label="Estoque futuro" value={preview.futureStock} unit={form.unit} />
+          <Preview
+            label="Estoque futuro (com compra)"
+            value={preview.futureStockWithSuggestion}
+            unit={form.unit}
+          />
           <div>
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
               Status Futuro

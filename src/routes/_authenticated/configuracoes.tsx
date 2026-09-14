@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
 import { BrandingSettingsCard } from "@/components/BrandingSettingsCard";
 import { UserApprovalCard } from "@/components/UserApprovalCard";
+import { PurchaseRulesCard } from "@/components/PurchaseRulesCard";
 import { useCategories, useProducts, useSuppliers } from "@/lib/data";
 import { useAuth, ROLE_LABEL } from "@/lib/auth";
 
@@ -96,25 +97,8 @@ function ConfiguracoesPage() {
         </div>
       </section>
 
-      {/* Seção 5: Regras de Cálculo */}
-      <section className="rounded-lg border bg-card p-5 shadow-card">
-        <h2 className="text-sm font-semibold">Regras de Cálculo de Estoque</h2>
-        <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
-          <li>
-            <strong className="text-foreground">Compra sugerida</strong> = Estoque desejado −
-            Estoque atual + Consumo semanal (nunca negativa).
-          </li>
-          <li>
-            <strong className="text-foreground">Estoque futuro</strong> = Estoque atual + Compra
-            sugerida − Consumo semanal.
-          </li>
-          <li>
-            <strong className="text-critical">Crítico</strong>: estoque abaixo do consumo semanal ·{" "}
-            <strong className="text-warning">Atenção</strong>: estoque próximo do mínimo ·{" "}
-            <strong className="text-success">Normal</strong>: estoque suficiente.
-          </li>
-        </ul>
-      </section>
+      {/* Seção 5: Parâmetros de Compra na Margem & Estoque */}
+      <PurchaseRulesCard />
     </div>
   );
 }

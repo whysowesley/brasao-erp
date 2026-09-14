@@ -108,6 +108,22 @@ export function useRules() {
   });
 }
 
+export async function updatePurchaseRules(rules: Partial<PurchaseRules>) {
+  const rulesDocRef = doc(db, "settings", "purchase_rules");
+  await setDoc(rulesDocRef, { ...rules, updated_at: serverTimestamp() }, { merge: true });
+}
+
+export function useUpdatePurchaseRules() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updatePurchaseRules,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["settings", "purchase_rules"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
+}
+
 export function useProducts() {
   const { data: rules } = useRules();
   return useQuery({

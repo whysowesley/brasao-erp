@@ -103,10 +103,13 @@ function ProductDetail() {
         : "Constante todos os dias",
     ],
     ["Estoque mínimo", formatQty(product.min_stock, product.unit)],
-    ["Estoque desejado", formatQty(product.desired_stock, product.unit)],
-    ["Estoque projetado (sem compra)", formatQty(product.projectedStock, product.unit)],
-    ["Compra sugerida", formatQty(product.suggestedPurchase, product.unit)],
-    ["Estoque futuro", formatQty(product.futureStock, product.unit)],
+    ["Estoque de segurança", formatQty(product.safety_stock, product.unit)],
+    ["Saldo 2ª previsto (sem compra)", formatQty(product.projectedStock, product.unit)],
+    ["Compra sugerida (na margem)", formatQty(product.suggestedPurchase, product.unit)],
+    [
+      "Estoque futuro 2ª feira (com compra sugerida)",
+      formatQty(product.futureStockWithSuggestion, product.unit),
+    ],
   ];
 
   return (
