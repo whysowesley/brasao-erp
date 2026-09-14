@@ -1,3 +1,5 @@
+import { getPostOperationMode } from "./post-operation";
+
 /**
  * Regras de negócio do controle de estoque e compras.
  * Todos os cálculos ficam centralizados aqui e são parametrizáveis
@@ -221,7 +223,7 @@ export function computeProduct(
   rules: PurchaseRules = DEFAULT_RULES,
   incoming = 0,
   refDay: DayOfWeek = getDayOfWeekFromDate(),
-  isPostOperation: boolean = rules.is_post_operation ?? true,
+  isPostOperation: boolean = rules.is_post_operation ?? getPostOperationMode(),
   isStockAlreadyPostOp: boolean = false,
 ): ComputedProduct {
   const weeks = p.coverage_weeks ?? rules.coverage_weeks ?? 1;
@@ -231,20 +233,22 @@ export function computeProduct(
   const safety = Number(p.safety_stock) || 0;
   const margin = 1 + (rules.safety_margin_percent || 0) / 100;
 
-  // Cálculo referencial do dia:
-  // Se isPostOperation = true (ex: Segunda pós-operação / noite):
-  // O consumo do dia vigente já ocorreu na operação.
-  // Logo, os dias restantes a serem supridos começam a partir do dia seguinte (Terça a Segunda 2).
+  // Consumo diário do produto
   const daily = getDailyConsumptionFromProduct(p);
   const todayConsumption = round(Number(daily[refDay]) || 0);
 
-  // Se isPostOperation = true:
-  // Se o estoque informado (current) é o estoque registrado no sistema (isStockAlreadyPostOp = false),
-  // ele foi registrado antes do encerramento de hoje. Logo, o estoque disponível no fechamento é (current - todayConsumption).
-  // Se isStockAlreadyPostOp = true (ex: contagem física realizada presencialmente no fechamento da noite),
-  // o estoque informado já é o valor contado após a operação, portanto não se desconta novamente.
-  const effectiveCurrent =
-    isPostOperation && !isStockAlreadyPostOp ? round(current - todayConsumption) : current;
+  // A quantidade informada (current, ex: 6 kg de abóbora) é o estoque físico disponível no momento da análise.
+  // - Em PRÉ-OPERAÇÃO (isPostOperation = false):
+  //   A operação de hoje ainda NÃO ocorreu ("não teve saída no dia atual").
+  //   O consumo do dia vigente ainda vai acontecer e precisa ser suprido por este estoque, junto com os demais dias.
+  //   Portanto, os dias restantes a suprir incluem o dia de hoje (Segunda a Segunda 2).
+  // - Em PÓS-OPERAÇÃO (isPostOperation = true):
+  //   A operação de hoje JÁ OCORREU ("estoque já é considerando o que saiu da segunda").
+  //   O estoque de 6 já é o saldo que restou após o consumo de hoje!
+  //   Portanto, NÃO se deduz novamente a saída média do dia atual do estoque.
+  //   Os dias restantes a serem supridos começam da TERÇA EM DIANTE (da terça até a Segunda 2).
+  //   Com menos dias a suprir, o consumo restante é menor, o saldo previsto é maior e a compra sugerida RECAI.
+  const effectiveCurrent = current;
 
   const remainingDays = getRemainingCycleDays(refDay, isPostOperation);
   let remainingConsumption = 0;
@@ -254,7 +258,7 @@ export function computeProduct(
   remainingConsumption = round(remainingConsumption);
   const remainingDaysLabel = getRemainingDaysLabel(refDay, isPostOperation);
 
-  // Saldo de estoque previsto que vai ficar para segunda-feira (Estoque Efetivo - Consumo Restante dos dias)
+  // Saldo de estoque previsto que vai ficar para segunda-feira (Estoque Atual - Consumo Restante dos dias a suprir)
   const projectedCycleEndStock = round(effectiveCurrent - remainingConsumption);
 
   // Giro da semana / necessidade do ciclo (consumo semanal * semanas de cobertura)

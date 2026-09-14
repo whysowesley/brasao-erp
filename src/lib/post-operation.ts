@@ -51,3 +51,13 @@ export function usePostOperationMode() {
 
   return [isPostOperation, setMode] as const;
 }
+
+export function getPostOperationMode(): boolean {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored !== null) return stored === "true";
+  } catch {
+    // Ignora erro
+  }
+  return true;
+}

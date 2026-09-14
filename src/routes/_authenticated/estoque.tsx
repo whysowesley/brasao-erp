@@ -194,9 +194,13 @@ function EstoquePage() {
     );
   }, [products, rules, effectiveRefDay, isPostOperation]);
 
-  // Se o usuário não digitou nada em Quero Comprar, o padrão para o cálculo de estoque futuro é 0
-  // (desta forma o estoque futuro deduz de fato o consumo do ciclo).
-  const buyQty = useCallback((p: ComputedProduct) => plan[p.id] ?? 0, [plan]);
+  // Se o usuário não digitou manualmente um valor em Quero Comprar, o padrão é a compra sugerida,
+  // permitindo que o valor recaia automaticamente ao alternar para pós-operação.
+  const buyQty = useCallback(
+    (p: ComputedProduct) =>
+      plan[p.id] !== undefined ? plan[p.id] : p.suggestedPurchase > 0 ? p.suggestedPurchase : 0,
+    [plan],
+  );
 
   // O estoque futuro é o saldo projetado (Estoque Atual deduzindo o consumo do ciclo) + pedidos a caminho + quero comprar
   const futureWithBuy = useCallback(
@@ -396,7 +400,7 @@ function EstoquePage() {
                 variant="outline"
                 className="border-primary/40 bg-background text-[11px] font-semibold text-primary"
               >
-                {getRemainingDaysLabel(effectiveRefDay)}
+                {getRemainingDaysLabel(effectiveRefDay, isPostOperation)}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">

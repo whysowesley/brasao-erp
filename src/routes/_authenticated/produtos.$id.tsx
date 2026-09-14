@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Calendar, Pencil } from "lucide-react";
 import {
@@ -25,14 +25,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useMovements, useProduct } from "@/lib/data";
+import { useMovements, useProduct, useRules } from "@/lib/data";
 import {
+  computeProduct,
   DAYS_OF_WEEK,
+  DEFAULT_RULES,
   formatDateTime,
   formatQty,
   getDailyConsumptionFromProduct,
+  getDayOfWeekFromDate,
   movementLabel,
 } from "@/lib/inventory";
+import { usePostOperationMode } from "@/lib/post-operation";
 
 export const Route = createFileRoute("/_authenticated/produtos/$id")({
   head: () => ({
@@ -55,9 +59,22 @@ export const Route = createFileRoute("/_authenticated/produtos/$id")({
 
 function ProductDetail() {
   const { id } = Route.useParams();
-  const { data: product, isLoading } = useProduct(id);
+  const { data: rawProduct, isLoading } = useProduct(id);
+  const { data: rules } = useRules();
+  const [isPostOperation] = usePostOperationMode();
   const { data: movements } = useMovements(id, 200);
   const [open, setOpen] = useState(false);
+
+  const product = useMemo(() => {
+    if (!rawProduct) return null;
+    return computeProduct(
+      rawProduct,
+      rules ?? DEFAULT_RULES,
+      0,
+      getDayOfWeekFromDate(),
+      isPostOperation,
+    );
+  }, [rawProduct, rules, isPostOperation]);
 
   if (isLoading || !product) {
     return <Skeleton className="h-64 w-full rounded-lg" />;
