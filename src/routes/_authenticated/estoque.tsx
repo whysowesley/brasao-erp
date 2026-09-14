@@ -1,6 +1,15 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowUpDown, Calendar, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
+import {
+  ArrowUpDown,
+  Calendar,
+  Pencil,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/PageHeader";
@@ -172,7 +181,7 @@ function EstoquePage() {
   const [editing, setEditing] = useState<ComputedProduct | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   /** Quantidade que o usuário pretende comprar — compartilhada com as outras telas. */
-  const { plan, setPlanned, clearPlan } = usePurchasePlan();
+  const { plan, setPlanned, setPlannedBatch, clearPlan } = usePurchasePlan();
 
   // Flag de momento da contagem: pós-operação (fechamento, dia de hoje já usado) vs pré-operação
   const [isPostOperation, setIsPostOperation] = usePostOperationMode();
@@ -185,19 +194,40 @@ function EstoquePage() {
     );
   }, [products, rules, effectiveRefDay, isPostOperation]);
 
-  const buyQty = useCallback((p: ComputedProduct) => plan[p.id] ?? p.suggestedPurchase, [plan]);
+  // Se o usuário não digitou nada em Quero Comprar, o padrão para o cálculo de estoque futuro é 0
+  // (desta forma o estoque futuro deduz de fato o consumo do ciclo).
+  const buyQty = useCallback((p: ComputedProduct) => plan[p.id] ?? 0, [plan]);
 
-  // O estoque futuro é o saldo da 2ª segunda + o valor a comprar para a próxima semana
+  // O estoque futuro é o saldo projetado (Estoque Atual deduzindo o consumo do ciclo) + pedidos a caminho + quero comprar
   const futureWithBuy = useCallback(
     (p: ComputedProduct) =>
       Math.round(
         ((p.projectedCycleEndStock ?? Number(p.current_stock) - p.remainingConsumption) +
+          (p.incoming ?? 0) +
           buyQty(p) +
           Number.EPSILON) *
           1000,
       ) / 1000,
     [buyQty],
   );
+
+  const applyAllSuggestions = useCallback(() => {
+    if (!recomputedProducts || recomputedProducts.length === 0) return;
+    const batch: Record<string, number> = {};
+    let count = 0;
+    for (const p of recomputedProducts) {
+      if (p.suggestedPurchase > 0) {
+        batch[p.id] = p.suggestedPurchase;
+        count++;
+      }
+    }
+    if (count === 0) {
+      toast.info("Nenhum produto possui sugestão de compra pendente.");
+      return;
+    }
+    setPlannedBatch(batch);
+    toast.success(`${count} sugestões de compra aplicadas a 'Quero Comprar'.`);
+  }, [recomputedProducts, setPlannedBatch]);
 
   /** Status do estoque em tempo real conforme o estoque futuro (só fica crítico se <= 0). */
   const stockStatus = useCallback(
@@ -307,9 +337,28 @@ function EstoquePage() {
         description="Todos os produtos, com cálculo automático de compra sugerida e estoque futuro."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {Object.keys(plan).length > 0 && (
-              <Button variant="outline" onClick={() => clearPlan()} className="text-xs sm:text-sm">
-                Limpar plano
+            {Object.keys(plan).length > 0 ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  clearPlan();
+                  toast.info(
+                    "Plano de compras limpo. Exibindo projeção real sem compras adicionais.",
+                  );
+                }}
+                className="text-xs sm:text-sm"
+              >
+                Limpar plano ({Object.keys(plan).length})
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={applyAllSuggestions}
+                className="gap-1.5 text-xs sm:text-sm"
+                title="Preenche a coluna 'Quero Comprar' com a compra sugerida de cada produto"
+              >
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span>Usar Sugestões</span>
               </Button>
             )}
             <WhatsAppStockImportDialog />
@@ -583,12 +632,23 @@ function EstoquePage() {
                     <TableCell className="text-right">
                       <PlanInput
                         value={buyQty(p)}
+                        placeholder={p.suggestedPurchase > 0 ? String(p.suggestedPurchase) : "0"}
                         onChange={(val) => setPlanned(p.id, val)}
                         className="num ml-auto h-8 w-24 text-right"
                       />
                     </TableCell>
                     <TableCell className="num text-right font-semibold">
-                      {formatQty(futureWithBuy(p), p.unit)}
+                      <span
+                        className={
+                          futureWithBuy(p) <= 0
+                            ? "text-rose-600 dark:text-rose-400 font-bold"
+                            : futureWithBuy(p) < Number(p.min_stock)
+                              ? "text-amber-600 dark:text-amber-400 font-semibold"
+                              : "text-foreground"
+                        }
+                      >
+                        {formatQty(futureWithBuy(p), p.unit)}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={stockStatus(p)} />

@@ -200,6 +200,7 @@ export type ComputedProduct = ProductRow & {
   projectedStock: number;
   suggestedPurchase: number;
   futureStock: number;
+  futureStockWithSuggestion?: number;
   status: StockStatus;
   futureStatus: StockStatus;
   referenceDay: DayOfWeek;
@@ -267,8 +268,11 @@ export function computeProduct(
   const rawSuggestion = targetTurnover - projectedCycleEndStock - incoming;
   const suggestedPurchase = round(Math.max(0, rawSuggestion));
 
-  // O estoque futuro é o saldo projetado da 2ª feira + pedidos pendentes + compra sugerida
-  const futureStock = round(projectedCycleEndStock + incoming + suggestedPurchase);
+  // O estoque futuro previsto é o saldo da 2ª feira + pedidos pendentes.
+  // Deduz o consumo do ciclo (e do dia vigente, se pós-operação ou ciclo aberto) para
+  // refletir a real projeção caso nenhuma compra adicional seja feita.
+  const futureStock = round(projectedCycleEndStock + incoming);
+  const futureStockWithSuggestion = round(projectedCycleEndStock + incoming + suggestedPurchase);
   const projectedStock = projectedCycleEndStock;
 
   // Status do estoque: só é crítico se for igual ou menor que zero (<= 0)
@@ -292,6 +296,7 @@ export function computeProduct(
     projectedStock,
     suggestedPurchase,
     futureStock,
+    futureStockWithSuggestion,
     status,
     futureStatus,
     referenceDay: refDay,

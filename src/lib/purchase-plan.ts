@@ -73,6 +73,12 @@ export function setPlanned(productId: string, quantity: number | null) {
   persist();
 }
 
+export function setPlannedBatch(batch: Record<string, number>) {
+  load();
+  plan = { ...plan, ...batch };
+  persist();
+}
+
 export function clearPlan(productIds?: string[]) {
   load();
   if (!productIds) plan = {};
@@ -91,7 +97,8 @@ export function usePurchasePlan() {
     (productId: string, quantity: number | null) => setPlanned(productId, quantity),
     [],
   );
-  return { plan: value, setPlanned: set, clearPlan };
+  const setBatch = useCallback((batch: Record<string, number>) => setPlannedBatch(batch), []);
+  return { plan: value, setPlanned: set, setPlannedBatch: setBatch, clearPlan };
 }
 
 /** Quantidade planejada para um produto, com fallback na sugestão do sistema. */
