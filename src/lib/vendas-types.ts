@@ -130,3 +130,93 @@ export interface QuickDayEntryForm {
   orders_count?: number | string;
   notes?: string;
 }
+
+/* -------------------------------------------------------------------------- */
+/*                        INTERCORRÊNCIAS & FATURAMENTO                       */
+/* -------------------------------------------------------------------------- */
+
+export type IncidentStatus = "pendente" | "em_andamento" | "resolvido";
+
+export const INCIDENT_CATEGORIES = [
+  "Clima / Chuva Torrencial",
+  "iFood / App Fora do Ar",
+  "Motoboy / Logística de Entrega",
+  "Cozinha / Ruptura de Estoque",
+  "Sistema PDV / Maquininha Travou",
+  "Contato de Faturamento",
+  "Falta de Energia / Água",
+  "Operação / Equipe / Atraso",
+  "Outros",
+] as const;
+
+export type IncidentCategory = (typeof INCIDENT_CATEGORIES)[number];
+
+export interface SalesIncident {
+  id: string;
+  date: string; // YYYY-MM-DD
+  category: string;
+  incident: string; // Qual foi a intercorrência
+  action_taken: string; // Ação tomada
+  to_meeting: boolean; // Se deve levar como pauta para reunião
+  status: IncidentStatus; // Resolvido / Pendente / Em andamento
+  resolution_notes?: string | null; // Retorno sobre o ocorrido / como foi solucionado
+  resolved_at?: string | null;
+  user_id?: string | null;
+  user_name: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                  ANÁLISE COMPARATIVA DE 4 SEMANAS                          */
+/* -------------------------------------------------------------------------- */
+
+export type DayComparisonStatus = "acima" | "media" | "abaixo" | "sem_historico";
+
+export interface HistoricalWeekPoint {
+  weekNumber: number; // 1 = 1 semana atrás, 2 = 2 semanas atrás, 3 = 3 semanas atrás, 4 = 4 semanas atrás
+  date: string; // YYYY-MM-DD
+  formattedDate: string; // DD/MM
+  dayOfWeek: string;
+  amount: number;
+  channels: Record<SalesChannelKey, number>;
+  ordersCount: number;
+  hasRecords: boolean;
+}
+
+export interface DayChannelComparison {
+  channel: SalesChannelKey;
+  label: string;
+  categoryLabel: string;
+  color: string;
+  currentAmount: number;
+  avgAmount: number;
+  variationAmount: number;
+  variationPercent: number;
+  status: DayComparisonStatus;
+}
+
+export interface Day4WeeksComparison {
+  targetDate: string;
+  formattedTargetDate: string;
+  dayOfWeek: string;
+  currentDayAmount: number;
+  currentDayChannels: Record<SalesChannelKey, number>;
+  currentDayOrders: number;
+  hasCurrentDaySales: boolean;
+
+  historicalWeeks: HistoricalWeekPoint[];
+  weeksWithDataCount: number;
+  totalHistoricalAmount: number;
+  avgHistoricalAmount: number;
+
+  variationAmount: number; // currentDayAmount - avgHistoricalAmount
+  variationPercent: number; // % em relação à média
+  status: DayComparisonStatus;
+  statusLabel: string;
+  statusBadgeClass: string;
+  statusCardClass: string;
+
+  channelComparisons: DayChannelComparison[];
+  incidents: SalesIncident[];
+}

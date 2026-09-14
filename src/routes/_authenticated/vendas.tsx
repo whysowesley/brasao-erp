@@ -20,6 +20,9 @@ import {
   CalendarDays,
   PieChart as PieChartIcon,
   BarChart3,
+  AlertTriangle,
+  LineChart,
+  ClipboardList,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -65,6 +68,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { LancarVendaDialog } from "@/components/vendas/LancarVendaDialog";
+import { Sales4WeeksAnalysisCard } from "@/components/vendas/Sales4WeeksAnalysisCard";
+import { SalesIncidentsList } from "@/components/vendas/SalesIncidentsList";
+import { SalesIncidentDialog } from "@/components/vendas/SalesIncidentDialog";
 import {
   computeMonthSalesMetrics,
   formatCurrency,
@@ -73,6 +79,7 @@ import {
   getTodayDateString,
   useDailySales,
   useDeleteDaySales,
+  useSalesIncidents,
 } from "@/lib/vendas";
 import { SALES_CHANNELS, type SalesChannelKey } from "@/lib/vendas-types";
 
@@ -95,9 +102,19 @@ function VendasPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthKey);
   const [showOnlyDaysWithSales, setShowOnlyDaysWithSales] = useState<boolean>(false);
 
-  // Dialog de lançamento
+  // Tabs de visualização
+  const [activeTab, setActiveTab] = useState<string>("tabela");
+
+  // Data em foco para a Análise Comparativa de 4 Semanas
+  const [analysisDate, setAnalysisDate] = useState<string>(getTodayDateString());
+
+  // Dialog de lançamento de vendas
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
   const [editingDate, setEditingDate] = useState<string>(getTodayDateString());
+
+  // Dialog de intercorrências
+  const [incidentDialogOpen, setIncidentDialogOpen] = useState<boolean>(false);
+  const [incidentDialogDate, setIncidentDialogDate] = useState<string>(getTodayDateString());
 
   // Confirmação de exclusão
   const [deleteDate, setDeleteDate] = useState<string | null>(null);
@@ -105,6 +122,29 @@ function VendasPage() {
   // Queries e Mutations
   const { data: records = [], isLoading } = useDailySales(selectedMonth);
   const deleteDaySales = useDeleteDaySales();
+
+  // Intercorrências globais para badges e avisos
+  const incidentsQuery = useSalesIncidents();
+  const allIncidents = useMemo(() => incidentsQuery.data ?? [], [incidentsQuery.data]);
+
+  const incidentsByDate = useMemo(() => {
+    const map = new Map<string, typeof allIncidents>();
+    for (const inc of allIncidents) {
+      const list = map.get(inc.date) || [];
+      list.push(inc);
+      map.set(inc.date, list);
+    }
+    return map;
+  }, [allIncidents]);
+
+  const pendingIncidentsCount = useMemo(
+    () => allIncidents.filter((i) => i.status === "pendente").length,
+    [allIncidents],
+  );
+  const meetingIncidentsCount = useMemo(
+    () => allIncidents.filter((i) => i.to_meeting).length,
+    [allIncidents],
+  );
 
   // Métricas do mês
   const metrics = useMemo(() => {
@@ -311,6 +351,24 @@ function VendasPage() {
               </Button>
 
               <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIncidentDialogDate(getTodayDateString());
+                  setIncidentDialogOpen(true);
+                }}
+                className="h-8 gap-1.5 text-xs font-semibold border-amber-300 bg-amber-50/70 text-amber-900 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-200"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                <span>+ Intercorrência</span>
+                {pendingIncidentsCount > 0 && (
+                  <Badge className="h-4 px-1 text-[9px] bg-rose-600 text-white font-bold ml-0.5">
+                    {pendingIncidentsCount}
+                  </Badge>
+                )}
+              </Button>
+
+              <Button
                 onClick={() => openNewSale()}
                 className="h-8 gap-1.5 text-xs font-semibold shadow-xs"
               >
@@ -464,31 +522,48 @@ function VendasPage() {
       </div>
 
       {/* TABS DE VISUALIZAÇÃO */}
-      <Tabs defaultValue="tabela" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
-          <TabsList className="bg-muted/60">
+          <TabsList className="bg-muted/60 flex-wrap h-auto p-1">
             <TabsTrigger value="tabela" className="gap-1.5 text-xs">
               <CalendarDays className="h-3.5 w-3.5" />
-              Diário de Vendas & Soma Mês
+              Diário & Soma Mês
+            </TabsTrigger>
+            <TabsTrigger value="analise" className="gap-1.5 text-xs font-semibold">
+              <LineChart className="h-3.5 w-3.5 text-primary" />
+              Análise de Decisão (4 Semanas)
+            </TabsTrigger>
+            <TabsTrigger value="intercorrencias" className="gap-1.5 text-xs">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+              Intercorrências & Contatos
+              {(pendingIncidentsCount > 0 || meetingIncidentsCount > 0) && (
+                <Badge className="ml-1 px-1.5 py-0 text-[9px] bg-rose-600 text-white font-bold">
+                  {pendingIncidentsCount > 0
+                    ? `${pendingIncidentsCount} pend.`
+                    : `${meetingIncidentsCount} pauta`}
+                </Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="graficos" className="gap-1.5 text-xs">
               <BarChart3 className="h-3.5 w-3.5" />
-              Gráficos & Comparativo de Canais
+              Gráficos & Canais
             </TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowOnlyDaysWithSales((prev) => !prev)}
-              className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-            >
-              <Filter className="h-3 w-3" />
-              {showOnlyDaysWithSales
-                ? "Mostrando apenas dias com venda"
-                : "Mostrar todos os dias do mês"}
-            </Button>
+            {activeTab === "tabela" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowOnlyDaysWithSales((prev) => !prev)}
+                className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+              >
+                <Filter className="h-3 w-3" />
+                {showOnlyDaysWithSales
+                  ? "Mostrando apenas dias com venda"
+                  : "Mostrar todos os dias do mês"}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -565,7 +640,7 @@ function VendasPage() {
                       <TableHead className="text-right font-bold text-primary bg-primary/5">
                         Acumulado Mês
                       </TableHead>
-                      <TableHead className="w-[90px] text-center">Ações</TableHead>
+                      <TableHead className="w-[120px] text-center">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -590,6 +665,8 @@ function VendasPage() {
                       displayDays.map((d) => {
                         const isToday = d.date === getTodayDateString();
                         const hasSales = d.totalDay > 0;
+                        const dayIncidents = incidentsByDate.get(d.date) || [];
+                        const hasMeetingIncident = dayIncidents.some((i) => i.to_meeting);
 
                         return (
                           <TableRow
@@ -603,7 +680,7 @@ function VendasPage() {
                             }
                           >
                             <TableCell className="font-mono text-xs">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-semibold text-foreground">
                                   {d.formattedDate}
                                 </span>
@@ -616,6 +693,24 @@ function VendasPage() {
                                     className="text-[9px] px-1 py-0 bg-amber-100 text-amber-900 border-amber-300"
                                   >
                                     Hoje
+                                  </Badge>
+                                )}
+                                {dayIncidents.length > 0 && (
+                                  <Badge
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setAnalysisDate(d.date);
+                                      setActiveTab("analise");
+                                    }}
+                                    className={`cursor-pointer text-[9px] px-1.5 py-0 border font-bold ${
+                                      hasMeetingIncident
+                                        ? "bg-indigo-50 text-indigo-700 border-indigo-300 dark:bg-indigo-950/40 dark:text-indigo-300"
+                                        : "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300"
+                                    }`}
+                                    title={`${dayIncidents.length} intercorrência(s) neste dia. Clique para analisar.`}
+                                  >
+                                    ⚠️ {dayIncidents.length}
                                   </Badge>
                                 )}
                               </div>
@@ -662,11 +757,35 @@ function VendasPage() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  className="h-7 w-7 text-primary hover:text-primary hover:bg-primary/10"
+                                  onClick={() => {
+                                    setAnalysisDate(d.date);
+                                    setActiveTab("analise");
+                                  }}
+                                  title="Análise de Decisão: comparar este dia com as últimas 4 semanas"
+                                >
+                                  <LineChart className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
                                   className="h-7 w-7 text-muted-foreground hover:text-foreground"
                                   onClick={() => openNewSale(d.date)}
                                   title="Editar ou lançar vendas deste dia"
                                 >
                                   <Edit2 className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-amber-600 hover:text-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                                  onClick={() => {
+                                    setIncidentDialogDate(d.date);
+                                    setIncidentDialogOpen(true);
+                                  }}
+                                  title="Registrar intercorrência ou contato neste dia"
+                                >
+                                  <AlertTriangle className="h-3.5 w-3.5" />
                                 </Button>
                                 {hasSales && (
                                   <Button
@@ -934,14 +1053,41 @@ function VendasPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* TAB 2: ANÁLISE DE DECISÃO (4 SEMANAS) */}
+        <TabsContent value="analise" className="space-y-6 m-0">
+          <Sales4WeeksAnalysisCard
+            selectedDate={analysisDate}
+            onDateChange={setAnalysisDate}
+            onOpenSaleEntry={openNewSale}
+          />
+        </TabsContent>
+
+        {/* TAB 3: INTERCORRÊNCIAS & CONTATOS DE FATURAMENTO */}
+        <TabsContent value="intercorrencias" className="space-y-6 m-0">
+          <SalesIncidentsList
+            initialDateFilter=""
+            onSelectDate={(date) => {
+              setAnalysisDate(date);
+              setActiveTab("analise");
+            }}
+          />
+        </TabsContent>
       </Tabs>
 
-      {/* DIALOG DE LANÇAMENTO */}
+      {/* DIALOG DE LANÇAMENTO DE VENDAS */}
       <LancarVendaDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         initialDate={editingDate}
         existingRecords={records}
+      />
+
+      {/* DIALOG DE INTERCORRÊNCIA / CONTATO */}
+      <SalesIncidentDialog
+        open={incidentDialogOpen}
+        onOpenChange={setIncidentDialogOpen}
+        initialDate={incidentDialogDate}
       />
 
       {/* DIALOG DE CONFIRMAÇÃO DE EXCLUSÃO */}

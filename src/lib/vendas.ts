@@ -18,10 +18,17 @@ import type {
   MonthSalesMetrics,
   QuickDayEntryForm,
   SalesChannelKey,
+  SalesIncident,
+  IncidentStatus,
+  Day4WeeksComparison,
+  DayChannelComparison,
+  HistoricalWeekPoint,
+  DayComparisonStatus,
 } from "@/lib/vendas-types";
 import { SALES_CHANNELS } from "@/lib/vendas-types";
 
 export const SALES_COLLECTION = "daily_sales";
+export const INCIDENTS_COLLECTION = "sales_incidents";
 
 /* -------------------------------------------------------------------------- */
 /*                                    UTILS                                   */
@@ -467,4 +474,429 @@ export function useDailySalesRange(startDate?: string, endDate?: string) {
     },
     enabled: Boolean(startDate && endDate),
   });
+}
+
+/* -------------------------------------------------------------------------- */
+/*                 INTERCORRÊNCIAS & CONTATOS DE FATURAMENTO                  */
+/* -------------------------------------------------------------------------- */
+
+export const WEEKDAYS_FULL = [
+  "Domingo",
+  "Segunda-feira",
+  "Terça-feira",
+  "Quarta-feira",
+  "Quinta-feira",
+  "Sexta-feira",
+  "Sábado",
+];
+
+export function getPastWeekDate(dateStr: string, weeksAgo: number): string {
+  if (!dateStr || !dateStr.includes("-")) return dateStr;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y!, m! - 1, d!);
+  date.setDate(date.getDate() - weeksAgo * 7);
+  const py = date.getFullYear();
+  const pm = String(date.getMonth() + 1).padStart(2, "0");
+  const pd = String(date.getDate()).padStart(2, "0");
+  return `${py}-${pm}-${pd}`;
+}
+
+export function getDayOfWeekInfo(dateStr: string): { short: string; long: string } {
+  if (!dateStr || !dateStr.includes("-")) return { short: "-", long: "-" };
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y!, m! - 1, d!);
+  const dayIdx = date.getDay();
+  return {
+    short: WEEKDAYS[dayIdx] || "-",
+    long: WEEKDAYS_FULL[dayIdx] || "-",
+  };
+}
+
+export function useSalesIncidents(dateFilter?: string) {
+  return useQuery({
+    queryKey: ["sales_incidents", dateFilter],
+    queryFn: async (): Promise<SalesIncident[]> => {
+      try {
+        const col = collection(db, INCIDENTS_COLLECTION);
+        let q = query(col);
+        if (dateFilter) {
+          q = query(col, where("date", "==", dateFilter));
+        }
+        const snap = await getDocs(q);
+        const incidents: SalesIncident[] = snap.docs.map((docSnap) => {
+          const d = docSnap.data();
+          return {
+            id: docSnap.id,
+            date: String(d["date"] || ""),
+            category: String(d["category"] || "Outros"),
+            incident: String(d["incident"] || ""),
+            action_taken: String(d["action_taken"] || ""),
+            to_meeting: Boolean(d["to_meeting"]),
+            status: (d["status"] as IncidentStatus) || "pendente",
+            resolution_notes: d["resolution_notes"] || null,
+            resolved_at: d["resolved_at"] || null,
+            user_id: d["user_id"] || null,
+            user_name: String(d["user_name"] || "Operador"),
+            created_at: (d["created_at"] as { toDate?: () => Date })?.toDate
+              ? (d["created_at"] as { toDate: () => Date }).toDate().toISOString()
+              : (d["created_at"] as string) || new Date().toISOString(),
+            updated_at: (d["updated_at"] as { toDate?: () => Date })?.toDate
+              ? (d["updated_at"] as { toDate: () => Date }).toDate().toISOString()
+              : (d["updated_at"] as string) || null,
+          };
+        });
+
+        return incidents.sort((a, b) => {
+          const dateCmp = b.date.localeCompare(a.date);
+          if (dateCmp !== 0) return dateCmp;
+          return (b.created_at || "").localeCompare(a.created_at || "");
+        });
+      } catch (err) {
+        console.error("Erro ao buscar intercorrências:", err);
+        return [];
+      }
+    },
+  });
+}
+
+export function useSaveSalesIncident() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      id?: string;
+      date: string;
+      category: string;
+      incident: string;
+      action_taken: string;
+      to_meeting: boolean;
+      status: IncidentStatus;
+      resolution_notes?: string | null;
+      resolved_at?: string | null;
+      user_id?: string | null;
+      user_name?: string;
+    }) => {
+      const payload = {
+        date: input.date,
+        category: input.category,
+        incident: input.incident.trim(),
+        action_taken: input.action_taken.trim(),
+        to_meeting: Boolean(input.to_meeting),
+        status: input.status,
+        resolution_notes: input.resolution_notes ? input.resolution_notes.trim() : null,
+        resolved_at:
+          input.status === "resolvido" ? input.resolved_at || getTodayDateString() : null,
+        user_id: input.user_id || null,
+        user_name: input.user_name || "Operador",
+        updated_at: serverTimestamp(),
+      };
+
+      if (input.id) {
+        const docRef = doc(db, INCIDENTS_COLLECTION, input.id);
+        await updateDoc(docRef, payload);
+        return input.id;
+      } else {
+        const docRef = await addDoc(collection(db, INCIDENTS_COLLECTION), {
+          ...payload,
+          created_at: serverTimestamp(),
+        });
+        return docRef.id;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sales_incidents"] });
+      qc.invalidateQueries({ queryKey: ["sales_comparison"] });
+    },
+  });
+}
+
+export function useDeleteSalesIncident() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await deleteDoc(doc(db, INCIDENTS_COLLECTION, id));
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sales_incidents"] });
+      qc.invalidateQueries({ queryKey: ["sales_comparison"] });
+    },
+  });
+}
+
+export function useUpdateIncidentStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      status,
+      resolution_notes,
+    }: {
+      id: string;
+      status: IncidentStatus;
+      resolution_notes?: string;
+    }) => {
+      const docRef = doc(db, INCIDENTS_COLLECTION, id);
+      const payload: Record<string, unknown> = {
+        status,
+        updated_at: serverTimestamp(),
+      };
+      if (resolution_notes !== undefined) {
+        payload.resolution_notes = resolution_notes.trim() || null;
+      }
+      if (status === "resolvido") {
+        payload.resolved_at = getTodayDateString();
+      } else {
+        payload.resolved_at = null;
+      }
+      await updateDoc(docRef, payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sales_incidents"] });
+      qc.invalidateQueries({ queryKey: ["sales_comparison"] });
+    },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/*               ANÁLISE COMPARATIVA DE 4 SEMANAS DO MESMO DIA                */
+/* -------------------------------------------------------------------------- */
+
+export function computeDay4WeeksComparison(
+  targetDate: string,
+  allFetchedSales: DailySaleRecord[],
+  incidents: SalesIncident[],
+): Day4WeeksComparison {
+  const dayInfo = getDayOfWeekInfo(targetDate);
+  const [y, m, d] = targetDate.split("-");
+  const formattedTargetDate = `${d}/${m}/${y}`;
+
+  // 4 semanas anteriores do mesmo dia da semana
+  const pastDates: string[] = [
+    getPastWeekDate(targetDate, 1),
+    getPastWeekDate(targetDate, 2),
+    getPastWeekDate(targetDate, 3),
+    getPastWeekDate(targetDate, 4),
+  ];
+
+  // Agrupar registros por data
+  const dateMap = new Map<string, DailySaleRecord[]>();
+  for (const r of allFetchedSales) {
+    const list = dateMap.get(r.date) || [];
+    list.push(r);
+    dateMap.set(r.date, list);
+  }
+
+  // Vendas do dia alvo (atual / data consultada)
+  const currentDayRecs = dateMap.get(targetDate) || [];
+  const currentDayChannels: Record<SalesChannelKey, number> = {
+    balcao_salao: 0,
+    delivery_ifood: 0,
+    delivery_anota_ai: 0,
+    delivery_99: 0,
+    delivery_sw_fast: 0,
+  };
+  let currentDayAmount = 0;
+  let currentDayOrders = 0;
+
+  for (const r of currentDayRecs) {
+    currentDayAmount += r.amount;
+    if (r.orders_count) currentDayOrders += r.orders_count;
+    if (r.channel in currentDayChannels) {
+      currentDayChannels[r.channel] += r.amount;
+    }
+  }
+
+  // Construir os 4 pontos históricos
+  const historicalWeeks: HistoricalWeekPoint[] = pastDates.map((pDate, idx) => {
+    const weekNum = idx + 1;
+    const [py, pm, pd] = pDate.split("-");
+    const formattedDate = `${pd}/${pm}`;
+    const pRecs = dateMap.get(pDate) || [];
+
+    const channels: Record<SalesChannelKey, number> = {
+      balcao_salao: 0,
+      delivery_ifood: 0,
+      delivery_anota_ai: 0,
+      delivery_99: 0,
+      delivery_sw_fast: 0,
+    };
+    let amount = 0;
+    let ordersCount = 0;
+
+    for (const r of pRecs) {
+      amount += r.amount;
+      if (r.orders_count) ordersCount += r.orders_count;
+      if (r.channel in channels) {
+        channels[r.channel] += r.amount;
+      }
+    }
+
+    return {
+      weekNumber: weekNum,
+      date: pDate,
+      formattedDate,
+      dayOfWeek: dayInfo.short,
+      amount,
+      channels,
+      ordersCount,
+      hasRecords: pRecs.length > 0 || amount > 0,
+    };
+  });
+
+  const weeksWithData = historicalWeeks.filter((w) => w.hasRecords);
+  const weeksWithDataCount = weeksWithData.length;
+  const totalHistoricalAmount = weeksWithData.reduce((acc, w) => acc + w.amount, 0);
+  const avgHistoricalAmount =
+    weeksWithDataCount > 0 ? totalHistoricalAmount / weeksWithDataCount : 0;
+
+  // Variação vs média das semanas anteriores
+  const variationAmount = currentDayAmount - avgHistoricalAmount;
+  const variationPercent =
+    avgHistoricalAmount > 0
+      ? ((currentDayAmount - avgHistoricalAmount) / avgHistoricalAmount) * 100
+      : 0;
+
+  // Status de decisão:
+  // Verde: Acima da média
+  // Amarelo: Na média (tolerância de +- 2%)
+  // Vermelho: Abaixo da média
+  let status: DayComparisonStatus = "sem_historico";
+  let statusLabel = "Sem Histórico Prévio";
+  let statusBadgeClass = "bg-muted text-muted-foreground border-border";
+  let statusCardClass = "border-border/70";
+
+  if (weeksWithDataCount === 0) {
+    status = "sem_historico";
+    statusLabel = "Sem Histórico Prévio (4 Semanas)";
+    statusBadgeClass = "bg-muted text-muted-foreground border-border";
+    statusCardClass = "border-border/70";
+  } else if (variationPercent > 2) {
+    status = "acima";
+    statusLabel = "Acima da Média";
+    statusBadgeClass =
+      "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800";
+    statusCardClass = "border-emerald-500/40 bg-emerald-50/15 dark:bg-emerald-950/10";
+  } else if (variationPercent < -2) {
+    status = "abaixo";
+    statusLabel = "Abaixo da Média";
+    statusBadgeClass =
+      "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800";
+    statusCardClass = "border-rose-500/40 bg-rose-50/15 dark:bg-rose-950/10";
+  } else {
+    status = "media";
+    statusLabel = "Na Média";
+    statusBadgeClass =
+      "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800";
+    statusCardClass = "border-amber-500/40 bg-amber-50/15 dark:bg-amber-950/10";
+  }
+
+  // Comparação detalhada canal por canal
+  const channelComparisons: DayChannelComparison[] = (
+    Object.keys(SALES_CHANNELS) as SalesChannelKey[]
+  ).map((chKey) => {
+    const config = SALES_CHANNELS[chKey];
+    const curVal = currentDayChannels[chKey] || 0;
+    const chTotalHist = weeksWithData.reduce((acc, w) => acc + (w.channels[chKey] || 0), 0);
+    const chAvg = weeksWithDataCount > 0 ? chTotalHist / weeksWithDataCount : 0;
+    const chVarAmount = curVal - chAvg;
+    const chVarPercent = chAvg > 0 ? ((curVal - chAvg) / chAvg) * 100 : 0;
+
+    let chStatus: DayComparisonStatus = "sem_historico";
+    if (weeksWithDataCount === 0) {
+      chStatus = "sem_historico";
+    } else if (chVarPercent > 2) {
+      chStatus = "acima";
+    } else if (chVarPercent < -2) {
+      chStatus = "abaixo";
+    } else {
+      chStatus = "media";
+    }
+
+    return {
+      channel: chKey,
+      label: config.label,
+      categoryLabel: config.categoryLabel,
+      color: config.color,
+      currentAmount: curVal,
+      avgAmount: chAvg,
+      variationAmount: chVarAmount,
+      variationPercent: chVarPercent,
+      status: chStatus,
+    };
+  });
+
+  return {
+    targetDate,
+    formattedTargetDate,
+    dayOfWeek: dayInfo.long,
+    currentDayAmount,
+    currentDayChannels,
+    currentDayOrders,
+    hasCurrentDaySales: currentDayRecs.length > 0 || currentDayAmount > 0,
+    historicalWeeks,
+    weeksWithDataCount,
+    totalHistoricalAmount,
+    avgHistoricalAmount,
+    variationAmount,
+    variationPercent,
+    status,
+    statusLabel,
+    statusBadgeClass,
+    statusCardClass,
+    channelComparisons,
+    incidents,
+  };
+}
+
+export function useDay4WeeksAnalysis(targetDate: string) {
+  const pastDates = [
+    targetDate,
+    getPastWeekDate(targetDate, 1),
+    getPastWeekDate(targetDate, 2),
+    getPastWeekDate(targetDate, 3),
+    getPastWeekDate(targetDate, 4),
+  ];
+
+  const salesQuery = useQuery({
+    queryKey: ["sales_comparison", targetDate],
+    queryFn: async (): Promise<DailySaleRecord[]> => {
+      try {
+        const q = query(collection(db, SALES_COLLECTION), where("date", "in", pastDates));
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            date: data["date"],
+            channel: data["channel"],
+            channel_category: data["channel_category"],
+            amount: Number(data["amount"]) || 0,
+            orders_count: data["orders_count"] ? Number(data["orders_count"]) : null,
+            notes: data["notes"] || null,
+            user_name: data["user_name"] || null,
+          };
+        });
+      } catch (err) {
+        console.error("Erro ao buscar histórico de 4 semanas:", err);
+        return [];
+      }
+    },
+    enabled: Boolean(targetDate),
+  });
+
+  const incidentsQuery = useSalesIncidents(targetDate);
+
+  const comparison = computeDay4WeeksComparison(
+    targetDate,
+    salesQuery.data || [],
+    incidentsQuery.data || [],
+  );
+
+  return {
+    data: comparison,
+    isLoading: salesQuery.isLoading || incidentsQuery.isLoading,
+    refetch: () => {
+      salesQuery.refetch();
+      incidentsQuery.refetch();
+    },
+  };
 }

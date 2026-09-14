@@ -130,5 +130,9 @@ service cloud.firestore {
       allow read: if isApprovedUser();
       allow write: if canWrite();
     }
+    match /sales_incidents/{document=**} {
+      allow read: if isApprovedUser();
+      allow write: if canWrite();
+    }
   }
 }
