@@ -14,25 +14,25 @@ service cloud.firestore {
     function isApprovedUser() {
       return isAuthenticated() && (
         isOwner() ||
-        (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true
-        )
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true)
       );
     }
 
     function isAdmin() {
-      return isOwner() || (
-        isApprovedUser() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master'
+      return isAuthenticated() && (
+        isOwner() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master')
       );
     }
 
     function canWrite() {
-      return isOwner() || (
-        isApprovedUser() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in
-          ['master', 'manager', 'editor', 'operator']
+      return isAuthenticated() && (
+        isOwner() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['master', 'manager', 'editor', 'operator'])
       );
     }
 
