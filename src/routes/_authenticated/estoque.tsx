@@ -59,6 +59,7 @@ import {
   useRules,
   useSuppliers,
 } from "@/lib/data";
+import { useAuth } from "@/lib/auth";
 import {
   formatQty,
   futureStatusFor,
@@ -158,6 +159,7 @@ function QuickNumericInput({
 }
 
 function EstoquePage() {
+  const { isCounter, canWrite } = useAuth();
   const { data: products, isLoading } = useProducts();
   const { data: suppliers } = useSuppliers();
   const { data: categories } = useCategories();
@@ -365,22 +367,35 @@ function EstoquePage() {
                 <span>Usar Sugestões</span>
               </Button>
             )}
-            <WhatsAppStockImportDialog />
-            <Link to="/importar">
-              <Button variant="outline" className="gap-1.5 text-xs sm:text-sm">
-                <Upload className="h-4 w-4" />
-                <span>Importar Planilha</span>
-              </Button>
-            </Link>
-            <Button
-              onClick={() => {
-                setEditing(null);
-                setDialogOpen(true);
-              }}
-              className="gap-1.5 text-xs sm:text-sm"
-            >
-              <Plus className="h-4 w-4" /> Novo produto
-            </Button>
+            {!isCounter ? (
+              <>
+                <WhatsAppStockImportDialog />
+                <Link to="/importar">
+                  <Button variant="outline" className="gap-1.5 text-xs sm:text-sm">
+                    <Upload className="h-4 w-4" />
+                    <span>Importar Planilha</span>
+                  </Button>
+                </Link>
+                {canWrite && (
+                  <Button
+                    onClick={() => {
+                      setEditing(null);
+                      setDialogOpen(true);
+                    }}
+                    className="gap-1.5 text-xs sm:text-sm"
+                  >
+                    <Plus className="h-4 w-4" /> Novo produto
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Link to="/contagens">
+                <Button className="gap-1.5 text-xs sm:text-sm">
+                  <Sparkles className="h-4 w-4" />
+                  <span>Ir para Contagens</span>
+                </Button>
+              </Link>
+            )}
           </div>
         }
       />
@@ -458,7 +473,7 @@ function EstoquePage() {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-3 md:grid-cols-4">
+      <div className={`mb-4 grid gap-3 ${isCounter ? "md:grid-cols-3" : "md:grid-cols-4"}`}>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -468,19 +483,21 @@ function EstoquePage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Select value={supplier} onValueChange={setSupplier}>
-          <SelectTrigger>
-            <SelectValue placeholder="Fornecedor" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos os fornecedores</SelectItem>
-            {suppliers?.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {!isCounter && (
+          <Select value={supplier} onValueChange={setSupplier}>
+            <SelectTrigger>
+              <SelectValue placeholder="Fornecedor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os fornecedores</SelectItem>
+              {suppliers?.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={category} onValueChange={setCategory}>
           <SelectTrigger>
             <SelectValue placeholder="Categoria" />
@@ -507,16 +524,18 @@ function EstoquePage() {
         </Select>
       </div>
 
-      <div className="mb-3 flex items-center gap-2">
-        <Switch
-          id="group-supplier"
-          checked={groupBySupplier}
-          onCheckedChange={setGroupBySupplier}
-        />
-        <Label htmlFor="group-supplier" className="text-sm text-muted-foreground">
-          Ver estoque agrupado por fornecedor
-        </Label>
-      </div>
+      {!isCounter && (
+        <div className="mb-3 flex items-center gap-2">
+          <Switch
+            id="group-supplier"
+            checked={groupBySupplier}
+            onCheckedChange={setGroupBySupplier}
+          />
+          <Label htmlFor="group-supplier" className="text-sm text-muted-foreground">
+            Ver estoque agrupado por fornecedor
+          </Label>
+        </div>
+      )}
 
       <div className="rounded-lg border bg-card shadow-card">
         <div className="sm:hidden flex items-center justify-between px-3 py-2 text-[11px] text-muted-foreground bg-muted/40 border-b">
@@ -532,7 +551,7 @@ function EstoquePage() {
                   Estoque Atual
                 </Th>
                 <Th k="unit">Embalagem</Th>
-                <Th k="supplierName">Fornecedor</Th>
+                {!isCounter && <Th k="supplierName">Fornecedor</Th>}
                 <Th k="avg_weekly_consumption" align="right">
                   Consumo Semanal
                 </Th>
@@ -558,30 +577,33 @@ function EstoquePage() {
                 </Th>
                 <Th k="status">Status do Estoque</Th>
                 <TableHead>Observação</TableHead>
-                <TableHead className="w-20" />
+                {!isCounter && canWrite && <TableHead className="w-20" />}
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading &&
                 Array.from({ length: 8 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={12}>
+                    <TableCell colSpan={isCounter ? 10 : 12}>
                       <Skeleton className="h-6 w-full" />
                     </TableCell>
                   </TableRow>
                 ))}
               {rows.map((p, i) => (
                 <Fragment key={p.id}>
-                  {groupBySupplier && rows[i - 1]?.supplierName !== p.supplierName && (
-                    <TableRow className="bg-muted/50 hover:bg-muted/50">
-                      <TableCell colSpan={12} className="py-2 text-xs font-semibold uppercase">
-                        {p.supplierName}
-                        <span className="ml-2 font-normal text-muted-foreground">
-                          {rows.filter((r) => r.supplierName === p.supplierName).length} produto(s)
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  )}
+                  {!isCounter &&
+                    groupBySupplier &&
+                    rows[i - 1]?.supplierName !== p.supplierName && (
+                      <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        <TableCell colSpan={12} className="py-2 text-xs font-semibold uppercase">
+                          {p.supplierName}
+                          <span className="ml-2 font-normal text-muted-foreground">
+                            {rows.filter((r) => r.supplierName === p.supplierName).length}{" "}
+                            produto(s)
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    )}
                   <TableRow>
                     <TableCell className="font-medium">
                       <Link to="/produtos/$id" params={{ id: p.id }} className="hover:underline">
@@ -590,12 +612,18 @@ function EstoquePage() {
                       <span className="ml-2 text-xs text-muted-foreground">{p.categoryName}</span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <QuickNumericInput
-                        value={p.current_stock}
-                        onSave={(val) => quickSaveStock(p, val)}
-                        className="num ml-auto h-8 w-24 text-right"
-                        ariaLabel={`Estoque atual de ${p.description}`}
-                      />
+                      {isCounter ? (
+                        <span className="num font-semibold text-foreground">
+                          {formatQty(p.current_stock, p.unit)}
+                        </span>
+                      ) : (
+                        <QuickNumericInput
+                          value={p.current_stock}
+                          onSave={(val) => quickSaveStock(p, val)}
+                          className="num ml-auto h-8 w-24 text-right"
+                          ariaLabel={`Estoque atual de ${p.description}`}
+                        />
+                      )}
                       {isPostOperation && (p.todayConsumption ?? 0) > 0 && (
                         <div
                           className="text-[10px] text-muted-foreground mt-0.5"
@@ -606,14 +634,22 @@ function EstoquePage() {
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{p.unit}</TableCell>
-                    <TableCell className="text-muted-foreground">{p.supplierName}</TableCell>
+                    {!isCounter && (
+                      <TableCell className="text-muted-foreground">{p.supplierName}</TableCell>
+                    )}
                     <TableCell className="text-right">
-                      <QuickNumericInput
-                        value={p.avg_weekly_consumption}
-                        onSave={(val) => quickSaveConsumption(p, val)}
-                        className="num ml-auto h-8 w-20 text-right font-medium"
-                        ariaLabel={`Consumo semanal de ${p.description}`}
-                      />
+                      {isCounter ? (
+                        <span className="num font-medium text-muted-foreground">
+                          {formatQty(p.avg_weekly_consumption, p.unit)}
+                        </span>
+                      ) : (
+                        <QuickNumericInput
+                          value={p.avg_weekly_consumption}
+                          onSave={(val) => quickSaveConsumption(p, val)}
+                          className="num ml-auto h-8 w-20 text-right font-medium"
+                          ariaLabel={`Consumo semanal de ${p.description}`}
+                        />
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="text-xs font-semibold text-foreground">
@@ -660,48 +696,53 @@ function EstoquePage() {
                     <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">
                       {p.notes ?? ""}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => {
-                            setEditing(p);
-                            setDialogOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost">
-                              <Trash2 className="h-4 w-4 text-critical" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Apagar {p.description}?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                O produto será removido junto com seu histórico de movimentações,
-                                itens de pedidos e de contagens. Essa ação não pode ser desfeita.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => removeProduct(p)}>
-                                Apagar produto
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </TableCell>
+                    {!isCounter && canWrite && (
+                      <TableCell>
+                        <div className="flex items-center">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditing(p);
+                              setDialogOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="icon" variant="ghost">
+                                <Trash2 className="h-4 w-4 text-critical" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Apagar {p.description}?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  O produto será removido junto com seu histórico de movimentações,
+                                  itens de pedidos e de contagens. Essa ação não pode ser desfeita.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => removeProduct(p)}>
+                                  Apagar produto
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 </Fragment>
               ))}
               {!isLoading && rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={12} className="py-10 text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={isCounter ? 10 : 12}
+                    className="py-10 text-center text-muted-foreground"
+                  >
                     Nenhum produto encontrado com os filtros aplicados.
                   </TableCell>
                 </TableRow>

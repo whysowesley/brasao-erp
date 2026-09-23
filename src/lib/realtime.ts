@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { collection, onSnapshot, type Unsubscribe } from "firebase/firestore";
 import { db } from "@/integrations/firebase/config";
 
-const COLLECTIONS = [
+const ALL_COLLECTIONS = [
   "products",
   "stock_movements",
   "stock_counts",
@@ -22,12 +22,21 @@ const COLLECTIONS = [
   "presence_logs",
 ] as const;
 
+const COUNTER_COLLECTIONS = [
+  "products",
+  "stock_movements",
+  "stock_counts",
+  "categories",
+  "units",
+  "settings",
+] as const;
+
 /**
  * Mantém todas as telas sincronizadas em tempo real com Firestore:
  * Qualquer alteração no estoque, contagem, movimentação, pedidos ou financeiro
  * feita em qualquer sessão/dispositivo invalida as queries ativas e atualiza a UI.
  */
-export function useRealtimeSync(enabled = true) {
+export function useRealtimeSync(enabled = true, isCounter = false) {
   const qc = useQueryClient();
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -35,6 +44,7 @@ export function useRealtimeSync(enabled = true) {
     if (!enabled) return;
 
     const unsubs: Unsubscribe[] = [];
+    const activeCollections = isCounter ? COUNTER_COLLECTIONS : ALL_COLLECTIONS;
 
     const notifyChange = () => {
       if (debounceTimerRef.current) {
@@ -45,7 +55,7 @@ export function useRealtimeSync(enabled = true) {
       }, 150);
     };
 
-    for (const collName of COLLECTIONS) {
+    for (const collName of activeCollections) {
       try {
         const collRef = collection(db, collName);
         let isInitial = true;
@@ -82,5 +92,5 @@ export function useRealtimeSync(enabled = true) {
         }
       });
     };
-  }, [enabled, qc]);
+  }, [enabled, isCounter, qc]);
 }

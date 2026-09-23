@@ -78,11 +78,28 @@ export type StockCountItemRow = {
   products: { description: string; unit: string } | null;
 };
 
+export type StockCountAuditEntry = {
+  adjusted_at: string;
+  user_name: string;
+  user_email?: string | null;
+  reason: string;
+  items_changed: Array<{
+    product_id: string;
+    product_description: string;
+    unit: string;
+    previous_counted: number;
+    new_counted: number;
+    difference_delta: number;
+  }>;
+};
+
 export type StockCountRow = {
   id: string;
   user_name: string;
+  user_email?: string | null;
   notes: string | null;
   counted_at: string;
+  audit_logs?: StockCountAuditEntry[];
   stock_count_items: StockCountItemRow[];
 };
 
@@ -526,8 +543,10 @@ export function useCounts() {
         return {
           id: d.id,
           user_name: data["user_name"] || "Administrador",
+          user_email: (data["user_email"] as string) || null,
           notes: data["notes"] || null,
           counted_at: countedDate,
+          audit_logs: (data["audit_logs"] as StockCountAuditEntry[]) || [],
           stock_count_items: rawItems.map((it: Record<string, unknown>, idx: number) => {
             const pId = (it["product_id"] as string) || "";
             const matched = productMap.get(pId);
@@ -838,6 +857,7 @@ export async function updateOrderStatus(
 export async function recordStockCount(
   notes: string | null,
   items: Array<{ productId: string; expected: number; counted: number }>,
+  operatorInfo?: { name?: string | null; email?: string | null; userId?: string | null },
 ) {
   if (items.length === 0) {
     throw new Error("Inclua ao menos um produto na contagem.");
@@ -856,6 +876,9 @@ export async function recordStockCount(
     }
     uniqueProductIds.add(item.productId);
   });
+
+  const operatorName = operatorInfo?.name?.trim() || operatorInfo?.email || CURRENT_USER;
+  const operatorEmail = operatorInfo?.email || null;
 
   const countDocRef = doc(collection(db, "stock_counts"));
   const countId = countDocRef.id;
@@ -914,8 +937,9 @@ export async function recordStockCount(
           quantity_before: before,
           quantity_change: after - before,
           quantity_after: after,
-          user_name: CURRENT_USER,
-          notes: `Contagem de estoque (diferença ${after - before})`,
+          user_name: operatorName,
+          user_email: operatorEmail,
+          notes: `Contagem de estoque (diferença ${after - before > 0 ? `+${after - before}` : after - before})`,
           reference_type: "stock_count",
           reference_id: countId,
           created_at: serverTimestamp(),
@@ -924,11 +948,161 @@ export async function recordStockCount(
     });
 
     transaction.set(countDocRef, {
-      user_name: CURRENT_USER,
+      user_name: operatorName,
+      user_email: operatorEmail,
       notes: notes?.trim() || null,
       items: countItems,
       counted_at: new Date().toISOString(),
       created_at: serverTimestamp(),
+      audit_logs: [],
+    });
+  });
+}
+
+export async function adjustStockCount(
+  countId: string,
+  updatedItems: Array<{ productId: string; newCounted: number }>,
+  reason: string,
+  operatorInfo?: { name?: string | null; email?: string | null; userId?: string | null },
+) {
+  if (!countId) {
+    throw new Error("Identificador da contagem é obrigatório.");
+  }
+  if (updatedItems.length === 0) {
+    throw new Error("Nenhum item informado para ajuste.");
+  }
+
+  const countDocRef = doc(db, "stock_counts", countId);
+  const operatorName = operatorInfo?.name?.trim() || operatorInfo?.email || "Contador";
+  const operatorEmail = operatorInfo?.email || null;
+
+  await runTransaction(db, async (transaction) => {
+    // 1. Leituras
+    const countSnap = await transaction.get(countDocRef);
+    if (!countSnap.exists()) {
+      throw new Error("Contagem de estoque não encontrada.");
+    }
+
+    const countData = countSnap.data();
+    const rawItems = (countData["items"] || countData["stock_count_items"] || []) as Array<{
+      id?: string;
+      product_id: string;
+      expected_quantity: number;
+      counted_quantity: number;
+      difference: number;
+    }>;
+
+    const productRefs = updatedItems.map((item) => doc(db, "products", item.productId));
+    const productSnaps = await Promise.all(productRefs.map((pref) => transaction.get(pref)));
+
+    const changedAuditList: StockCountAuditEntry["items_changed"] = [];
+    const movementRecords: Array<{
+      movementRef: ReturnType<typeof doc>;
+      data: Record<string, unknown>;
+    }> = [];
+    const productUpdates: Array<{
+      productRef: ReturnType<typeof doc>;
+      newStock: number;
+    }> = [];
+
+    // Mapear itens atualizados da contagem
+    const updatedCountItems = rawItems.map((existingItem) => {
+      const match = updatedItems.find((u) => u.productId === existingItem.product_id);
+      if (!match) return existingItem;
+
+      const oldCounted = Number(existingItem.counted_quantity) || 0;
+      const newCounted = Number(match.newCounted);
+      if (!Number.isFinite(newCounted) || newCounted < 0) {
+        throw new Error("Quantidade contada informada é inválida.");
+      }
+
+      const diffDelta = newCounted - oldCounted;
+      const expected = Number(existingItem.expected_quantity) || 0;
+
+      if (diffDelta !== 0) {
+        const prodIndex = updatedItems.findIndex((u) => u.productId === existingItem.product_id);
+        const pSnap = productSnaps[prodIndex];
+        const pData = pSnap?.data() || {};
+        const pDesc = (pData["description"] as string) || "Produto";
+        const pUnit = (pData["unit"] as string) || "UN";
+
+        const currentStock = Number(pData["current_stock"]) || 0;
+        const newStock = Math.max(0, currentStock + diffDelta);
+
+        if (pSnap && pSnap.exists()) {
+          productUpdates.push({
+            productRef: productRefs[prodIndex],
+            newStock,
+          });
+
+          const movRef = doc(collection(db, "stock_movements"));
+          movementRecords.push({
+            movementRef: movRef,
+            data: {
+              product_id: existingItem.product_id,
+              product_description: pDesc,
+              product_unit: pUnit,
+              type: "ajuste_contagem",
+              quantity_before: currentStock,
+              quantity_change: diffDelta,
+              quantity_after: newStock,
+              user_name: operatorName,
+              user_email: operatorEmail,
+              notes: `Ajuste da contagem anterior: ${reason.trim() || "Ajuste/Correção"}. Qtd contada alterada de ${oldCounted} para ${newCounted}.`,
+              reference_type: "stock_count_adjustment",
+              reference_id: countId,
+              created_at: serverTimestamp(),
+            },
+          });
+        }
+
+        changedAuditList.push({
+          product_id: existingItem.product_id,
+          product_description: pDesc,
+          unit: pUnit,
+          previous_counted: oldCounted,
+          new_counted: newCounted,
+          difference_delta: diffDelta,
+        });
+      }
+
+      return {
+        ...existingItem,
+        counted_quantity: newCounted,
+        difference: newCounted - expected,
+      };
+    });
+
+    if (changedAuditList.length === 0) {
+      throw new Error("Nenhuma alteração foi realizada nos valores da contagem.");
+    }
+
+    // 2. Escritas
+    productUpdates.forEach(({ productRef, newStock }) => {
+      transaction.update(productRef, {
+        current_stock: newStock,
+        updated_at: serverTimestamp(),
+      });
+    });
+
+    movementRecords.forEach(({ movementRef, data }) => {
+      transaction.set(movementRef, data);
+    });
+
+    const newAuditEntry: StockCountAuditEntry = {
+      adjusted_at: new Date().toISOString(),
+      user_name: operatorName,
+      user_email: operatorEmail,
+      reason: reason.trim() || "Correção de lançamento de contagem",
+      items_changed: changedAuditList,
+    };
+
+    const previousAudits = (countData["audit_logs"] as StockCountAuditEntry[]) || [];
+
+    transaction.update(countDocRef, {
+      items: updatedCountItems,
+      audit_logs: [newAuditEntry, ...previousAudits],
+      updated_at: serverTimestamp(),
     });
   });
 }

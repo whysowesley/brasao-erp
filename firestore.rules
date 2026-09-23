@@ -36,6 +36,22 @@ service cloud.firestore {
       );
     }
 
+    function isCounter() {
+      return isAuthenticated() && !isOwner() && (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'contagem'
+      );
+    }
+
+    function isNonCounterApproved() {
+      return isApprovedUser() && !isCounter();
+    }
+
+    function canCountOrWrite() {
+      return canWrite() || isCounter();
+    }
+
     function hasAuthenticatedEmail() {
       return request.auth.token.email != null
         && request.resource.data.email is string
@@ -68,14 +84,15 @@ service cloud.firestore {
 
     match /products/{document=**} {
       allow read: if isApprovedUser();
-      allow write: if canWrite();
+      allow create, delete: if canWrite();
+      allow update: if canCountOrWrite();
     }
     match /categories/{document=**} {
       allow read: if isApprovedUser();
       allow write: if canWrite();
     }
     match /suppliers/{document=**} {
-      allow read: if isApprovedUser();
+      allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
     match /units/{document=**} {
@@ -84,54 +101,54 @@ service cloud.firestore {
     }
     match /stock_movements/{document=**} {
       allow read: if isApprovedUser();
-      allow write: if canWrite();
+      allow write: if canCountOrWrite();
     }
     match /stock_counts/{document=**} {
       allow read: if isApprovedUser();
-      allow write: if canWrite();
+      allow write: if canCountOrWrite();
     }
     match /purchase_orders/{document=**} {
-      allow read: if isApprovedUser();
+      allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
     match /system_counters/{document=**} {
       allow read: if isApprovedUser();
-      allow write: if canWrite();
+      allow write: if canCountOrWrite();
     }
     match /financial_transactions/{document=**} {
-      allow read: if isApprovedUser();
+      allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
     match /financial_categories/{document=**} {
-      allow read: if isApprovedUser();
+      allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
     match /cost_centers/{document=**} {
-      allow read: if isApprovedUser();
+      allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
     match /payment_methods/{document=**} {
-      allow read: if isApprovedUser();
+      allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
     match /daily_sales/{document=**} {
-      allow read: if isApprovedUser();
+      allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
     match /holerites/{document=**} {
-      allow read: if isApprovedUser();
+      allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
     match /employees/{document=**} {
-      allow read: if isApprovedUser();
+      allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
     match /presence_logs/{document=**} {
-      allow read: if isApprovedUser();
+      allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
     match /sales_incidents/{document=**} {
-      allow read: if isApprovedUser();
+      allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
   }

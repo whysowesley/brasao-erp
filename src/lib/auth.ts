@@ -21,7 +21,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/integrations/firebase/config";
 
-export type AppRole = "master" | "manager" | "operator" | "viewer" | "editor";
+export type AppRole = "master" | "manager" | "operator" | "viewer" | "editor" | "contagem";
 
 export interface UserProfile {
   userId: string;
@@ -48,6 +48,7 @@ export const ROLE_LABEL: Record<AppRole, string> = {
   operator: "Operador",
   editor: "Editor",
   viewer: "Visualizador",
+  contagem: "Contador (Apenas Contagem e Estoque)",
 };
 
 export const OWNER_EMAIL = "wesleyjunio197@gmail.com";
@@ -351,7 +352,14 @@ export function useAuth() {
   const role = profile ? profile.role : null;
   const isMaster = isOwnerUser(auth.currentUser) || (isApproved && role === "master");
   const isManager = role === "manager" || isMaster;
+  const isCounter = role === "contagem";
   const canWrite = isApproved && (role === "operator" || role === "editor" || isManager);
+  const canCount = isApproved && (canWrite || isCounter);
+  const canAccessFinancial = isApproved && !isCounter;
+  const canAccessSuppliers = isApproved && !isCounter;
+  const canAccessOrders = isApproved && !isCounter;
+  const canAccessSales = isApproved && !isCounter;
+  const canAccessHR = isApproved && !isCounter;
 
   return {
     user: profile,
@@ -362,7 +370,14 @@ export function useAuth() {
     role,
     isMaster,
     isManager,
+    isCounter,
     canWrite,
+    canCount,
+    canAccessFinancial,
+    canAccessSuppliers,
+    canAccessOrders,
+    canAccessSales,
+    canAccessHR,
     signOut: signOutMutation.mutate,
     isSigningOut: signOutMutation.isPending,
     refetchProfile,
@@ -376,6 +391,24 @@ export function useCanWrite(): boolean {
   return (
     me.role === "master" || me.role === "manager" || me.role === "operator" || me.role === "editor"
   );
+}
+
+export function useCanCount(): boolean {
+  const { data: me } = useMe();
+  if (!me) return false;
+  if (!me.approved) return false;
+  return (
+    me.role === "master" ||
+    me.role === "manager" ||
+    me.role === "operator" ||
+    me.role === "editor" ||
+    me.role === "contagem"
+  );
+}
+
+export function useIsCounter(): boolean {
+  const { data: me } = useMe();
+  return me?.approved === true && me?.role === "contagem";
 }
 
 export async function fetchUsersList(): Promise<UserProfileRow[]> {
@@ -417,11 +450,11 @@ export async function fetchUsersList(): Promise<UserProfileRow[]> {
   }
 }
 
-export async function setUserApproval(userId: string, approved: boolean) {
+export async function setUserApproval(userId: string, approved: boolean, role?: AppRole) {
   const userRef = doc(db, "users", userId);
   await updateDoc(userRef, {
     approved,
-    role: approved ? "manager" : "viewer",
+    role: approved ? role || "manager" : "viewer",
     updatedAt: serverTimestamp(),
   });
 }

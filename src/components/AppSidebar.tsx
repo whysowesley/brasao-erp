@@ -90,6 +90,7 @@ export function AppSidebar() {
   const qc = useQueryClient();
 
   const isMaster = me?.role === "master";
+  const isCounter = me?.role === "contagem";
 
   const { data: allUsers } = useQuery({
     queryKey: ["users_list"],
@@ -99,6 +100,13 @@ export function AppSidebar() {
   });
 
   const pendingCount = allUsers?.filter((u) => !u.approved).length ?? 0;
+
+  const currentEstoqueItems = isCounter
+    ? [
+        { title: "Contagens", url: "/contagens", icon: ClipboardList },
+        { title: "Estoque de Produtos", url: "/estoque", icon: Boxes },
+      ]
+    : estoqueItems;
 
   const systemItems: Array<{
     title: string;
@@ -146,10 +154,10 @@ export function AppSidebar() {
       <SidebarContent>
         {/* Estoque */}
         <SidebarGroup>
-          <SidebarGroupLabel>Estoque</SidebarGroupLabel>
+          <SidebarGroupLabel>{isCounter ? "Contagem & Estoque" : "Estoque"}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {estoqueItems.map((item) => (
+              {currentEstoqueItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
                     <Link
@@ -167,127 +175,131 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Financeiro */}
-        <SidebarGroup>
-          <SidebarGroupLabel>Financeiro</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {financeiroItems.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <Link
-                      to={item.url}
-                      onClick={handleNavClick}
-                      className="flex items-center gap-2"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {!isCounter && (
+          <>
+            {/* Financeiro */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Financeiro</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {financeiroItems.map((item) => (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                        <Link
+                          to={item.url}
+                          onClick={handleNavClick}
+                          className="flex items-center gap-2"
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
 
-        {/* Vendas */}
-        <SidebarGroup>
-          <SidebarGroupLabel>Vendas</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {vendasItems.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <Link
-                      to={item.url}
-                      onClick={handleNavClick}
-                      className="flex items-center gap-2"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+            {/* Vendas */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Vendas</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {vendasItems.map((item) => (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                        <Link
+                          to={item.url}
+                          onClick={handleNavClick}
+                          className="flex items-center gap-2"
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
 
-        {/* Operação & Presença */}
-        <SidebarGroup>
-          <SidebarGroupLabel>Operação &amp; Presença</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {operacaoItems.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <Link
-                      to={item.url}
-                      onClick={handleNavClick}
-                      className="flex items-center gap-2"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+            {/* Operação & Presença */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Operação &amp; Presença</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {operacaoItems.map((item) => (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                        <Link
+                          to={item.url}
+                          onClick={handleNavClick}
+                          className="flex items-center gap-2"
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
 
-        {/* RH & Pessoal */}
-        <SidebarGroup>
-          <SidebarGroupLabel>RH & Pessoal</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {rhItems.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <Link
-                      to={item.url}
-                      onClick={handleNavClick}
-                      className="flex items-center gap-2"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+            {/* RH & Pessoal */}
+            <SidebarGroup>
+              <SidebarGroupLabel>RH & Pessoal</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {rhItems.map((item) => (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                        <Link
+                          to={item.url}
+                          onClick={handleNavClick}
+                          className="flex items-center gap-2"
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
 
-        {/* Sistema */}
-        <SidebarGroup>
-          <SidebarGroupLabel>Sistema</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {systemItems.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <Link
-                      to={item.url}
-                      onClick={handleNavClick}
-                      className="flex items-center justify-between gap-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </div>
-                      {Boolean(item.badgeCount && item.badgeCount > 0) && (
-                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white shadow-xs">
-                          {item.badgeCount}
-                        </span>
-                      )}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+            {/* Sistema */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Sistema</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {systemItems.map((item) => (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                        <Link
+                          to={item.url}
+                          onClick={handleNavClick}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <div className="flex items-center gap-2">
+                            <item.icon className="h-4 w-4" />
+                            <span>{item.title}</span>
+                          </div>
+                          {Boolean(item.badgeCount && item.badgeCount > 0) && (
+                            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white shadow-xs">
+                              {item.badgeCount}
+                            </span>
+                          )}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
       </SidebarContent>
 
       {me && (

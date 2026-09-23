@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @source "../src";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 /*
  * Design system — Brasão | Controle de Estoque e Compras
@@ -64,6 +64,7 @@
 }
 
 :root {
+  color-scheme: light;
   --radius: 0.5rem;
   --background: oklch(0.982 0.003 250);
   --foreground: oklch(0.24 0.028 255);
@@ -107,6 +108,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.19 0.025 258);
   --foreground: oklch(0.96 0.005 250);
   --surface: oklch(0.23 0.028 258);

@@ -307,6 +307,7 @@ export function UserApprovalCard() {
                           <SelectItem value="manager">{ROLE_LABEL.manager}</SelectItem>
                           <SelectItem value="editor">{ROLE_LABEL.editor}</SelectItem>
                           <SelectItem value="operator">{ROLE_LABEL.operator}</SelectItem>
+                          <SelectItem value="contagem">{ROLE_LABEL.contagem}</SelectItem>
                           <SelectItem value="viewer">{ROLE_LABEL.viewer}</SelectItem>
                         </SelectContent>
                       </Select>

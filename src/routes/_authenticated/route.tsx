@@ -1,9 +1,17 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { useEffect } from "react";
+import {
+  createFileRoute,
+  Outlet,
+  redirect,
+  useNavigate,
+  useRouterState,
+} from "@tanstack/react-router";
 import { Clock, Eye, LogOut, RefreshCw, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppSidebar } from "@/components/AppSidebar";
 import { BrasaoLogo } from "@/components/BrasaoLogo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { getCurrentAuthUser, signOutAuth, useAuth, useCanWrite, useMe } from "@/lib/auth";
@@ -21,12 +29,33 @@ export const Route = createFileRoute("/_authenticated")({
 
 function AuthenticatedLayout() {
   const { data: me, isLoading, refetch } = useMe();
-  const { isApproved, isMaster, signOut } = useAuth();
+  const { isApproved, isMaster, isCounter, signOut } = useAuth();
   const { branding } = useBranding();
   const canWrite = useCanWrite();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (r) => r.location.pathname });
 
   // Só ativa a sincronização em tempo real se o usuário já estiver aprovado
-  useRealtimeSync(isApproved || isMaster);
+  useRealtimeSync(isApproved || isMaster, isCounter);
+
+  // Redireciona usuários com perfil "contagem" se tentarem acessar páginas proibidas (financeiro, faturamento, etc.)
+  useEffect(() => {
+    if (isLoading || !me || !isApproved) return;
+
+    if (isCounter) {
+      const isAllowed =
+        pathname === "/contagens" ||
+        pathname.startsWith("/contagens/") ||
+        pathname === "/estoque" ||
+        pathname.startsWith("/estoque/") ||
+        pathname.startsWith("/produtos/");
+
+      if (!isAllowed) {
+        toast.info("Acesso restrito ao módulo de Contagem e Estoque.");
+        navigate({ to: "/contagens", replace: true });
+      }
+    }
+  }, [isLoading, me, isApproved, isCounter, pathname, navigate]);
 
   if (isLoading) {
     return (
@@ -119,6 +148,9 @@ function AuthenticatedLayout() {
               <p className="text-xs sm:text-sm font-medium text-muted-foreground truncate">
                 {branding.companyName || "Galeteria Brasão"} · Gestão Integrada
               </p>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <ThemeToggle />
             </div>
           </header>
           <main className="flex-1 px-3 py-4 sm:px-6 sm:py-6 md:px-8">
