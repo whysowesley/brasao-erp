@@ -153,7 +153,23 @@
   html {
     font-family: var(--font-sans);
     -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     text-rendering: optimizeLegibility;
+    /* Ajuste proporcional para celulares: 14px em telas menores que 640px escala todos os rem confortavelmente */
+    font-size: 14px;
+  }
+
+  @media (min-width: 640px) {
+    html {
+      font-size: 15px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    html {
+      font-size: 16px;
+    }
   }
 
   body {
@@ -163,6 +179,7 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
   }
 
   h1,
@@ -188,10 +205,15 @@
 }
 
 @utility page-title {
-  font-size: 1.375rem;
-  line-height: 1.75rem;
-  font-weight: 600;
+  font-size: 1.2rem;
+  line-height: 1.5rem;
+  font-weight: 700;
   letter-spacing: -0.02em;
+
+  @media (min-width: 640px) {
+    font-size: 1.375rem;
+    line-height: 1.75rem;
+  }
 }
 
 @media print {

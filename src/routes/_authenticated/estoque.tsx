@@ -543,7 +543,7 @@ function EstoquePage() {
           <span className="font-mono text-[10px] text-primary">↔ deslize</span>
         </div>
         <div className="overflow-x-auto">
-          <Table className="min-w-[960px]">
+          <Table className={isCounter ? "min-w-[640px]" : "min-w-[880px]"}>
             <TableHeader>
               <TableRow>
                 <Th k="description">Produto</Th>

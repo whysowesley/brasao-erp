@@ -202,11 +202,23 @@ export function AdjustCountDialog({
             <TableHeader>
               <TableRow>
                 <TableHead>Produto</TableHead>
-                <TableHead className="text-right">Qtd Esperada</TableHead>
-                <TableHead className="text-right">Contada Anterior</TableHead>
-                <TableHead className="text-right">Nova Quantidade Contada</TableHead>
-                <TableHead className="text-right">Nova Diferença</TableHead>
-                <TableHead className="w-12"></TableHead>
+                <TableHead className="text-right whitespace-nowrap">
+                  <span className="hidden sm:inline">Qtd Esperada</span>
+                  <span className="sm:hidden">Esperado</span>
+                </TableHead>
+                <TableHead className="text-right whitespace-nowrap">
+                  <span className="hidden sm:inline">Contada Anterior</span>
+                  <span className="sm:hidden">Ant.</span>
+                </TableHead>
+                <TableHead className="text-right whitespace-nowrap">
+                  <span className="hidden sm:inline">Nova Quantidade Contada</span>
+                  <span className="sm:hidden">Nova Qtd</span>
+                </TableHead>
+                <TableHead className="text-right whitespace-nowrap">
+                  <span className="hidden sm:inline">Nova Diferença</span>
+                  <span className="sm:hidden">Dif.</span>
+                </TableHead>
+                <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

@@ -41,6 +41,7 @@ import {
   statusFor,
 } from "@/lib/inventory";
 import { usePurchasePlan } from "@/lib/purchase-plan";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -132,13 +133,16 @@ function Dashboard() {
       />
 
       {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-2.5 sm:gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 rounded-lg" />
+            <Skeleton
+              key={i}
+              className={cn("h-24 sm:h-28 rounded-lg", i === 4 ? "col-span-2 sm:col-span-1" : "")}
+            />
           ))}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-2.5 sm:gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <StatCard
             label="Produtos cadastrados"
             value={products?.length ?? 0}
@@ -166,25 +170,27 @@ function Dashboard() {
             hint="Itens com quantidade sugerida"
             icon={<ShoppingCart className="h-4 w-4" />}
           />
-          <StatCard
-            label="Pedidos em aberto"
-            value={openOrders.length}
-            hint="Ainda não recebidos"
-            icon={<FileText className="h-4 w-4" />}
-          />
+          <div className="col-span-2 sm:col-span-1 lg:col-span-1">
+            <StatCard
+              label="Pedidos em aberto"
+              value={openOrders.length}
+              hint="Ainda não recebidos"
+              icon={<FileText className="h-4 w-4" />}
+            />
+          </div>
         </div>
       )}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-5">
+      <div className="mt-4 sm:mt-6 grid gap-4 sm:gap-6 lg:grid-cols-5">
         <section className="rounded-lg border bg-card shadow-card lg:col-span-3">
-          <header className="flex items-center justify-between border-b px-4 py-3">
-            <h2 className="text-sm font-semibold">Produtos que precisam de reposição</h2>
-            <Button asChild variant="ghost" size="sm">
+          <header className="flex items-center justify-between border-b px-3 sm:px-4 py-2.5 sm:py-3">
+            <h2 className="text-xs sm:text-sm font-semibold">Produtos que precisam de reposição</h2>
+            <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
               <Link to="/sugestoes">Ver todos</Link>
             </Button>
           </header>
           <div className="overflow-x-auto">
-            <Table className="min-w-[560px]">
+            <Table className="min-w-[480px] sm:min-w-[560px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Produto</TableHead>

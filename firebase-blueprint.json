@@ -291,14 +291,38 @@
       "description": "Registro de intercorrências operacionais e contatos de faturamento vinculados às vendas por data, com ações tomadas e pautas para reunião",
       "fields": {
         "date": { "type": "string", "description": "Data no formato YYYY-MM-DD" },
-        "category": { "type": "string", "description": "Categoria da intercorrência (ex: Clima/Chuva, iFood/App, Motoboy/Logística, Cozinha/Insumos, Sistema/Maquininha, Contato de Faturamento, Outros)" },
-        "incident": { "type": "string", "description": "Descrição detalhada do ocorrido / intercorrência" },
+        "category": {
+          "type": "string",
+          "description": "Categoria da intercorrência (ex: Clima/Chuva, iFood/App, Motoboy/Logística, Cozinha/Insumos, Sistema/Maquininha, Contato de Faturamento, Outros)"
+        },
+        "incident": {
+          "type": "string",
+          "description": "Descrição detalhada do ocorrido / intercorrência"
+        },
         "action_taken": { "type": "string", "description": "Ação imediata ou tomada pela equipe" },
-        "to_meeting": { "type": "boolean", "description": "Se deve ser levado como pauta de reunião" },
-        "status": { "type": "string", "description": "Status de resolução: pendente, em_andamento, resolvido" },
-        "resolution_notes": { "type": "string", "description": "Notas de retorno / histórico de resolução", "optional": true },
-        "resolved_at": { "type": "string", "description": "Data em que foi resolvido", "optional": true },
-        "user_id": { "type": "string", "description": "ID do usuário que registrou", "optional": true },
+        "to_meeting": {
+          "type": "boolean",
+          "description": "Se deve ser levado como pauta de reunião"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status de resolução: pendente, em_andamento, resolvido"
+        },
+        "resolution_notes": {
+          "type": "string",
+          "description": "Notas de retorno / histórico de resolução",
+          "optional": true
+        },
+        "resolved_at": {
+          "type": "string",
+          "description": "Data em que foi resolvido",
+          "optional": true
+        },
+        "user_id": {
+          "type": "string",
+          "description": "ID do usuário que registrou",
+          "optional": true
+        },
         "user_name": { "type": "string", "description": "Nome do usuário que registrou" },
         "created_at": { "type": "timestamp", "description": "Data e hora de criação" },
         "updated_at": { "type": "timestamp", "description": "Data e hora da última atualização" }
