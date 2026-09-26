@@ -227,14 +227,18 @@
   nav,
   aside,
   button,
-  [data-radix-portal] > div:not(:has(#printable-purchase-order)):not(:has(#printable-holerite)),
+  [data-radix-portal]
+    > div:not(:has(#printable-purchase-order)):not(:has(#printable-holerite)):not(
+      :has(#printable-replenishment-report)
+    ),
   [role="dialog"] > button {
     display: none !important;
   }
 
   .printable-purchase-order,
   #printable-purchase-order,
-  #printable-holerite {
+  #printable-holerite,
+  #printable-replenishment-report {
     box-shadow: none !important;
     border: none !important;
     padding: 0 !important;

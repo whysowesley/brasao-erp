@@ -9,6 +9,10 @@ import {
   ClipboardList,
   FileText,
   Filter,
+  LayoutGrid,
+  List,
+  Maximize2,
+  Printer,
   Search,
   ShoppingCart,
   SlidersHorizontal,
@@ -18,6 +22,7 @@ import {
 
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { PlanInput } from "@/components/PlanInput";
+import { ReplenishmentReportModal } from "@/components/ReplenishmentReportModal";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -143,12 +148,55 @@ function Dashboard() {
   const [onlyNeedsReplenishment, setOnlyNeedsReplenishment] = useState(true);
   const [replenishmentSearch, setReplenishmentSearch] = useState("");
   const [showAllReplenishmentRows, setShowAllReplenishmentRows] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [replenishmentViewMode, setReplenishmentViewMode] = useState<"table" | "cards">("table");
 
   const critical = products?.filter((p) => p.status === "critico") ?? [];
   const attention = products?.filter((p) => p.status === "atencao") ?? [];
   const toBuy = products?.filter((p) => p.suggestedPurchase > 0) ?? [];
   const openOrders = orders?.filter((o) => OPEN_ORDER_STATUSES.includes(o.status)) ?? [];
   const supplierSummary = buildSupplierSummary(products);
+
+  const activeFilterLabel = useMemo(() => {
+    switch (stockFilter) {
+      case "all":
+        return "Todos com reposição";
+      case "lte_0":
+        return "Estoque ≤ 0 (Zerados ou negativos)";
+      case "eq_0":
+        return "Estoque = 0 (Apenas zerados)";
+      case "lt_0":
+        return "Estoque < 0 (Apenas negativos)";
+      case "gt_0":
+        return "Estoque > 0";
+      case "gt_1":
+        return "Estoque > 1";
+      case "gte_1":
+        return "Estoque ≥ 1";
+      case "gt_2":
+        return "Estoque > 2";
+      case "gte_2":
+        return "Estoque ≥ 2";
+      case "gt_3":
+        return "Estoque > 3";
+      case "gte_3":
+        return "Estoque ≥ 3";
+      case "gt_4":
+        return "Estoque > 4";
+      case "gte_4":
+        return "Estoque ≥ 4";
+      case "gt_5":
+        return "Estoque > 5";
+      case "gte_5":
+        return "Estoque ≥ 5";
+      case "gt_10":
+        return "Estoque > 10";
+      case "custom":
+        return `Estoque ${customOperator} ${customValue}`;
+      default:
+        return "Todos";
+    }
+  }, [stockFilter, customOperator, customValue]);
 
   const filteredReplenishmentProducts = useMemo(() => {
     if (!products) return [];
@@ -315,9 +363,54 @@ function Dashboard() {
                   {filteredReplenishmentProducts.length}
                 </Badge>
               </div>
-              <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                <Link to="/sugestoes">Ver todos em sugestões</Link>
-              </Button>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {/* Alternador Tabela / Cards para Telas de Celulares */}
+                <div className="inline-flex sm:hidden rounded-md border bg-muted/40 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setReplenishmentViewMode("table")}
+                    className={cn(
+                      "px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1 transition-colors",
+                      replenishmentViewMode === "table"
+                        ? "bg-background text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    <List className="h-3 w-3" />
+                    Tabela
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReplenishmentViewMode("cards")}
+                    className={cn(
+                      "px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1 transition-colors",
+                      replenishmentViewMode === "cards"
+                        ? "bg-background text-foreground shadow-xs font-semibold"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    <LayoutGrid className="h-3 w-3" />
+                    Cards
+                  </button>
+                </div>
+
+                {/* Botão de Tela Maior / Gerar PDF / Print */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="h-7 px-2 text-xs gap-1.5 font-medium border-primary/30 text-primary hover:bg-primary/10 bg-primary/5 shrink-0"
+                  title="Abrir em tela maior para ver tudo sem rolar, gerar PDF ou tirar print para WhatsApp"
+                >
+                  <Maximize2 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Tela Maior & PDF</span>
+                  <span className="sm:hidden">PDF / Print</span>
+                </Button>
+
+                <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                  <Link to="/sugestoes">Ver todos</Link>
+                </Button>
+              </div>
             </div>
 
             {/* Atalhos rápidos por chips */}
@@ -455,101 +548,206 @@ function Dashboard() {
             </div>
           </header>
 
-          <div className="overflow-x-auto">
-            <Table className="min-w-[480px] sm:min-w-[560px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Produto</TableHead>
-                  <TableHead className="text-right">Estoque</TableHead>
-                  <TableHead className="text-right">Consumo/sem</TableHead>
-                  <TableHead className="text-right">Compra sugerida</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {displayedReplenishment.map((p) => {
-                  const isZeroOrNeg = Number(p.current_stock) <= 0;
-                  return (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-medium">
-                        <Link
-                          to="/produtos/$id"
-                          params={{ id: p.id }}
-                          className="hover:underline flex items-center gap-1.5"
-                        >
-                          <span className="truncate max-w-[180px] sm:max-w-xs">
-                            {p.description}
+          {/* Conteúdo: Cartões Móveis ou Tabela Completa */}
+          {replenishmentViewMode === "cards" ? (
+            <div className="p-2 sm:p-3 space-y-2">
+              {displayedReplenishment.map((p) => {
+                const isZeroOrNeg = Number(p.current_stock) <= 0;
+                return (
+                  <div
+                    key={p.id}
+                    className={cn(
+                      "rounded-lg border p-2.5 bg-card/60 hover:bg-muted/20 transition-colors space-y-2",
+                      isZeroOrNeg && "border-destructive/30 bg-destructive/5",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <Link
+                        to="/produtos/$id"
+                        params={{ id: p.id }}
+                        className="text-xs font-semibold hover:underline leading-snug line-clamp-2"
+                      >
+                        {p.description}
+                      </Link>
+                      <div className="shrink-0 flex items-center gap-1">
+                        {isZeroOrNeg && (
+                          <span
+                            className={cn(
+                              "px-1.5 py-0.2 rounded text-[10px] font-bold shrink-0",
+                              Number(p.current_stock) < 0
+                                ? "bg-destructive/15 text-destructive"
+                                : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+                            )}
+                          >
+                            {Number(p.current_stock) < 0 ? "Negativo" : "Zerado"}
                           </span>
-                          {isZeroOrNeg && (
-                            <span
-                              className={cn(
-                                "inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold shrink-0",
-                                Number(p.current_stock) < 0
-                                  ? "bg-destructive/15 text-destructive"
-                                  : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-                              )}
-                            >
-                              {Number(p.current_stock) < 0 ? "Negativo" : "Zerado"}
-                            </span>
+                        )}
+                        <StatusBadge status={p.status} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-border/50 text-[11px]">
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] text-muted-foreground block">Estoque:</span>
+                        <span
+                          className={cn(
+                            "font-bold num text-xs",
+                            isZeroOrNeg ? "text-destructive" : "text-foreground",
                           )}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="num text-right font-medium">
-                        <span className={cn(isZeroOrNeg && "text-destructive font-bold")}>
+                        >
                           {formatQty(p.current_stock, p.unit)}
                         </span>
-                      </TableCell>
-                      <TableCell className="num text-right">
-                        {formatQty(p.avg_weekly_consumption, p.unit)}
-                      </TableCell>
-                      <TableCell className="num text-right font-semibold">
-                        {p.suggestedPurchase > 0 ? (
-                          formatQty(p.suggestedPurchase, p.unit)
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={p.status} />
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] text-muted-foreground block">
+                          Consumo/sem:
+                        </span>
+                        <span className="num font-medium text-muted-foreground">
+                          {formatQty(p.avg_weekly_consumption, p.unit)}
+                        </span>
+                      </div>
+                      <div className="space-y-0.5 text-right">
+                        <span className="text-[10px] text-muted-foreground block">Comprar:</span>
+                        <span
+                          className={cn(
+                            "num font-bold text-xs",
+                            p.suggestedPurchase > 0 ? "text-primary" : "text-muted-foreground",
+                          )}
+                        >
+                          {p.suggestedPurchase > 0 ? formatQty(p.suggestedPurchase, p.unit) : "—"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {filteredReplenishmentProducts.length === 0 && !isLoading && (
+                <div className="py-8 text-center text-xs text-muted-foreground space-y-1.5">
+                  <p>Nenhum produto encontrado com os filtros selecionados.</p>
+                  {(stockFilter !== "all" || replenishmentSearch || !onlyNeedsReplenishment) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setStockFilter("all");
+                        setReplenishmentSearch("");
+                        setOnlyNeedsReplenishment(true);
+                      }}
+                      className="h-6 text-xs"
+                    >
+                      Restaurar filtros
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table className="min-w-[440px] sm:min-w-[560px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="px-2.5 sm:px-4">Produto</TableHead>
+                    <TableHead className="text-right px-2 sm:px-4">Estoque</TableHead>
+                    <TableHead className="text-right px-2 sm:px-4">Consumo/sem</TableHead>
+                    <TableHead className="text-right px-2 sm:px-4">Compra sugerida</TableHead>
+                    <TableHead className="px-2 sm:px-4">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {displayedReplenishment.map((p) => {
+                    const isZeroOrNeg = Number(p.current_stock) <= 0;
+                    return (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-medium px-2.5 sm:px-4 py-2 sm:py-3">
+                          <Link
+                            to="/produtos/$id"
+                            params={{ id: p.id }}
+                            className="hover:underline flex items-center gap-1.5"
+                          >
+                            <span className="truncate max-w-[170px] sm:max-w-xs">
+                              {p.description}
+                            </span>
+                            {isZeroOrNeg && (
+                              <span
+                                className={cn(
+                                  "inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold shrink-0",
+                                  Number(p.current_stock) < 0
+                                    ? "bg-destructive/15 text-destructive"
+                                    : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+                                )}
+                              >
+                                {Number(p.current_stock) < 0 ? "Negativo" : "Zerado"}
+                              </span>
+                            )}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="num text-right font-medium px-2 sm:px-4 py-2 sm:py-3">
+                          <span className={cn(isZeroOrNeg && "text-destructive font-bold")}>
+                            {formatQty(p.current_stock, p.unit)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="num text-right px-2 sm:px-4 py-2 sm:py-3">
+                          {formatQty(p.avg_weekly_consumption, p.unit)}
+                        </TableCell>
+                        <TableCell className="num text-right font-semibold px-2 sm:px-4 py-2 sm:py-3">
+                          {p.suggestedPurchase > 0 ? (
+                            formatQty(p.suggestedPurchase, p.unit)
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="px-2 sm:px-4 py-2 sm:py-3">
+                          <StatusBadge status={p.status} />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {filteredReplenishmentProducts.length === 0 && !isLoading && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                        <div className="space-y-1.5">
+                          <p>Nenhum produto encontrado com os filtros selecionados.</p>
+                          {(stockFilter !== "all" ||
+                            replenishmentSearch ||
+                            !onlyNeedsReplenishment) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setStockFilter("all");
+                                setReplenishmentSearch("");
+                                setOnlyNeedsReplenishment(true);
+                              }}
+                              className="h-6 text-xs"
+                            >
+                              Restaurar filtros
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-                {filteredReplenishmentProducts.length === 0 && !isLoading && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                      <div className="space-y-1.5">
-                        <p>Nenhum produto encontrado com os filtros selecionados.</p>
-                        {(stockFilter !== "all" ||
-                          replenishmentSearch ||
-                          !onlyNeedsReplenishment) && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setStockFilter("all");
-                              setReplenishmentSearch("");
-                              setOnlyNeedsReplenishment(true);
-                            }}
-                            className="h-6 text-xs"
-                          >
-                            Restaurar filtros
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
 
           {filteredReplenishmentProducts.length > 8 && (
             <div className="flex items-center justify-between border-t px-3 sm:px-4 py-2 text-xs text-muted-foreground bg-muted/20">
-              <span>
-                Mostrando {displayedReplenishment.length} de {filteredReplenishmentProducts.length}{" "}
-                itens
-              </span>
+              <div className="flex items-center gap-2">
+                <span>
+                  Mostrando {displayedReplenishment.length} de{" "}
+                  {filteredReplenishmentProducts.length} itens
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="text-primary hover:underline text-xs font-medium hidden sm:inline"
+                >
+                  · Ver em Tela Maior
+                </button>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
@@ -719,6 +917,15 @@ function Dashboard() {
           </div>
         </section>
       )}
+
+      <ReplenishmentReportModal
+        open={isReportModalOpen}
+        onOpenChange={setIsReportModalOpen}
+        products={filteredReplenishmentProducts}
+        filterLabel={activeFilterLabel}
+        scopeLabel={onlyNeedsReplenishment ? "Apenas Reposição" : "Todo o Estoque"}
+        searchQuery={replenishmentSearch}
+      />
     </div>
   );
 }
