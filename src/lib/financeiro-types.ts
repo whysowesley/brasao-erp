@@ -181,3 +181,22 @@ export interface MonthSummary {
   saldoOperacionalRealizado: number;
   saldoOperacionalPrevisto: number;
 }
+
+export type QuadrantSortOption =
+  | "manual"
+  | "valor_desc"
+  | "valor_asc"
+  | "alfabetico_asc"
+  | "alfabetico_desc"
+  | "vencimento"
+  | "pendentes_primeiro";
+
+export const SORT_LABELS: Record<QuadrantSortOption, string> = {
+  manual: "Manual (Arrastar e Soltar)",
+  valor_desc: "Maior Valor (R$ ↓)",
+  valor_asc: "Menor Valor (R$ ↑)",
+  alfabetico_asc: "Fornecedor (A-Z)",
+  alfabetico_desc: "Fornecedor (Z-A)",
+  vencimento: "Data de Vencimento",
+  pendentes_primeiro: "Pendentes Primeiro",
+};

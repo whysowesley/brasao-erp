@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -79,6 +80,7 @@ import {
   useMoveFinancialTransactionDay,
   useDeleteFinancialTransaction,
   useReversePayment,
+  useBatchUpdateTransactionOrder,
   resolveTransactionStatus,
   getTransactionDisplayTitle,
   getTodayString,
@@ -91,6 +93,7 @@ import { MarcarPagoDialog } from "./MarcarPagoDialog";
 import { TransactionPixPopover } from "./TransactionPixPopover";
 import { TransactionObservationDialog } from "./TransactionObservationDialog";
 import { TransactionCommentsDialog } from "./TransactionCommentsDialog";
+import { BankBalancesBar } from "./BankBalancesBar";
 
 function formatCurrency(val: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -119,6 +122,27 @@ function formatShortDate(dateStr: string | null | undefined): string {
   }
 }
 
+export type QuadrantSortOption =
+  | "manual"
+  | "valor_desc"
+  | "valor_asc"
+  | "alfabetico_asc"
+  | "alfabetico_desc"
+  | "vencimento"
+  | "emissao"
+  | "pendentes_primeiro";
+
+export const SORT_LABELS: Record<QuadrantSortOption, string> = {
+  manual: "Manual (Arrastar ou ▲/▼)",
+  valor_desc: "Maior Valor (R$ ↓)",
+  valor_asc: "Menor Valor (R$ ↑)",
+  alfabetico_asc: "Fornecedor (A-Z)",
+  alfabetico_desc: "Fornecedor (Z-A)",
+  vencimento: "Data de Vencimento",
+  emissao: "Data de Emissão",
+  pendentes_primeiro: "Pendentes Primeiro",
+};
+
 interface QuadrantesVencimentoViewProps {
   initialDate?: Date;
   onOpenCreate?: (defaultDate?: string) => void;
@@ -129,6 +153,7 @@ export function QuadrantesVencimentoView({
   onOpenCreate,
 }: QuadrantesVencimentoViewProps) {
   const { canWrite } = useAuth();
+  const queryClient = useQueryClient();
   const todayStr = getTodayString();
 
   // Mês selecionado
@@ -143,9 +168,14 @@ export function QuadrantesVencimentoView({
   );
   const [showEmptyDays, setShowEmptyDays] = useState<boolean>(false);
 
-  // Estado de Arrastar e Soltar (Drag & Drop)
+  // Estado de Arrastar e Soltar (Drag & Drop com suporte interno e entre dias)
   const [draggedTx, setDraggedTx] = useState<FinancialTransaction | null>(null);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+  const [dragOverRowId, setDragOverRowId] = useState<string | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<"above" | "below" | null>(null);
+
+  // Ordenação interna configurável por quadrante
+  const [quadrantSort, setQuadrantSort] = useState<Record<string, QuadrantSortOption>>({});
 
   // Modais de Edição / Pagamento / Detalhes
   const [lancamentoDialogOpen, setLancamentoDialogOpen] = useState(false);
@@ -184,6 +214,7 @@ export function QuadrantesVencimentoView({
   const moveDayMutation = useMoveFinancialTransactionDay();
   const deleteMutation = useDeleteFinancialTransaction();
   const reverseMutation = useReversePayment();
+  const batchUpdateOrderMutation = useBatchUpdateTransactionOrder();
 
   // Dias do mês atual
   const monthStart = startOfMonth(currentMonthDate);
@@ -253,20 +284,45 @@ export function QuadrantesVencimentoView({
       }
     });
 
-    // Ordena cada dia: não pagos primeiro, depois por order_index ou valor
+    // Ordena cada dia conforme o filtro do quadrante (ou manual por padrão)
     map.forEach((items, key) => {
+      const sortOpt = quadrantSort[key] || "manual";
       items.sort((a, b) => {
-        if (
-          a.order_index !== null &&
-          a.order_index !== undefined &&
-          b.order_index !== null &&
-          b.order_index !== undefined
-        ) {
-          return a.order_index - b.order_index;
+        switch (sortOpt) {
+          case "valor_desc":
+            return b.amount - a.amount;
+          case "valor_asc":
+            return a.amount - b.amount;
+          case "alfabetico_asc":
+            return (a.supplier_name || a.description || "").localeCompare(
+              b.supplier_name || b.description || "",
+            );
+          case "alfabetico_desc":
+            return (b.supplier_name || b.description || "").localeCompare(
+              a.supplier_name || a.description || "",
+            );
+          case "vencimento":
+            return (a.due_date || "").localeCompare(b.due_date || "");
+          case "emissao":
+            return (b.issue_date || "").localeCompare(a.issue_date || "");
+          case "pendentes_primeiro":
+            if (a.status !== "pago" && b.status === "pago") return -1;
+            if (a.status === "pago" && b.status !== "pago") return 1;
+            return (a.order_index ?? 9999) - (b.order_index ?? 9999);
+          case "manual":
+          default: {
+            const orderA = typeof a.order_index === "number" ? a.order_index : 999999;
+            const orderB = typeof b.order_index === "number" ? b.order_index : 999999;
+            if (orderA !== orderB) {
+              return orderA - orderB;
+            }
+            if (a.status !== "pago" && b.status === "pago") return -1;
+            if (a.status === "pago" && b.status !== "pago") return 1;
+            return (a.supplier_name || a.description || "").localeCompare(
+              b.supplier_name || b.description || "",
+            );
+          }
         }
-        if (a.status === "pago" && b.status !== "pago") return 1;
-        if (a.status !== "pago" && b.status === "pago") return -1;
-        return (a.supplier_name || "").localeCompare(b.supplier_name || "");
       });
     });
 
@@ -279,6 +335,7 @@ export function QuadrantesVencimentoView({
     supplierFilter,
     statusFilter,
     currentMonthDate,
+    quadrantSort,
   ]);
 
   // Estatísticas do Mês
@@ -305,7 +362,7 @@ export function QuadrantesVencimentoView({
     return { totalPagar, totalPago, totalGeral, countTotal, countPendentes };
   }, [groupedByDay]);
 
-  // Manipulação de Drag & Drop
+  // Manipulação de Drag & Drop (com suporte interno no quadrante e entre dias)
   const handleDragStart = (e: React.DragEvent, tx: FinancialTransaction) => {
     setDraggedTx(tx);
     e.dataTransfer.effectAllowed = "move";
@@ -320,13 +377,191 @@ export function QuadrantesVencimentoView({
     }
   };
 
-  const handleDragLeave = () => {
-    setDragOverDay(null);
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverDay(null);
+    }
   };
 
+  const handleRowDragOver = (
+    e: React.DragEvent,
+    targetTx: FinancialTransaction,
+    dayKey: string,
+  ) => {
+    if (!draggedTx || draggedTx.id === targetTx.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    const isAbove = offsetY < rect.height / 2;
+
+    setDragOverDay(dayKey);
+    setDragOverRowId(targetTx.id);
+    setDragOverPosition(isAbove ? "above" : "below");
+  };
+
+  const handleRowDragLeave = (e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverRowId(null);
+      setDragOverPosition(null);
+    }
+  };
+
+  // Mover item para cima ou para baixo com 1 clique (▲ / ▼)
+  const handleMoveItemUpDown = async (
+    tx: FinancialTransaction,
+    dayKey: string,
+    direction: "up" | "down",
+  ) => {
+    if (!canWrite) {
+      toast.error("Você não tem permissão para alterar ou reordenar lançamentos.");
+      return;
+    }
+    const currentDayItems = groupedByDay.get(dayKey) || [];
+    const currentIndex = currentDayItems.findIndex((i) => i.id === tx.id);
+    if (currentIndex === -1) return;
+
+    const newIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (newIndex < 0 || newIndex >= currentDayItems.length) return;
+
+    const reordered = [...currentDayItems];
+    const [removed] = reordered.splice(currentIndex, 1);
+    reordered.splice(newIndex, 0, removed);
+
+    // Força ordenação manual neste quadrante
+    setQuadrantSort((prev) => ({ ...prev, [dayKey]: "manual" }));
+
+    // Atualização otimista imediata no cache do React Query
+    queryClient.setQueriesData({ queryKey: ["financial_transactions"] }, (old: unknown) => {
+      if (!Array.isArray(old)) return old;
+      const orderMap = new Map<string, number>();
+      reordered.forEach((item, idx) => orderMap.set(item.id, idx));
+      return old.map((t: FinancialTransaction) =>
+        orderMap.has(t.id) ? { ...t, order_index: orderMap.get(t.id)! } : t,
+      );
+    });
+
+    try {
+      await batchUpdateOrderMutation.mutateAsync(
+        reordered.map((item, index) => ({ id: item.id, order_index: index })),
+      );
+      toast.success(direction === "up" ? "Linha movida para cima!" : "Linha movida para baixo!");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao reordenar.";
+      toast.error(msg);
+    }
+  };
+
+  // Soltar diretamente em cima de uma linha específica (reordenação interna)
+  const handleRowDrop = async (
+    e: React.DragEvent,
+    targetTx: FinancialTransaction,
+    targetDay: string,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const dropPosition = dragOverPosition || "below";
+    setDragOverRowId(null);
+    setDragOverPosition(null);
+    setDragOverDay(null);
+
+    if (!draggedTx) return;
+    if (!canWrite) {
+      toast.error("Você não tem permissão para alterar ou reordenar lançamentos.");
+      return;
+    }
+
+    if (draggedTx.id === targetTx.id) {
+      setDraggedTx(null);
+      return;
+    }
+
+    const sourceDay = getTxTargetDate(draggedTx);
+    const isSameDay = sourceDay === targetDay;
+    const currentDayItems = groupedByDay.get(targetDay) || [];
+
+    // Remove o item arrastado da lista atual
+    const filtered = currentDayItems.filter((item) => item.id !== draggedTx.id);
+    const targetIndex = filtered.findIndex((item) => item.id === targetTx.id);
+    const insertIndex =
+      targetIndex === -1
+        ? filtered.length
+        : dropPosition === "below"
+          ? targetIndex + 1
+          : targetIndex;
+
+    const updatedTx: FinancialTransaction = {
+      ...draggedTx,
+      due_date: dateCriterion === "due_only" ? targetDay : draggedTx.due_date,
+      expected_payment_date:
+        dateCriterion === "expected_or_due" ? targetDay : draggedTx.expected_payment_date,
+    };
+
+    const reorderedList = [
+      ...filtered.slice(0, insertIndex),
+      updatedTx,
+      ...filtered.slice(insertIndex),
+    ];
+
+    // Força a ordenação manual naquele quadrante para preservar a posição escolhida pelo usuário
+    setQuadrantSort((prev) => ({ ...prev, [targetDay]: "manual" }));
+
+    // Atualização otimista imediata no cache
+    queryClient.setQueriesData({ queryKey: ["financial_transactions"] }, (old: unknown) => {
+      if (!Array.isArray(old)) return old;
+      const orderMap = new Map<string, number>();
+      reorderedList.forEach((item, index) => orderMap.set(item.id, index));
+      return old.map((item: FinancialTransaction) => {
+        if (orderMap.has(item.id)) {
+          const newOrder = orderMap.get(item.id)!;
+          if (!isSameDay && item.id === draggedTx.id) {
+            return {
+              ...item,
+              order_index: newOrder,
+              expected_payment_date:
+                dateCriterion === "expected_or_due" ? targetDay : item.expected_payment_date,
+              due_date: dateCriterion === "due_only" ? targetDay : item.due_date,
+            };
+          }
+          return { ...item, order_index: newOrder };
+        }
+        return item;
+      });
+    });
+
+    try {
+      await batchUpdateOrderMutation.mutateAsync(
+        reorderedList.map((item, index) => ({
+          id: item.id,
+          order_index: index,
+          targetDate: !isSameDay && item.id === draggedTx.id ? targetDay : undefined,
+        })),
+      );
+
+      if (isSameDay) {
+        toast.success("Ordem interna do quadrante atualizada com sucesso!");
+      } else {
+        const targetDateBr = formatDateBr(targetDay);
+        toast.success(
+          `${draggedTx.supplier_name || "Lançamento"} movido para ${targetDateBr} na posição indicada!`,
+        );
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao reordenar.";
+      toast.error(msg);
+    } finally {
+      setDraggedTx(null);
+    }
+  };
+
+  // Soltar no quadrante (fundo do quadrante)
   const handleDrop = async (e: React.DragEvent, targetDate: string) => {
     e.preventDefault();
     setDragOverDay(null);
+    setDragOverRowId(null);
+    setDragOverPosition(null);
 
     if (!draggedTx) return;
     if (!canWrite) {
@@ -335,8 +570,39 @@ export function QuadrantesVencimentoView({
     }
 
     const sourceDate = getTxTargetDate(draggedTx);
+
+    // Se for no mesmo quadrante e soltou no fundo: move para o final
     if (sourceDate === targetDate) {
-      setDraggedTx(null);
+      const currentDayItems = groupedByDay.get(targetDate) || [];
+      if (currentDayItems.length <= 1) {
+        setDraggedTx(null);
+        return;
+      }
+
+      const filtered = currentDayItems.filter((i) => i.id !== draggedTx.id);
+      const reordered = [...filtered, draggedTx];
+      setQuadrantSort((prev) => ({ ...prev, [targetDate]: "manual" }));
+
+      // Atualização otimista imediata
+      queryClient.setQueriesData({ queryKey: ["financial_transactions"] }, (old: unknown) => {
+        if (!Array.isArray(old)) return old;
+        const orderMap = new Map<string, number>();
+        reordered.forEach((item, idx) => orderMap.set(item.id, idx));
+        return old.map((t: FinancialTransaction) =>
+          orderMap.has(t.id) ? { ...t, order_index: orderMap.get(t.id)! } : t,
+        );
+      });
+
+      try {
+        await batchUpdateOrderMutation.mutateAsync(
+          reordered.map((item, index) => ({ id: item.id, order_index: index })),
+        );
+        toast.success("Linha movida para o final do dia!");
+      } catch {
+        // silencioso
+      } finally {
+        setDraggedTx(null);
+      }
       return;
     }
 
@@ -611,9 +877,9 @@ export function QuadrantesVencimentoView({
                 }`}
               >
                 {/* Cabeçalho do Quadrante - Azul Real Sólido com Texto em Caixa Alta Conforme Modelo */}
-                <div className="bg-[#0047AB] dark:bg-[#1E3A8A] text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 select-none">
-                  <div className="flex items-center gap-2.5">
-                    <CalendarClock className="h-4 w-4 text-blue-200" />
+                <div className="bg-[#0047AB] dark:bg-[#1E3A8A] text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5 select-none">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <CalendarClock className="h-4 w-4 text-blue-200 shrink-0" />
                     <span className="font-extrabold tracking-wide text-xs sm:text-sm text-white">
                       {dayTitle}
                     </span>
@@ -622,6 +888,13 @@ export function QuadrantesVencimentoView({
                         Hoje
                       </Badge>
                     )}
+
+                    {/* 4 Opções de saldo sutis ao lado de cada nome do dia da semana */}
+                    <BankBalancesBar
+                      dayPendingAmount={dayPending}
+                      dayTotalAmount={dayTotal}
+                      canWrite={canWrite}
+                    />
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -648,14 +921,14 @@ export function QuadrantesVencimentoView({
                   </div>
                 </div>
 
-                {/* Sub-faixa de Resumo do Dia se houver itens */}
+                {/* Sub-faixa de Resumo do Dia e Filtro de Ordenação */}
                 {items.length > 0 && (
-                  <div className="bg-muted/40 border-b px-4 py-1.5 flex flex-wrap items-center justify-between text-[11px] text-muted-foreground">
-                    <span>
-                      {items.length} conta(s) • {items.filter((i) => i.status !== "pago").length} a
-                      vencer
-                    </span>
+                  <div className="bg-muted/40 border-b px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
                     <div className="flex items-center gap-3">
+                      <span>
+                        {items.length} conta(s) • {items.filter((i) => i.status !== "pago").length}{" "}
+                        a vencer
+                      </span>
                       {dayPending > 0 && (
                         <span className="text-amber-600 dark:text-amber-400 font-semibold">
                           Pendente: {formatCurrency(dayPending)}
@@ -666,6 +939,101 @@ export function QuadrantesVencimentoView({
                           Pago: {formatCurrency(dayPaid)}
                         </span>
                       )}
+                    </div>
+
+                    {/* Filtro / Seletor de Ordenação Interna do Quadrante */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <div className="hidden xl:flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQuadrantSort((prev) => ({ ...prev, [dayKey]: "manual" }))
+                          }
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors border ${
+                            (quadrantSort[dayKey] || "manual") === "manual"
+                              ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                              : "bg-background hover:bg-muted text-muted-foreground border-border/60"
+                          }`}
+                          title="Ordem manual livre: arraste ou use os botões ▲/▼ em cada linha"
+                        >
+                          ↕️ Manual
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQuadrantSort((prev) => ({ ...prev, [dayKey]: "valor_desc" }))
+                          }
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors border ${
+                            quadrantSort[dayKey] === "valor_desc"
+                              ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                              : "bg-background hover:bg-muted text-muted-foreground border-border/60"
+                          }`}
+                          title="Ordenar do maior valor para o menor"
+                        >
+                          💰 Maior R$
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQuadrantSort((prev) => ({ ...prev, [dayKey]: "alfabetico_asc" }))
+                          }
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors border ${
+                            quadrantSort[dayKey] === "alfabetico_asc"
+                              ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                              : "bg-background hover:bg-muted text-muted-foreground border-border/60"
+                          }`}
+                          title="Ordenar alfabeticamente pelo fornecedor (A-Z)"
+                        >
+                          🔤 A-Z
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQuadrantSort((prev) => ({ ...prev, [dayKey]: "vencimento" }))
+                          }
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors border ${
+                            quadrantSort[dayKey] === "vencimento"
+                              ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                              : "bg-background hover:bg-muted text-muted-foreground border-border/60"
+                          }`}
+                          title="Ordenar por data de vencimento"
+                        >
+                          📅 Vencimento
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-[10px] text-muted-foreground hidden sm:inline">
+                          Ordem:
+                        </span>
+                        <Select
+                          value={quadrantSort[dayKey] || "manual"}
+                          onValueChange={(val) => {
+                            setQuadrantSort((prev) => ({
+                              ...prev,
+                              [dayKey]: val as QuadrantSortOption,
+                            }));
+                            toast.info(`Ordem alterada: ${SORT_LABELS[val as QuadrantSortOption]}`);
+                          }}
+                        >
+                          <SelectTrigger className="h-6.5 text-[11px] px-2 py-0 w-[190px] bg-background border-border/70 font-medium">
+                            <SelectValue placeholder="Ordenar quadrante" />
+                          </SelectTrigger>
+                          <SelectContent align="end">
+                            <SelectItem value="manual">↕️ Manual (Arrastar ou ▲/▼)</SelectItem>
+                            <SelectItem value="valor_desc">💰 Maior Valor (R$ ↓)</SelectItem>
+                            <SelectItem value="valor_asc">💵 Menor Valor (R$ ↑)</SelectItem>
+                            <SelectItem value="alfabetico_asc">🔤 Fornecedor (A-Z)</SelectItem>
+                            <SelectItem value="alfabetico_desc">🔠 Fornecedor (Z-A)</SelectItem>
+                            <SelectItem value="vencimento">📅 Data de Vencimento</SelectItem>
+                            <SelectItem value="emissao">📄 Data de Emissão</SelectItem>
+                            <SelectItem value="pendentes_primeiro">
+                              ⏳ Pendentes Primeiro
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -689,12 +1057,91 @@ export function QuadrantesVencimentoView({
                     <table className="w-full text-xs text-left border-collapse min-w-[960px]">
                       <thead>
                         <tr className="bg-muted/50 text-muted-foreground font-semibold border-b text-[11px]">
-                          <th className="w-8 px-2 py-2 text-center">#</th>
-                          <th className="px-3 py-2">Emissão</th>
+                          <th
+                            className="w-12 px-2 py-2 text-center"
+                            title="Reordenação manual (arrastar ou botões ▲/▼)"
+                          >
+                            #
+                          </th>
+                          <th
+                            className="px-3 py-2 cursor-pointer hover:text-foreground select-none transition-colors"
+                            onClick={() =>
+                              setQuadrantSort((prev) => ({
+                                ...prev,
+                                [dayKey]: "emissao",
+                              }))
+                            }
+                            title="Clique para ordenar por data de emissão"
+                          >
+                            <div className="flex items-center gap-1">
+                              <span>Emissão</span>
+                              {quadrantSort[dayKey] === "emissao" && (
+                                <ArrowUpDown className="h-3 w-3 text-blue-600" />
+                              )}
+                            </div>
+                          </th>
                           <th className="px-2 py-2 w-16">COD</th>
-                          <th className="px-3 py-2 min-w-[200px]">DESCRIÇÃO / FORNECEDOR</th>
-                          <th className="px-3 py-2 text-right">Valor</th>
-                          <th className="px-3 py-2 text-center">Vencimento</th>
+                          <th
+                            className="px-3 py-2 min-w-[200px] cursor-pointer hover:text-foreground select-none transition-colors"
+                            onClick={() =>
+                              setQuadrantSort((prev) => ({
+                                ...prev,
+                                [dayKey]:
+                                  prev[dayKey] === "alfabetico_asc"
+                                    ? "alfabetico_desc"
+                                    : "alfabetico_asc",
+                              }))
+                            }
+                            title="Clique para alternar ordem alfabética A-Z / Z-A"
+                          >
+                            <div className="flex items-center gap-1">
+                              <span>DESCRIÇÃO / FORNECEDOR</span>
+                              {quadrantSort[dayKey] === "alfabetico_asc" && (
+                                <span className="text-blue-600 text-[10px] font-bold">A-Z</span>
+                              )}
+                              {quadrantSort[dayKey] === "alfabetico_desc" && (
+                                <span className="text-blue-600 text-[10px] font-bold">Z-A</span>
+                              )}
+                            </div>
+                          </th>
+                          <th
+                            className="px-3 py-2 text-right cursor-pointer hover:text-foreground select-none transition-colors"
+                            onClick={() =>
+                              setQuadrantSort((prev) => ({
+                                ...prev,
+                                [dayKey]:
+                                  prev[dayKey] === "valor_desc" ? "valor_asc" : "valor_desc",
+                              }))
+                            }
+                            title="Clique para alternar Maior / Menor Valor"
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Valor</span>
+                              {quadrantSort[dayKey] === "valor_desc" && (
+                                <span className="text-blue-600 text-[10px] font-bold">R$ ↓</span>
+                              )}
+                              {quadrantSort[dayKey] === "valor_asc" && (
+                                <span className="text-blue-600 text-[10px] font-bold">R$ ↑</span>
+                              )}
+                            </div>
+                          </th>
+                          <th
+                            className="px-3 py-2 text-center cursor-pointer hover:text-foreground select-none transition-colors"
+                            onClick={() =>
+                              setQuadrantSort((prev) => ({
+                                ...prev,
+                                [dayKey]: "vencimento",
+                              }))
+                            }
+                            title="Clique para ordenar por data de vencimento"
+                          >
+                            <div className="flex items-center justify-center gap-1">
+                              <span>Vencimento</span>
+                              {quadrantSort[dayKey] === "vencimento" && (
+                                <ArrowUpDown className="h-3 w-3 text-blue-600" />
+                              )}
+                            </div>
+                          </th>
                           <th className="px-3 py-2 text-center">Nova Data Pgto</th>
                           <th className="px-3 py-2 text-center">Status</th>
                           <th className="px-3 py-2 text-center">Chave PIX</th>
@@ -711,7 +1158,7 @@ export function QuadrantesVencimentoView({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/60">
-                        {items.map((tx) => {
+                        {items.map((tx, itemIndex) => {
                           const isPaid = tx.status === "pago";
                           const isLate = tx.status === "atrasado";
                           const hasPostponedDate = Boolean(
@@ -724,13 +1171,57 @@ export function QuadrantesVencimentoView({
                               key={tx.id}
                               draggable={canWrite}
                               onDragStart={(e) => handleDragStart(e, tx)}
+                              onDragOver={(e) => handleRowDragOver(e, tx, dayKey)}
+                              onDragLeave={handleRowDragLeave}
+                              onDrop={(e) => handleRowDrop(e, tx, dayKey)}
                               className={`group hover:bg-muted/40 transition-colors ${
                                 isPaid ? "opacity-75 bg-muted/20" : ""
+                              } ${
+                                dragOverRowId === tx.id
+                                  ? dragOverPosition === "above"
+                                    ? "border-t-2 border-blue-500 bg-blue-50/70 dark:bg-blue-950/50 shadow-inner"
+                                    : "border-b-2 border-blue-500 bg-blue-50/70 dark:bg-blue-950/50 shadow-inner"
+                                  : ""
                               }`}
                             >
-                              {/* Drag Handle */}
-                              <td className="px-2 py-2 text-center text-muted-foreground/50 group-hover:text-foreground cursor-grab active:cursor-grabbing">
-                                <GripVertical className="h-4 w-4 mx-auto" />
+                              {/* Reorder Handle & Up/Down Arrows */}
+                              <td className="px-1.5 py-2 text-center whitespace-nowrap">
+                                <div className="flex items-center justify-center gap-0.5">
+                                  <div
+                                    className="p-1 text-muted-foreground/50 group-hover:text-foreground cursor-grab active:cursor-grabbing hover:bg-muted rounded"
+                                    title="Arraste para mover para cima, para baixo ou para outro dia"
+                                  >
+                                    <GripVertical className="h-4 w-4 mx-auto" />
+                                  </div>
+                                  {canWrite && items.length > 1 && (
+                                    <div className="flex flex-col -space-y-0.5">
+                                      <button
+                                        type="button"
+                                        disabled={itemIndex === 0}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMoveItemUpDown(tx, dayKey, "up");
+                                        }}
+                                        className="h-3.5 w-3.5 flex items-center justify-center text-muted-foreground hover:text-blue-600 disabled:opacity-20 disabled:hover:text-muted-foreground transition-colors cursor-pointer text-[10px]"
+                                        title="Mover linha para cima"
+                                      >
+                                        ▲
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={itemIndex === items.length - 1}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMoveItemUpDown(tx, dayKey, "down");
+                                        }}
+                                        className="h-3.5 w-3.5 flex items-center justify-center text-muted-foreground hover:text-blue-600 disabled:opacity-20 disabled:hover:text-muted-foreground transition-colors cursor-pointer text-[10px]"
+                                        title="Mover linha para baixo"
+                                      >
+                                        ▼
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               </td>
 
                               {/* Emissão */}
