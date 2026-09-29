@@ -13,7 +13,7 @@ import {
   query,
   writeBatch,
 } from "firebase/firestore";
-import { db } from "@/integrations/firebase/config";
+import { auth, db } from "@/integrations/firebase/config";
 import type {
   FinancialTransaction,
   FinancialCategory,
@@ -900,28 +900,61 @@ export function useAddTransactionComment() {
       transactionId: string;
       text: string;
       mentions?: string[];
-      user: { id: string; name: string; email?: string | null };
+      user?: { id?: string; name?: string; email?: string | null };
     }) => {
       const transRef = doc(db, "financial_transactions", transactionId);
       const snap = await getDoc(transRef);
       if (!snap.exists()) throw new Error("Conta não encontrada");
       const data = snap.data();
-      const currentComments: TransactionComment[] = Array.isArray(data["comments"])
-        ? data["comments"]
+      const rawComments = Array.isArray(data["comments"]) ? data["comments"] : [];
+
+      // Sanitiza comentários anteriores para nunca conter undefined
+      const sanitizedExisting: TransactionComment[] = rawComments.map((c) => ({
+        id: (c && typeof c.id === "string" ? c.id : "") || crypto.randomUUID(),
+        user_id: (c && typeof c.user_id === "string" ? c.user_id : "") || "usuario",
+        user_name: (c && typeof c.user_name === "string" ? c.user_name : "") || "Usuário",
+        user_email: c && typeof c.user_email === "string" ? c.user_email : null,
+        text: (c && typeof c.text === "string" ? c.text : "") || "",
+        mentions: Array.isArray(c?.mentions)
+          ? c.mentions.filter((m: unknown): m is string => typeof m === "string")
+          : [],
+        created_at:
+          (c && typeof c.created_at === "string" ? c.created_at : "") || new Date().toISOString(),
+      }));
+
+      const resolvedUserId =
+        user?.id ||
+        (user as { userId?: string })?.userId ||
+        (user as { uid?: string })?.uid ||
+        auth.currentUser?.uid ||
+        "usuario";
+
+      const resolvedUserName =
+        user?.name ||
+        (user as { fullName?: string })?.fullName ||
+        auth.currentUser?.displayName ||
+        (user?.email ? user.email.split("@")[0] : null) ||
+        (auth.currentUser?.email ? auth.currentUser.email.split("@")[0] : null) ||
+        "Usuário";
+
+      const resolvedEmail = user?.email || auth.currentUser?.email || null;
+
+      const cleanMentions = Array.isArray(mentions)
+        ? mentions.filter((m): m is string => typeof m === "string" && m.trim().length > 0)
         : [];
 
       const newComment: TransactionComment = {
         id: crypto.randomUUID(),
-        user_id: user.id,
-        user_name: user.name,
-        user_email: user.email || null,
+        user_id: resolvedUserId,
+        user_name: resolvedUserName,
+        user_email: resolvedEmail,
         text: text.trim(),
-        mentions: mentions || [],
+        mentions: cleanMentions,
         created_at: new Date().toISOString(),
       };
 
       await updateDoc(transRef, {
-        comments: [...currentComments, newComment],
+        comments: [...sanitizedExisting, newComment],
         updated_at: serverTimestamp(),
       });
       return newComment;
@@ -945,12 +978,24 @@ export function useDeleteTransactionComment() {
       const snap = await getDoc(transRef);
       if (!snap.exists()) return;
       const data = snap.data();
-      const currentComments: TransactionComment[] = Array.isArray(data["comments"])
-        ? data["comments"]
-        : [];
-      const updated = currentComments.filter((c) => c.id !== commentId);
+      const rawComments = Array.isArray(data["comments"]) ? data["comments"] : [];
+      const sanitized = rawComments
+        .filter((c) => c && c.id !== commentId)
+        .map((c) => ({
+          id: (c && typeof c.id === "string" ? c.id : "") || crypto.randomUUID(),
+          user_id: (c && typeof c.user_id === "string" ? c.user_id : "") || "usuario",
+          user_name: (c && typeof c.user_name === "string" ? c.user_name : "") || "Usuário",
+          user_email: c && typeof c.user_email === "string" ? c.user_email : null,
+          text: (c && typeof c.text === "string" ? c.text : "") || "",
+          mentions: Array.isArray(c?.mentions)
+            ? c.mentions.filter((m: unknown): m is string => typeof m === "string")
+            : [],
+          created_at:
+            (c && typeof c.created_at === "string" ? c.created_at : "") || new Date().toISOString(),
+        }));
+
       await updateDoc(transRef, {
-        comments: updated,
+        comments: sanitized,
         updated_at: serverTimestamp(),
       });
     },

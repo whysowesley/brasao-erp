@@ -125,15 +125,19 @@ export function TransactionCommentsDialog({
     const mentionMatches = cleanText.match(/@([\wÀ-ÿ-]+)/g) || [];
     const mentions = mentionMatches.map((m) => m.replace("@", "").trim());
 
+    const currentUserId = user.userId || (user as { uid?: string }).uid || "usuario";
+    const currentUserName = user.fullName || user.email?.split("@")[0] || "Usuário";
+    const currentUserEmail = user.email || null;
+
     try {
       await addCommentMutation.mutateAsync({
         transactionId: transaction.id,
         text: cleanText,
         mentions,
         user: {
-          id: user.uid,
-          name: user.displayName || user.email?.split("@")[0] || "Usuário",
-          email: user.email || null,
+          id: currentUserId,
+          name: currentUserName,
+          email: currentUserEmail,
         },
       });
 
@@ -217,7 +221,8 @@ export function TransactionCommentsDialog({
             </div>
           ) : (
             comments.map((c) => {
-              const isAuthor = user?.uid === c.user_id;
+              const currentUserId = user?.userId || (user as { uid?: string })?.uid;
+              const isAuthor = Boolean(currentUserId && currentUserId === c.user_id);
               const canDelete = isAuthor || isMaster;
 
               return (
