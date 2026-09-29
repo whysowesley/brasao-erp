@@ -27,6 +27,7 @@ import type {
   FinancialSummary,
   MonthSummary,
   FinancialFilters,
+  TransactionComment,
 } from "@/lib/financeiro-types";
 
 export type {
@@ -42,6 +43,7 @@ export type {
   FinancialSummary,
   MonthSummary,
   FinancialFilters,
+  TransactionComment,
 };
 
 export interface QuitarTransacaoInput {
@@ -160,7 +162,14 @@ export function useFinancialTransactions(filters?: FinancialFilters) {
           payment_method_id: (data["payment_method_id"] as string) || null,
           supplier_id: (data["supplier_id"] as string) || null,
           supplier_name: (data["supplier_name"] as string) || null,
+          pix_key:
+            (data["pix_key"] as string) ||
+            (data["supplier"] as { pix_key?: string })?.pix_key ||
+            null,
           notes: (data["notes"] as string) || null,
+          comments: Array.isArray(data["comments"])
+            ? (data["comments"] as TransactionComment[])
+            : [],
           document_url: (data["document_url"] as string) || null,
           is_recurring: Boolean(data["is_recurring"]),
           recurrence_group_id: (data["recurrence_group_id"] as string) || null,
@@ -669,7 +678,9 @@ export async function createFinancialTransaction(
     payment_method_name: paymentMethodName,
     supplier_id: input.supplier_id || null,
     supplier_name: supplierName,
+    pix_key: input.pix_key?.trim() || null,
     notes: input.notes?.trim() || null,
+    comments: [],
     document_url: input.document_url?.trim() || null,
     created_at: serverTimestamp(),
     updated_at: serverTimestamp(),
@@ -810,7 +821,10 @@ export async function updateFinancialTransaction(
     updatePayload["payment_method_id"] = input.payment_method_id;
   if (input.supplier_id !== undefined) updatePayload["supplier_id"] = input.supplier_id;
   if (input.supplier_name !== undefined) updatePayload["supplier_name"] = input.supplier_name;
+  if (input.pix_key !== undefined)
+    updatePayload["pix_key"] = input.pix_key ? input.pix_key.trim() : null;
   if (input.notes !== undefined) updatePayload["notes"] = input.notes;
+  if (input.comments !== undefined) updatePayload["comments"] = input.comments;
   if (input.document_url !== undefined) updatePayload["document_url"] = input.document_url;
 
   await updateDoc(doc(db, "financial_transactions", input.id), updatePayload);
@@ -820,6 +834,126 @@ export function useUpdateFinancialTransaction() {
   const invalidate = useInvalidateFinancial();
   return useMutation({
     mutationFn: updateFinancialTransaction,
+    onSuccess: invalidate,
+  });
+}
+
+/** Hook rápido para colar/atualizar chave PIX de uma conta (e opcionalmente sincronizar no cadastro do fornecedor) */
+export function useUpdateTransactionPixKey() {
+  const invalidate = useInvalidateFinancial();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      pix_key,
+      supplier_id,
+      updateSupplier = false,
+    }: {
+      id: string;
+      pix_key: string | null;
+      supplier_id?: string | null;
+      updateSupplier?: boolean;
+    }) => {
+      const cleanPix = pix_key ? pix_key.trim() : null;
+      await updateDoc(doc(db, "financial_transactions", id), {
+        pix_key: cleanPix,
+        updated_at: serverTimestamp(),
+      });
+      if (updateSupplier && supplier_id) {
+        try {
+          await updateDoc(doc(db, "suppliers", supplier_id), {
+            pix_key: cleanPix,
+            updated_at: serverTimestamp(),
+          });
+        } catch {
+          // ignora se regras não permitirem
+        }
+      }
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** Hook rápido para atualizar observações de uma conta diretamente pelo ícone de olho */
+export function useUpdateTransactionNotes() {
+  const invalidate = useInvalidateFinancial();
+  return useMutation({
+    mutationFn: async ({ id, notes }: { id: string; notes: string | null }) => {
+      await updateDoc(doc(db, "financial_transactions", id), {
+        notes: notes ? notes.trim() : null,
+        updated_at: serverTimestamp(),
+      });
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** Hook para adicionar comentário com menções a uma conta */
+export function useAddTransactionComment() {
+  const invalidate = useInvalidateFinancial();
+  return useMutation({
+    mutationFn: async ({
+      transactionId,
+      text,
+      mentions,
+      user,
+    }: {
+      transactionId: string;
+      text: string;
+      mentions?: string[];
+      user: { id: string; name: string; email?: string | null };
+    }) => {
+      const transRef = doc(db, "financial_transactions", transactionId);
+      const snap = await getDoc(transRef);
+      if (!snap.exists()) throw new Error("Conta não encontrada");
+      const data = snap.data();
+      const currentComments: TransactionComment[] = Array.isArray(data["comments"])
+        ? data["comments"]
+        : [];
+
+      const newComment: TransactionComment = {
+        id: crypto.randomUUID(),
+        user_id: user.id,
+        user_name: user.name,
+        user_email: user.email || null,
+        text: text.trim(),
+        mentions: mentions || [],
+        created_at: new Date().toISOString(),
+      };
+
+      await updateDoc(transRef, {
+        comments: [...currentComments, newComment],
+        updated_at: serverTimestamp(),
+      });
+      return newComment;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** Hook para remover comentário de uma conta */
+export function useDeleteTransactionComment() {
+  const invalidate = useInvalidateFinancial();
+  return useMutation({
+    mutationFn: async ({
+      transactionId,
+      commentId,
+    }: {
+      transactionId: string;
+      commentId: string;
+    }) => {
+      const transRef = doc(db, "financial_transactions", transactionId);
+      const snap = await getDoc(transRef);
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const currentComments: TransactionComment[] = Array.isArray(data["comments"])
+        ? data["comments"]
+        : [];
+      const updated = currentComments.filter((c) => c.id !== commentId);
+      await updateDoc(transRef, {
+        comments: updated,
+        updated_at: serverTimestamp(),
+      });
+    },
     onSuccess: invalidate,
   });
 }

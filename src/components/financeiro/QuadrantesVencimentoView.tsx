@@ -22,6 +22,10 @@ import {
   CalendarClock,
   Sparkles,
   ArrowUpDown,
+  Eye,
+  MessageSquare,
+  QrCode,
+  Copy,
 } from "lucide-react";
 import {
   format,
@@ -84,6 +88,9 @@ import { useAuth } from "@/lib/auth";
 import type { FinancialTransaction, StatusTransacao } from "@/lib/financeiro-types";
 import { LancamentoDialog } from "./LancamentoDialog";
 import { MarcarPagoDialog } from "./MarcarPagoDialog";
+import { TransactionPixPopover } from "./TransactionPixPopover";
+import { TransactionObservationDialog } from "./TransactionObservationDialog";
+import { TransactionCommentsDialog } from "./TransactionCommentsDialog";
 
 function formatCurrency(val: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -140,18 +147,38 @@ export function QuadrantesVencimentoView({
   const [draggedTx, setDraggedTx] = useState<FinancialTransaction | null>(null);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
 
-  // Modais de Edição / Pagamento
+  // Modais de Edição / Pagamento / Detalhes
   const [lancamentoDialogOpen, setLancamentoDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
   const [payingTransaction, setPayingTransaction] = useState<FinancialTransaction | null>(null);
   const [deletingTransaction, setDeletingTransaction] = useState<FinancialTransaction | null>(null);
   const [customDefaultDate, setCustomDefaultDate] = useState<string | undefined>(undefined);
+  const [observationTransaction, setObservationTransaction] = useState<FinancialTransaction | null>(
+    null,
+  );
+  const [commentsTransaction, setCommentsTransaction] = useState<FinancialTransaction | null>(null);
 
   // Queries
   const { data: suppliers = [] } = useSuppliers();
   const { data: allTransactions = [], isLoading } = useFinancialTransactions({
     type: "despesa", // Focado em contas a pagar e fornecedores
   });
+
+  // Transações atualizadas para os modais (reativo ao cache/Firestore)
+  const currentObservationTx = useMemo(
+    () =>
+      observationTransaction
+        ? allTransactions.find((t) => t.id === observationTransaction.id) || observationTransaction
+        : null,
+    [allTransactions, observationTransaction],
+  );
+  const currentCommentsTx = useMemo(
+    () =>
+      commentsTransaction
+        ? allTransactions.find((t) => t.id === commentsTransaction.id) || commentsTransaction
+        : null,
+    [allTransactions, commentsTransaction],
+  );
 
   // Mutações
   const moveDayMutation = useMoveFinancialTransactionDay();
@@ -658,190 +685,72 @@ export function QuadrantesVencimentoView({
                     .
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left border-collapse">
-                      <thead>
-                        <tr className="bg-muted/50 text-muted-foreground font-semibold border-b text-[11px]">
-                          <th className="w-8 px-2 py-2 text-center">#</th>
-                          <th className="px-3 py-2">Emissão</th>
-                          <th className="px-2 py-2 w-16">COD</th>
-                          <th className="px-3 py-2 min-w-[200px]">DESCRIÇÃO / FORNECEDOR</th>
-                          <th className="px-3 py-2 text-right">Valor</th>
-                          <th className="px-3 py-2 text-center">Vencimento</th>
-                          <th className="px-3 py-2 text-center">Nova Data Pgto</th>
-                          <th className="px-3 py-2 text-center">Status</th>
-                          <th
-                            className="px-3 py-2 text-center w-12"
-                            title="Liquidar / Marcar como pago"
+                  <>
+                    {/* Visualização Otimizada para Celular (Mobile Cards) */}
+                    <div className="md:hidden divide-y divide-border/60">
+                      {items.map((tx) => {
+                        const isPaid = tx.status === "pago";
+                        const isLate = tx.status === "atrasado";
+                        const hasPostponedDate = Boolean(
+                          tx.expected_payment_date && tx.expected_payment_date !== tx.due_date,
+                        );
+                        const commentsCount = tx.comments?.length || 0;
+
+                        return (
+                          <div
+                            key={`mobile-${tx.id}`}
+                            className={`p-3.5 space-y-2.5 transition-colors ${
+                              isPaid ? "opacity-80 bg-muted/20" : "hover:bg-muted/30"
+                            }`}
                           >
-                            Pago
-                          </th>
-                          <th className="px-3 py-2">Data Pgto</th>
-                          <th className="px-3 py-2">Observações</th>
-                          <th className="px-2 py-2 text-right w-16">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border/60">
-                        {items.map((tx) => {
-                          const isPaid = tx.status === "pago";
-                          const isLate = tx.status === "atrasado";
-                          const hasPostponedDate = Boolean(
-                            tx.expected_payment_date && tx.expected_payment_date !== tx.due_date,
-                          );
-
-                          return (
-                            <tr
-                              key={tx.id}
-                              draggable={canWrite}
-                              onDragStart={(e) => handleDragStart(e, tx)}
-                              className={`group hover:bg-muted/40 transition-colors ${
-                                isPaid ? "opacity-75 bg-muted/20" : ""
-                              }`}
-                            >
-                              {/* Drag Handle */}
-                              <td className="px-2 py-2 text-center text-muted-foreground/50 group-hover:text-foreground cursor-grab active:cursor-grabbing">
-                                <GripVertical className="h-4 w-4 mx-auto" />
-                              </td>
-
-                              {/* Emissão */}
-                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                                {tx.issue_date ? formatShortDate(tx.issue_date) : "—"}
-                              </td>
-
-                              {/* COD */}
-                              <td className="px-2 py-2 font-mono text-muted-foreground whitespace-nowrap">
-                                {tx.code ?? tx.id.slice(0, 4)}
-                              </td>
-
-                              {/* Descrição / Fornecedor */}
-                              <td className="px-3 py-2">
-                                <div className="flex flex-col">
-                                  <span className="font-semibold text-foreground flex items-center gap-1.5">
-                                    <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                    {tx.supplier_name || tx.description || "Sem descrição"}
-                                  </span>
-                                  {tx.supplier_name && tx.description && (
-                                    <span className="text-[11px] text-muted-foreground">
-                                      {tx.description}
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-
-                              {/* Valor */}
-                              <td className="px-3 py-2 text-right font-bold text-foreground whitespace-nowrap">
-                                {formatCurrency(tx.amount)}
-                              </td>
-
-                              {/* Vencimento Original */}
-                              <td className="px-3 py-2 text-center whitespace-nowrap text-muted-foreground">
-                                {formatDateBr(tx.due_date)}
-                              </td>
-
-                              {/* Nova Data Pgto (Postergada / Previsão) com seletor rápido */}
-                              <td className="px-3 py-2 text-center whitespace-nowrap">
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className={`h-7 text-xs px-2 font-medium ${
-                                        hasPostponedDate
-                                          ? "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100"
-                                          : "text-muted-foreground hover:text-foreground"
-                                      }`}
-                                      title="Clique para alterar a data postergada desta conta"
-                                    >
-                                      <CalendarIcon className="h-3 w-3 mr-1" />
-                                      {tx.expected_payment_date
-                                        ? formatDateBr(tx.expected_payment_date)
-                                        : "—"}
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-auto p-3" align="center">
-                                    <div className="space-y-2">
-                                      <p className="text-xs font-semibold">
-                                        Reagendar / Postergada:
-                                      </p>
-                                      <Calendar
-                                        mode="single"
-                                        selected={
-                                          tx.expected_payment_date
-                                            ? parseISO(tx.expected_payment_date)
-                                            : parseISO(tx.due_date)
-                                        }
-                                        onSelect={(newDate) => {
-                                          if (newDate) {
-                                            handleMoveToDate(tx, format(newDate, "yyyy-MM-dd"));
-                                          }
-                                        }}
-                                        initialFocus
-                                      />
-                                    </div>
-                                  </PopoverContent>
-                                </Popover>
-                              </td>
-
-                              {/* Status Badge */}
-                              <td className="px-3 py-2 text-center whitespace-nowrap">
+                            {/* Topo do Card Mobile: Status + Checkbox Pago + Código + Menu */}
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={isPaid}
+                                  disabled={!canWrite}
+                                  onCheckedChange={() => {
+                                    if (isPaid) {
+                                      reverseMutation.mutate(tx.id, {
+                                        onSuccess: () =>
+                                          toast.success("Pagamento estornado com sucesso!"),
+                                      });
+                                    } else {
+                                      setPayingTransaction(tx);
+                                    }
+                                  }}
+                                  className="h-4.5 w-4.5 rounded data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                                  title={isPaid ? "Desmarcar pagamento" : "Marcar como pago"}
+                                />
                                 {isPaid ? (
-                                  <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[10px] px-2 py-0.5 uppercase border-none">
+                                  <Badge className="bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.2 uppercase border-none">
                                     PAGO
                                   </Badge>
                                 ) : isLate ? (
                                   <Badge
                                     variant="destructive"
-                                    className="font-semibold text-[10px] px-2 py-0.5 uppercase"
+                                    className="font-bold text-[10px] px-2 py-0.2 uppercase"
                                   >
                                     ATRASADO
                                   </Badge>
                                 ) : (
                                   <Badge
                                     variant="secondary"
-                                    className="bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 font-semibold text-[10px] px-2 py-0.5 uppercase border-none"
+                                    className="bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 font-bold text-[10px] px-2 py-0.2 uppercase border-none"
                                   >
                                     PENDENTE
                                   </Badge>
                                 )}
-                              </td>
+                                <span className="font-mono text-[11px] text-muted-foreground">
+                                  #{tx.code ?? tx.id.slice(0, 4)}
+                                </span>
+                              </div>
 
-                              {/* Liquidação Checkbox Quadrada Estilo Planilha */}
-                              <td className="px-3 py-2 text-center whitespace-nowrap">
-                                <Checkbox
-                                  checked={isPaid}
-                                  disabled={!canWrite}
-                                  onCheckedChange={() => {
-                                    if (isPaid) {
-                                      // Reverter pagamento
-                                      reverseMutation.mutate(tx.id, {
-                                        onSuccess: () =>
-                                          toast.success("Pagamento estornado com sucesso!"),
-                                      });
-                                    } else {
-                                      // Abrir modal de pagamento com valores
-                                      setPayingTransaction(tx);
-                                    }
-                                  }}
-                                  className="h-4 w-4 rounded data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
-                                  title={isPaid ? "Desmarcar pagamento" : "Marcar como pago"}
-                                />
-                              </td>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[11px] text-muted-foreground">
+                                  {tx.issue_date ? formatShortDate(tx.issue_date) : ""}
+                                </span>
 
-                              {/* Data Efetiva de Pagamento */}
-                              <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
-                                {tx.payment_date ? formatDateBr(tx.payment_date) : "—"}
-                              </td>
-
-                              {/* Observações */}
-                              <td
-                                className="px-3 py-2 text-muted-foreground max-w-[180px] truncate"
-                                title={tx.notes || ""}
-                              >
-                                {tx.notes || "—"}
-                              </td>
-
-                              {/* Menu de Ações */}
-                              <td className="px-2 py-2 text-right whitespace-nowrap">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button
@@ -903,13 +812,462 @@ export function QuadrantesVencimentoView({
                                     )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                              </div>
+                            </div>
+
+                            {/* Informações Principais: Fornecedor e Valor em Destaque */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex flex-col min-w-0 pr-1">
+                                <span className="font-bold text-sm text-foreground flex items-center gap-1.5 leading-snug">
+                                  <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  <span className="truncate">
+                                    {tx.supplier_name || tx.description || "Sem descrição"}
+                                  </span>
+                                </span>
+                                {tx.supplier_name && tx.description && (
+                                  <span className="text-[11px] text-muted-foreground truncate pl-5">
+                                    {tx.description}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-extrabold text-sm sm:text-base text-foreground whitespace-nowrap">
+                                {formatCurrency(tx.amount)}
+                              </span>
+                            </div>
+
+                            {/* Datas: Vencimento Original & Nova Data Pgto / Previsão */}
+                            <div className="flex flex-wrap items-center justify-between text-xs gap-2 pt-0.5 border-t border-border/40">
+                              <div className="text-[11px] text-muted-foreground">
+                                <span>Venc: </span>
+                                <strong className="text-foreground">
+                                  {formatDateBr(tx.due_date)}
+                                </strong>
+                              </div>
+
+                              <div className="flex items-center gap-1 text-[11px]">
+                                <span className="text-muted-foreground">Nova Data:</span>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className={`h-6 text-[11px] px-1.5 font-medium ${
+                                        hasPostponedDate
+                                          ? "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100"
+                                          : "text-muted-foreground hover:text-foreground"
+                                      }`}
+                                      title="Alterar data postergada desta conta"
+                                    >
+                                      <CalendarIcon className="h-3 w-3 mr-1" />
+                                      {tx.expected_payment_date
+                                        ? formatDateBr(tx.expected_payment_date)
+                                        : "—"}
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-3" align="end">
+                                    <div className="space-y-2">
+                                      <p className="text-xs font-semibold">
+                                        Reagendar / Postergada:
+                                      </p>
+                                      <Calendar
+                                        mode="single"
+                                        selected={
+                                          tx.expected_payment_date
+                                            ? parseISO(tx.expected_payment_date)
+                                            : parseISO(tx.due_date)
+                                        }
+                                        onSelect={(newDate) => {
+                                          if (newDate) {
+                                            handleMoveToDate(tx, format(newDate, "yyyy-MM-dd"));
+                                          }
+                                        }}
+                                        initialFocus
+                                      />
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
+                            </div>
+
+                            {/* Ações Rápidas: Copiar Chave PIX, Observação (Olho), Comentários (@) */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                              {/* Chave PIX (Botão destacado com cópia instantânea) */}
+                              <TransactionPixPopover
+                                transaction={tx}
+                                canWrite={canWrite}
+                                variant="card"
+                              />
+
+                              <div className="flex items-center gap-1.5">
+                                {/* Ícone de Olho para Visualizar / Editar Observação sem abrir edição da conta */}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setObservationTransaction(tx)}
+                                  className="h-8 flex-1 text-xs gap-1.5 border-border/70 hover:bg-muted font-medium"
+                                  title="Visualizar observação sem precisar editar o pedido"
+                                >
+                                  <Eye
+                                    className={`h-3.5 w-3.5 ${
+                                      tx.notes
+                                        ? "text-blue-600 dark:text-blue-400"
+                                        : "text-muted-foreground"
+                                    }`}
+                                  />
+                                  <span className="truncate">
+                                    {tx.notes ? "Ver Obs." : "+ Obs."}
+                                  </span>
+                                </Button>
+
+                                {/* Botão de Comentários & Menções (@) */}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setCommentsTransaction(tx)}
+                                  className="h-8 flex-1 text-xs gap-1.5 border-border/70 hover:bg-muted font-medium"
+                                  title="Comentários e menções de outros usuários (@)"
+                                >
+                                  <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                                  <span>Comentários</span>
+                                  {commentsCount > 0 && (
+                                    <Badge
+                                      variant="secondary"
+                                      className="h-4 px-1.5 text-[10px] bg-primary/15 text-primary border-none font-bold"
+                                    >
+                                      {commentsCount}
+                                    </Badge>
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+
+                            {/* Snippet de Observação se houver */}
+                            {tx.notes && (
+                              <div
+                                onClick={() => setObservationTransaction(tx)}
+                                className="text-[11px] text-muted-foreground bg-muted/40 hover:bg-muted/60 p-2 rounded border border-border/60 cursor-pointer flex items-start gap-1.5 transition-colors"
+                                title="Clique para abrir e ver a observação completa"
+                              >
+                                <Eye className="h-3 w-3 text-blue-600 shrink-0 mt-0.5" />
+                                <span className="line-clamp-2">{tx.notes}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Tabela Completa para Desktop e Telas Médias / Grandes */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-xs text-left border-collapse">
+                        <thead>
+                          <tr className="bg-muted/50 text-muted-foreground font-semibold border-b text-[11px]">
+                            <th className="w-8 px-2 py-2 text-center">#</th>
+                            <th className="px-3 py-2">Emissão</th>
+                            <th className="px-2 py-2 w-16">COD</th>
+                            <th className="px-3 py-2 min-w-[200px]">DESCRIÇÃO / FORNECEDOR</th>
+                            <th className="px-3 py-2 text-right">Valor</th>
+                            <th className="px-3 py-2 text-center">Vencimento</th>
+                            <th className="px-3 py-2 text-center">Nova Data Pgto</th>
+                            <th className="px-3 py-2 text-center">Status</th>
+                            <th className="px-3 py-2 text-center">Chave PIX</th>
+                            <th className="px-3 py-2 text-center">Obs.</th>
+                            <th className="px-3 py-2 text-center">Comentários</th>
+                            <th
+                              className="px-3 py-2 text-center w-12"
+                              title="Liquidar / Marcar como pago"
+                            >
+                              Pago
+                            </th>
+                            <th className="px-3 py-2">Data Pgto</th>
+                            <th className="px-2 py-2 text-right w-16">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {items.map((tx) => {
+                            const isPaid = tx.status === "pago";
+                            const isLate = tx.status === "atrasado";
+                            const hasPostponedDate = Boolean(
+                              tx.expected_payment_date && tx.expected_payment_date !== tx.due_date,
+                            );
+                            const commentsCount = tx.comments?.length || 0;
+
+                            return (
+                              <tr
+                                key={tx.id}
+                                draggable={canWrite}
+                                onDragStart={(e) => handleDragStart(e, tx)}
+                                className={`group hover:bg-muted/40 transition-colors ${
+                                  isPaid ? "opacity-75 bg-muted/20" : ""
+                                }`}
+                              >
+                                {/* Drag Handle */}
+                                <td className="px-2 py-2 text-center text-muted-foreground/50 group-hover:text-foreground cursor-grab active:cursor-grabbing">
+                                  <GripVertical className="h-4 w-4 mx-auto" />
+                                </td>
+
+                                {/* Emissão */}
+                                <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                                  {tx.issue_date ? formatShortDate(tx.issue_date) : "—"}
+                                </td>
+
+                                {/* COD */}
+                                <td className="px-2 py-2 font-mono text-muted-foreground whitespace-nowrap">
+                                  {tx.code ?? tx.id.slice(0, 4)}
+                                </td>
+
+                                {/* Descrição / Fornecedor */}
+                                <td className="px-3 py-2">
+                                  <div className="flex flex-col">
+                                    <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                      <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                      {tx.supplier_name || tx.description || "Sem descrição"}
+                                    </span>
+                                    {tx.supplier_name && tx.description && (
+                                      <span className="text-[11px] text-muted-foreground">
+                                        {tx.description}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* Valor */}
+                                <td className="px-3 py-2 text-right font-bold text-foreground whitespace-nowrap">
+                                  {formatCurrency(tx.amount)}
+                                </td>
+
+                                {/* Vencimento Original */}
+                                <td className="px-3 py-2 text-center whitespace-nowrap text-muted-foreground">
+                                  {formatDateBr(tx.due_date)}
+                                </td>
+
+                                {/* Nova Data Pgto (Postergada / Previsão) com seletor rápido */}
+                                <td className="px-3 py-2 text-center whitespace-nowrap">
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className={`h-7 text-xs px-2 font-medium ${
+                                          hasPostponedDate
+                                            ? "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100"
+                                            : "text-muted-foreground hover:text-foreground"
+                                        }`}
+                                        title="Clique para alterar a data postergada desta conta"
+                                      >
+                                        <CalendarIcon className="h-3 w-3 mr-1" />
+                                        {tx.expected_payment_date
+                                          ? formatDateBr(tx.expected_payment_date)
+                                          : "—"}
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-3" align="center">
+                                      <div className="space-y-2">
+                                        <p className="text-xs font-semibold">
+                                          Reagendar / Postergada:
+                                        </p>
+                                        <Calendar
+                                          mode="single"
+                                          selected={
+                                            tx.expected_payment_date
+                                              ? parseISO(tx.expected_payment_date)
+                                              : parseISO(tx.due_date)
+                                          }
+                                          onSelect={(newDate) => {
+                                            if (newDate) {
+                                              handleMoveToDate(tx, format(newDate, "yyyy-MM-dd"));
+                                            }
+                                          }}
+                                          initialFocus
+                                        />
+                                      </div>
+                                    </PopoverContent>
+                                  </Popover>
+                                </td>
+
+                                {/* Status Badge */}
+                                <td className="px-3 py-2 text-center whitespace-nowrap">
+                                  {isPaid ? (
+                                    <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[10px] px-2 py-0.5 uppercase border-none">
+                                      PAGO
+                                    </Badge>
+                                  ) : isLate ? (
+                                    <Badge
+                                      variant="destructive"
+                                      className="font-semibold text-[10px] px-2 py-0.5 uppercase"
+                                    >
+                                      ATRASADO
+                                    </Badge>
+                                  ) : (
+                                    <Badge
+                                      variant="secondary"
+                                      className="bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 font-semibold text-[10px] px-2 py-0.5 uppercase border-none"
+                                    >
+                                      PENDENTE
+                                    </Badge>
+                                  )}
+                                </td>
+
+                                {/* Chave PIX (com ação 1-clique para copiar) */}
+                                <td className="px-3 py-2 text-center whitespace-nowrap">
+                                  <TransactionPixPopover transaction={tx} canWrite={canWrite} />
+                                </td>
+
+                                {/* Observações com ícone de olho para visualização sem abrir edição */}
+                                <td className="px-3 py-2 text-center whitespace-nowrap">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setObservationTransaction(tx)}
+                                    className={`h-7 px-2 text-xs gap-1.5 font-normal max-w-[160px] ${
+                                      tx.notes
+                                        ? "text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                                        : "text-muted-foreground/50 hover:text-muted-foreground"
+                                    }`}
+                                    title={
+                                      tx.notes
+                                        ? `Observação: ${tx.notes}`
+                                        : "Clique para visualizar ou adicionar observação"
+                                    }
+                                  >
+                                    <Eye
+                                      className={`h-3.5 w-3.5 shrink-0 ${
+                                        tx.notes ? "text-blue-600 dark:text-blue-400" : ""
+                                      }`}
+                                    />
+                                    <span className="truncate text-left">{tx.notes || "—"}</span>
+                                  </Button>
+                                </td>
+
+                                {/* Comentários & Menções (@) */}
+                                <td className="px-3 py-2 text-center whitespace-nowrap">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setCommentsTransaction(tx)}
+                                    className={`h-7 px-2 text-xs gap-1 ${
+                                      commentsCount > 0
+                                        ? "text-indigo-600 dark:text-indigo-400 font-semibold hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                                        : "text-muted-foreground/60 hover:text-foreground"
+                                    }`}
+                                    title="Ver comentários ou mencionar outros usuários (@)"
+                                  >
+                                    <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                                    {commentsCount > 0 ? (
+                                      <Badge
+                                        variant="secondary"
+                                        className="h-4 px-1.5 text-[10px] bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-none font-bold"
+                                      >
+                                        {commentsCount}
+                                      </Badge>
+                                    ) : (
+                                      <span className="text-[11px] opacity-70">@</span>
+                                    )}
+                                  </Button>
+                                </td>
+
+                                {/* Liquidação Checkbox Quadrada Estilo Planilha */}
+                                <td className="px-3 py-2 text-center whitespace-nowrap">
+                                  <Checkbox
+                                    checked={isPaid}
+                                    disabled={!canWrite}
+                                    onCheckedChange={() => {
+                                      if (isPaid) {
+                                        // Reverter pagamento
+                                        reverseMutation.mutate(tx.id, {
+                                          onSuccess: () =>
+                                            toast.success("Pagamento estornado com sucesso!"),
+                                        });
+                                      } else {
+                                        // Abrir modal de pagamento com valores
+                                        setPayingTransaction(tx);
+                                      }
+                                    }}
+                                    className="h-4 w-4 rounded data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                                    title={isPaid ? "Desmarcar pagamento" : "Marcar como pago"}
+                                  />
+                                </td>
+
+                                {/* Data Efetiva de Pagamento */}
+                                <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
+                                  {tx.payment_date ? formatDateBr(tx.payment_date) : "—"}
+                                </td>
+
+                                {/* Menu de Ações */}
+                                <td className="px-2 py-2 text-right whitespace-nowrap">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-muted-foreground"
+                                      >
+                                        •••
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuLabel>Ações da Linha</DropdownMenuLabel>
+                                      <DropdownMenuSeparator />
+                                      {canWrite && (
+                                        <>
+                                          <DropdownMenuItem
+                                            onClick={() => {
+                                              setEditingTransaction(tx);
+                                              setLancamentoDialogOpen(true);
+                                            }}
+                                          >
+                                            <Pencil className="h-3.5 w-3.5 mr-2" />
+                                            Editar Conta
+                                          </DropdownMenuItem>
+
+                                          {!isPaid && (
+                                            <DropdownMenuItem
+                                              onClick={() => setPayingTransaction(tx)}
+                                            >
+                                              <CheckCircle2 className="h-3.5 w-3.5 mr-2 text-emerald-600" />
+                                              Liquidar (Marcar Pago)
+                                            </DropdownMenuItem>
+                                          )}
+
+                                          {isPaid && (
+                                            <DropdownMenuItem
+                                              onClick={() => {
+                                                reverseMutation.mutate(tx.id, {
+                                                  onSuccess: () =>
+                                                    toast.success("Pagamento estornado!"),
+                                                });
+                                              }}
+                                            >
+                                              <Undo2 className="h-3.5 w-3.5 mr-2 text-amber-600" />
+                                              Estornar Pagamento
+                                            </DropdownMenuItem>
+                                          )}
+
+                                          <DropdownMenuSeparator />
+
+                                          <DropdownMenuItem
+                                            className="text-destructive"
+                                            onClick={() => setDeletingTransaction(tx)}
+                                          >
+                                            <Trash2 className="h-3.5 w-3.5 mr-2" />
+                                            Excluir
+                                          </DropdownMenuItem>
+                                        </>
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 )}
               </div>
             );
@@ -930,6 +1288,22 @@ export function QuadrantesVencimentoView({
         open={!!payingTransaction}
         onOpenChange={(open) => !open && setPayingTransaction(null)}
         transaction={payingTransaction}
+      />
+
+      {/* Modal de Observações (Ícone de Olho) */}
+      <TransactionObservationDialog
+        open={!!observationTransaction}
+        onOpenChange={(open) => !open && setObservationTransaction(null)}
+        transaction={currentObservationTx}
+        canWrite={canWrite}
+      />
+
+      {/* Modal de Comentários & Menções (@) */}
+      <TransactionCommentsDialog
+        open={!!commentsTransaction}
+        onOpenChange={(open) => !open && setCommentsTransaction(null)}
+        transaction={currentCommentsTx}
+        canWrite={canWrite}
       />
 
       {/* Diálogo de Confirmação de Exclusão */}

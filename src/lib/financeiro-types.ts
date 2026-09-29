@@ -28,6 +28,16 @@ export interface PaymentMethod {
   created_at: string;
 }
 
+export interface TransactionComment {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email?: string | null;
+  text: string;
+  mentions?: string[]; // IDs ou nomes de usuários mencionados (ex: ['Wesley', 'wesleyjunio197@gmail.com'])
+  created_at: string;
+}
+
 export interface FinancialTransaction {
   id: string;
   description: string | null;
@@ -46,7 +56,9 @@ export interface FinancialTransaction {
   payment_method_id: string | null;
   supplier_id: string | null;
   supplier_name: string | null;
+  pix_key?: string | null; // Chave PIX da conta ou fornecedor
   notes: string | null;
+  comments?: TransactionComment[] | null; // Comentários e menções da conta
   document_url: string | null;
   is_recurring: boolean;
   recurrence_group_id: string | null;
@@ -88,6 +100,7 @@ export interface CreateFinancialTransactionInput {
   payment_method_id?: string | null | undefined;
   supplier_id?: string | null | undefined;
   supplier_name?: string | null | undefined;
+  pix_key?: string | null | undefined;
   notes?: string | null | undefined;
   document_url?: string | null | undefined;
   is_recurring?: boolean | undefined;
@@ -114,7 +127,9 @@ export interface UpdateFinancialTransactionInput {
   payment_method_id?: string | null | undefined;
   supplier_id?: string | null | undefined;
   supplier_name?: string | null | undefined;
+  pix_key?: string | null | undefined;
   notes?: string | null | undefined;
+  comments?: TransactionComment[] | undefined;
   document_url?: string | null | undefined;
 }
 

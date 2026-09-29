@@ -84,6 +84,7 @@ export function LancamentoDialog({
   const [expectedPaymentDate, setExpectedPaymentDate] = useState<Date | undefined>(undefined);
   const [issueDate, setIssueDate] = useState<Date | undefined>(undefined);
   const [code, setCode] = useState<string>("");
+  const [pixKey, setPixKey] = useState<string>("");
   const [notes, setNotes] = useState("");
   const [documentUrl, setDocumentUrl] = useState("");
 
@@ -127,6 +128,7 @@ export function LancamentoDialog({
       setCostCenterId(transactionToEdit.cost_center_id || "none");
       setSupplierId(transactionToEdit.supplier_id || "none");
       setPaymentMethodId(transactionToEdit.payment_method_id || "none");
+      setPixKey(transactionToEdit.pix_key || transactionToEdit.supplier?.pix_key || "");
       setNotes(transactionToEdit.notes || "");
       setDocumentUrl(transactionToEdit.document_url || "");
       setRecorrenciaType("unica");
@@ -142,6 +144,7 @@ export function LancamentoDialog({
       setCostCenterId("none");
       setSupplierId("none");
       setPaymentMethodId("none");
+      setPixKey("");
       setNotes("");
       setDocumentUrl("");
       setRecorrenciaType("unica");
@@ -191,6 +194,7 @@ export function LancamentoDialog({
           supplier_id: supplierId !== "none" ? supplierId : null,
           supplier_name: selectedSupplier ? selectedSupplier.name : null,
           payment_method_id: paymentMethodId !== "none" ? paymentMethodId : null,
+          pix_key: pixKey.trim() || null,
           notes: notes.trim() || null,
           document_url: documentUrl.trim() || null,
         });
@@ -209,6 +213,7 @@ export function LancamentoDialog({
           supplier_id: supplierId !== "none" ? supplierId : null,
           supplier_name: selectedSupplier ? selectedSupplier.name : null,
           payment_method_id: paymentMethodId !== "none" ? paymentMethodId : null,
+          pix_key: pixKey.trim() || null,
           notes: notes.trim() || null,
           document_url: documentUrl.trim() || null,
           is_recurring: recorrenciaType !== "unica",
@@ -562,6 +567,46 @@ export function LancamentoDialog({
                   onChange={(e) => setDocumentUrl(e.target.value)}
                 />
               </div>
+            </div>
+
+            {/* Chave PIX para Pagamento */}
+            <div className="space-y-1.5 rounded-lg border border-emerald-500/25 bg-emerald-50/30 dark:bg-emerald-950/20 p-3">
+              <div className="flex items-center justify-between">
+                <Label
+                  htmlFor="tx-pix-key"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300"
+                >
+                  <CreditCard className="h-4 w-4 text-emerald-600" />
+                  Chave PIX para Pagamento
+                </Label>
+                {supplierId !== "none" &&
+                  (() => {
+                    const sup = suppliers.find((s) => s.id === supplierId);
+                    if (sup?.pix_key && sup.pix_key !== pixKey) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setPixKey(sup.pix_key || "")}
+                          className="text-[11px] text-emerald-700 dark:text-emerald-300 hover:underline font-semibold"
+                        >
+                          Usar PIX do fornecedor ({sup.pix_key.slice(0, 14)}...)
+                        </button>
+                      );
+                    }
+                    return null;
+                  })()}
+              </div>
+              <Input
+                id="tx-pix-key"
+                value={pixKey}
+                onChange={(e) => setPixKey(e.target.value)}
+                placeholder="Cole a chave PIX (CNPJ, CPF, Celular, E-mail ou Aleatória)..."
+                className="h-8.5 font-mono text-xs bg-background"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Permite copiar a chave PIX em 1 toque/clique no computador ou celular para pagar no
+                banco.
+              </p>
             </div>
 
             {/* Recorrência e Parcelamento (Apenas na Criação) */}

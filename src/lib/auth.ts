@@ -471,3 +471,11 @@ export async function deleteUserProfile(userId: string) {
   const userRef = doc(db, "users", userId);
   await deleteDoc(userRef);
 }
+
+export function useUsersList() {
+  return useQuery({
+    queryKey: ["users_list"],
+    queryFn: fetchUsersList,
+    staleTime: 1000 * 60 * 5,
+  });
+}
