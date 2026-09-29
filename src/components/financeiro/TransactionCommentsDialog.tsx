@@ -125,6 +125,27 @@ export function TransactionCommentsDialog({
     const mentionMatches = cleanText.match(/@([\wÀ-ÿ-]+)/g) || [];
     const mentions = mentionMatches.map((m) => m.replace("@", "").trim());
 
+    // Resolve os IDs dos usuários correspondentes às menções
+    const mentionedUserIds: string[] = [];
+    mentions.forEach((mention) => {
+      const match = approvedUsers.find((u) => {
+        const name = (u.full_name || "").toLowerCase();
+        const email = (u.email || "").toLowerCase();
+        const emailPrefix = (u.email?.split("@")[0] || "").toLowerCase();
+        const target = mention.toLowerCase();
+        return (
+          name === target ||
+          name.includes(target) ||
+          email === target ||
+          emailPrefix === target ||
+          u.id === mention
+        );
+      });
+      if (match && match.id && !mentionedUserIds.includes(match.id)) {
+        mentionedUserIds.push(match.id);
+      }
+    });
+
     const currentUserId = user.userId || (user as { uid?: string }).uid || "usuario";
     const currentUserName = user.fullName || user.email?.split("@")[0] || "Usuário";
     const currentUserEmail = user.email || null;
@@ -134,6 +155,7 @@ export function TransactionCommentsDialog({
         transactionId: transaction.id,
         text: cleanText,
         mentions,
+        mentionedUserIds,
         user: {
           id: currentUserId,
           name: currentUserName,

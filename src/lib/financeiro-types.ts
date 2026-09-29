@@ -35,6 +35,8 @@ export interface TransactionComment {
   user_email?: string | null;
   text: string;
   mentions?: string[]; // IDs ou nomes de usuários mencionados (ex: ['Wesley', 'wesleyjunio197@gmail.com'])
+  mentioned_user_ids?: string[]; // IDs diretos dos usuários mencionados
+  read_by?: string[]; // IDs dos usuários que já leram esta menção
   created_at: string;
 }
 

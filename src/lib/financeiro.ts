@@ -895,11 +895,13 @@ export function useAddTransactionComment() {
       transactionId,
       text,
       mentions,
+      mentionedUserIds,
       user,
     }: {
       transactionId: string;
       text: string;
       mentions?: string[];
+      mentionedUserIds?: string[];
       user?: { id?: string; name?: string; email?: string | null };
     }) => {
       const transRef = doc(db, "financial_transactions", transactionId);
@@ -917,6 +919,12 @@ export function useAddTransactionComment() {
         text: (c && typeof c.text === "string" ? c.text : "") || "",
         mentions: Array.isArray(c?.mentions)
           ? c.mentions.filter((m: unknown): m is string => typeof m === "string")
+          : [],
+        mentioned_user_ids: Array.isArray(c?.mentioned_user_ids)
+          ? c.mentioned_user_ids.filter((m: unknown): m is string => typeof m === "string")
+          : [],
+        read_by: Array.isArray(c?.read_by)
+          ? c.read_by.filter((r: unknown): r is string => typeof r === "string")
           : [],
         created_at:
           (c && typeof c.created_at === "string" ? c.created_at : "") || new Date().toISOString(),
@@ -943,6 +951,12 @@ export function useAddTransactionComment() {
         ? mentions.filter((m): m is string => typeof m === "string" && m.trim().length > 0)
         : [];
 
+      const cleanMentionedUserIds = Array.isArray(mentionedUserIds)
+        ? mentionedUserIds.filter(
+            (id): id is string => typeof id === "string" && id.trim().length > 0,
+          )
+        : [];
+
       const newComment: TransactionComment = {
         id: crypto.randomUUID(),
         user_id: resolvedUserId,
@@ -950,6 +964,8 @@ export function useAddTransactionComment() {
         user_email: resolvedEmail,
         text: text.trim(),
         mentions: cleanMentions,
+        mentioned_user_ids: cleanMentionedUserIds,
+        read_by: [],
         created_at: new Date().toISOString(),
       };
 
@@ -958,6 +974,61 @@ export function useAddTransactionComment() {
         updated_at: serverTimestamp(),
       });
       return newComment;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** Hook para marcar menção como lida */
+export function useMarkMentionAsRead() {
+  const invalidate = useInvalidateFinancial();
+  return useMutation({
+    mutationFn: async ({
+      transactionId,
+      commentId,
+      userId,
+    }: {
+      transactionId: string;
+      commentId?: string;
+      userId: string;
+    }) => {
+      // 1. Marca imediatamente no localStorage para resposta instantânea
+      try {
+        const key = `read_mentions_${userId}`;
+        const stored: string[] = JSON.parse(localStorage.getItem(key) || "[]");
+        if (commentId && !stored.includes(commentId)) {
+          stored.push(commentId);
+          localStorage.setItem(key, JSON.stringify(stored));
+        }
+      } catch {
+        // ignore
+      }
+
+      // 2. Tenta sincronizar com o Firestore no documento da transação
+      try {
+        const transRef = doc(db, "financial_transactions", transactionId);
+        const snap = await getDoc(transRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          const comments = Array.isArray(data["comments"]) ? data["comments"] : [];
+          let changed = false;
+          const updatedComments = comments.map((c) => {
+            if (!commentId || c.id === commentId) {
+              const currentReadBy = Array.isArray(c.read_by) ? c.read_by : [];
+              if (!currentReadBy.includes(userId)) {
+                changed = true;
+                return { ...c, read_by: [...currentReadBy, userId] };
+              }
+            }
+            return c;
+          });
+          if (changed) {
+            await updateDoc(transRef, { comments: updatedComments });
+          }
+        }
+      } catch (err) {
+        console.warn("Could not sync mention read status to Firestore:", err);
+      }
     },
     onSuccess: invalidate,
   });

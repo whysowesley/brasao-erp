@@ -94,6 +94,7 @@ import { TransactionPixPopover } from "./TransactionPixPopover";
 import { TransactionObservationDialog } from "./TransactionObservationDialog";
 import { TransactionCommentsDialog } from "./TransactionCommentsDialog";
 import { BankBalancesBar } from "./BankBalancesBar";
+import { MentionsNotificationPopup } from "./MentionsNotificationPopup";
 
 function formatCurrency(val: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -133,9 +134,9 @@ export type QuadrantSortOption =
   | "pendentes_primeiro";
 
 export const SORT_LABELS: Record<QuadrantSortOption, string> = {
-  manual: "Manual (Arrastar ou ▲/▼)",
-  valor_desc: "Maior Valor (R$ ↓)",
-  valor_asc: "Menor Valor (R$ ↑)",
+  manual: "Manual (Livre)",
+  valor_desc: "Maior Valor (R$)",
+  valor_asc: "Menor Valor (R$)",
   alfabetico_asc: "Fornecedor (A-Z)",
   alfabetico_desc: "Fornecedor (Z-A)",
   vencimento: "Data de Vencimento",
@@ -734,6 +735,8 @@ export function QuadrantesVencimentoView({
               </span>
             </div>
 
+            <MentionsNotificationPopup variant="trigger" />
+
             {canWrite && (
               <Button
                 size="sm"
@@ -956,7 +959,7 @@ export function QuadrantesVencimentoView({
                           }`}
                           title="Ordem manual livre: arraste ou use os botões ▲/▼ em cada linha"
                         >
-                          ↕️ Manual
+                          Manual
                         </button>
                         <button
                           type="button"
@@ -970,7 +973,7 @@ export function QuadrantesVencimentoView({
                           }`}
                           title="Ordenar do maior valor para o menor"
                         >
-                          💰 Maior R$
+                          Maior Valor
                         </button>
                         <button
                           type="button"
@@ -984,7 +987,7 @@ export function QuadrantesVencimentoView({
                           }`}
                           title="Ordenar alfabeticamente pelo fornecedor (A-Z)"
                         >
-                          🔤 A-Z
+                          Fornecedor A-Z
                         </button>
                         <button
                           type="button"
@@ -998,7 +1001,7 @@ export function QuadrantesVencimentoView({
                           }`}
                           title="Ordenar por data de vencimento"
                         >
-                          📅 Vencimento
+                          Vencimento
                         </button>
                       </div>
 
@@ -1017,20 +1020,18 @@ export function QuadrantesVencimentoView({
                             toast.info(`Ordem alterada: ${SORT_LABELS[val as QuadrantSortOption]}`);
                           }}
                         >
-                          <SelectTrigger className="h-6.5 text-[11px] px-2 py-0 w-[190px] bg-background border-border/70 font-medium">
+                          <SelectTrigger className="h-6.5 text-[11px] px-2 py-0 w-[175px] bg-background border-border/70 font-medium">
                             <SelectValue placeholder="Ordenar quadrante" />
                           </SelectTrigger>
                           <SelectContent align="end">
-                            <SelectItem value="manual">↕️ Manual (Arrastar ou ▲/▼)</SelectItem>
-                            <SelectItem value="valor_desc">💰 Maior Valor (R$ ↓)</SelectItem>
-                            <SelectItem value="valor_asc">💵 Menor Valor (R$ ↑)</SelectItem>
-                            <SelectItem value="alfabetico_asc">🔤 Fornecedor (A-Z)</SelectItem>
-                            <SelectItem value="alfabetico_desc">🔠 Fornecedor (Z-A)</SelectItem>
-                            <SelectItem value="vencimento">📅 Data de Vencimento</SelectItem>
-                            <SelectItem value="emissao">📄 Data de Emissão</SelectItem>
-                            <SelectItem value="pendentes_primeiro">
-                              ⏳ Pendentes Primeiro
-                            </SelectItem>
+                            <SelectItem value="manual">Manual (Livre / Arrastar)</SelectItem>
+                            <SelectItem value="valor_desc">Maior Valor (R$)</SelectItem>
+                            <SelectItem value="valor_asc">Menor Valor (R$)</SelectItem>
+                            <SelectItem value="alfabetico_asc">Fornecedor (A-Z)</SelectItem>
+                            <SelectItem value="alfabetico_desc">Fornecedor (Z-A)</SelectItem>
+                            <SelectItem value="vencimento">Data de Vencimento</SelectItem>
+                            <SelectItem value="emissao">Data de Emissão</SelectItem>
+                            <SelectItem value="pendentes_primeiro">Pendentes Primeiro</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

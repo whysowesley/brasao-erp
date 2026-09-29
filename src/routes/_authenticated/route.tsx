@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { AppSidebar } from "@/components/AppSidebar";
 import { BrasaoLogo } from "@/components/BrasaoLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { MentionsNotificationPopup } from "@/components/financeiro/MentionsNotificationPopup";
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { getCurrentAuthUser, signOutAuth, useAuth, useCanWrite, useMe } from "@/lib/auth";
@@ -150,6 +151,7 @@ function AuthenticatedLayout() {
               </p>
             </div>
             <div className="ml-auto flex items-center gap-2">
+              <MentionsNotificationPopup variant="all" />
               <ThemeToggle />
             </div>
           </header>

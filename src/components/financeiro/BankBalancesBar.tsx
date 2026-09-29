@@ -46,11 +46,11 @@ export function BankBalancesBar({
   const [sicrediInput, setSicrediInput] = useState("");
 
   useEffect(() => {
-    if (balances) {
-      setJamInput(String(balances.jam || ""));
-      setGbmInput(String(balances.gbm || ""));
-      setTonInput(String(balances.ton || ""));
-      setSicrediInput(String(balances.sicredi || ""));
+    if (balances && isOpen) {
+      setJamInput(balances.jam > 0 ? String(balances.jam) : "");
+      setGbmInput(balances.gbm > 0 ? String(balances.gbm) : "");
+      setTonInput(balances.ton > 0 ? String(balances.ton) : "");
+      setSicrediInput(balances.sicredi > 0 ? String(balances.sicredi) : "");
     }
   }, [balances, isOpen]);
 
@@ -62,6 +62,7 @@ export function BankBalancesBar({
     }
 
     const parseVal = (str: string) => {
+      if (!str || !str.trim()) return 0;
       const clean = str.replace(/[^\d,-]/g, "").replace(",", ".");
       const num = parseFloat(clean);
       return isNaN(num) ? 0 : num;
@@ -168,7 +169,7 @@ export function BankBalancesBar({
 
           <div className="grid grid-cols-2 gap-3">
             {/* JAM */}
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label
                 htmlFor="saldo-jam"
                 className="text-xs font-semibold flex items-center justify-between"
@@ -176,8 +177,8 @@ export function BankBalancesBar({
                 <span>JAM</span>
                 <span className="text-[10px] text-muted-foreground font-normal">Conta 1</span>
               </Label>
-              <div className="relative">
-                <span className="absolute left-2.5 top-2 text-xs text-muted-foreground font-mono">
+              <div className="flex items-center rounded-md border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-xs h-8">
+                <span className="bg-muted/70 px-2.5 h-full flex items-center justify-center border-r border-input text-xs font-semibold text-muted-foreground select-none shrink-0 font-mono">
                   R$
                 </span>
                 <Input
@@ -186,14 +187,14 @@ export function BankBalancesBar({
                   value={jamInput}
                   onChange={(e) => setJamInput(e.target.value)}
                   placeholder="0,00"
-                  className="pl-8 h-8 text-xs font-mono font-semibold"
+                  className="border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 h-full px-2.5 text-xs font-mono font-semibold"
                   autoFocus
                 />
               </div>
             </div>
 
             {/* GBM */}
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label
                 htmlFor="saldo-gbm"
                 className="text-xs font-semibold flex items-center justify-between"
@@ -201,8 +202,8 @@ export function BankBalancesBar({
                 <span>GBM</span>
                 <span className="text-[10px] text-muted-foreground font-normal">Conta 2</span>
               </Label>
-              <div className="relative">
-                <span className="absolute left-2.5 top-2 text-xs text-muted-foreground font-mono">
+              <div className="flex items-center rounded-md border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-xs h-8">
+                <span className="bg-muted/70 px-2.5 h-full flex items-center justify-center border-r border-input text-xs font-semibold text-muted-foreground select-none shrink-0 font-mono">
                   R$
                 </span>
                 <Input
@@ -211,13 +212,13 @@ export function BankBalancesBar({
                   value={gbmInput}
                   onChange={(e) => setGbmInput(e.target.value)}
                   placeholder="0,00"
-                  className="pl-8 h-8 text-xs font-mono font-semibold"
+                  className="border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 h-full px-2.5 text-xs font-mono font-semibold"
                 />
               </div>
             </div>
 
             {/* TON */}
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label
                 htmlFor="saldo-ton"
                 className="text-xs font-semibold flex items-center justify-between"
@@ -225,8 +226,8 @@ export function BankBalancesBar({
                 <span>TON</span>
                 <span className="text-[10px] text-muted-foreground font-normal">Conta 3</span>
               </Label>
-              <div className="relative">
-                <span className="absolute left-2.5 top-2 text-xs text-muted-foreground font-mono">
+              <div className="flex items-center rounded-md border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-xs h-8">
+                <span className="bg-muted/70 px-2.5 h-full flex items-center justify-center border-r border-input text-xs font-semibold text-muted-foreground select-none shrink-0 font-mono">
                   R$
                 </span>
                 <Input
@@ -235,13 +236,13 @@ export function BankBalancesBar({
                   value={tonInput}
                   onChange={(e) => setTonInput(e.target.value)}
                   placeholder="0,00"
-                  className="pl-8 h-8 text-xs font-mono font-semibold"
+                  className="border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 h-full px-2.5 text-xs font-mono font-semibold"
                 />
               </div>
             </div>
 
             {/* SICREDI */}
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label
                 htmlFor="saldo-sicredi"
                 className="text-xs font-semibold flex items-center justify-between"
@@ -249,8 +250,8 @@ export function BankBalancesBar({
                 <span>SICREDI</span>
                 <span className="text-[10px] text-muted-foreground font-normal">Conta 4</span>
               </Label>
-              <div className="relative">
-                <span className="absolute left-2.5 top-2 text-xs text-muted-foreground font-mono">
+              <div className="flex items-center rounded-md border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all shadow-xs h-8">
+                <span className="bg-muted/70 px-2.5 h-full flex items-center justify-center border-r border-input text-xs font-semibold text-muted-foreground select-none shrink-0 font-mono">
                   R$
                 </span>
                 <Input
@@ -259,7 +260,7 @@ export function BankBalancesBar({
                   value={sicrediInput}
                   onChange={(e) => setSicrediInput(e.target.value)}
                   placeholder="0,00"
-                  className="pl-8 h-8 text-xs font-mono font-semibold"
+                  className="border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 h-full px-2.5 text-xs font-mono font-semibold"
                 />
               </div>
             </div>
