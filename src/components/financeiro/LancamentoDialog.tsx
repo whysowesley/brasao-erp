@@ -48,6 +48,7 @@ import {
 import { useSuppliers } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import type { FinancialTransaction, TipoRecorrencia, TipoTransacao } from "@/lib/financeiro-types";
+import { PaymentMethodSelect } from "./PaymentMethodSelect";
 
 interface LancamentoDialogProps {
   open: boolean;
@@ -543,19 +544,12 @@ export function LancamentoDialog({
                   <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
                   Forma de Pagamento (Prevista/Padrão)
                 </Label>
-                <Select value={paymentMethodId} onValueChange={setPaymentMethodId}>
-                  <SelectTrigger id="tx-payment-method-select">
-                    <SelectValue placeholder="Selecione a forma de pagamento..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">A definir</SelectItem>
-                    {paymentMethods.map((pm) => (
-                      <SelectItem key={pm.id} value={pm.id}>
-                        {pm.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <PaymentMethodSelect
+                  id="tx-payment-method-select"
+                  value={paymentMethodId}
+                  onValueChange={setPaymentMethodId}
+                  canWrite={canWrite && isApproved}
+                />
               </div>
 
               <div className="space-y-1.5">

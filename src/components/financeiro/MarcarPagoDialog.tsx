@@ -41,6 +41,7 @@ import {
 import { useSuppliers } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import type { FinancialTransaction } from "@/lib/financeiro-types";
+import { PaymentMethodSelect } from "./PaymentMethodSelect";
 
 interface MarcarPagoDialogProps {
   open: boolean;
@@ -259,19 +260,13 @@ export function MarcarPagoDialog({ open, onOpenChange, transaction }: MarcarPago
                 <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
                 Forma de Pagamento Utilizada
               </Label>
-              <Select value={paymentMethodId} onValueChange={setPaymentMethodId}>
-                <SelectTrigger id="pay-method-select">
-                  <SelectValue placeholder="Selecione a forma..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Não informada / Outra</SelectItem>
-                  {paymentMethods.map((pm) => (
-                    <SelectItem key={pm.id} value={pm.id}>
-                      {pm.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <PaymentMethodSelect
+                id="pay-method-select"
+                value={paymentMethodId}
+                onValueChange={setPaymentMethodId}
+                placeholder="Selecione a forma..."
+                canWrite={canWrite && isApproved}
+              />
             </div>
 
             {/* Observações da Baixa */}
