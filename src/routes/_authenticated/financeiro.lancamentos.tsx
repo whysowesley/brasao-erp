@@ -677,21 +677,32 @@ function LancamentosPage() {
 
                       {/* Categoria */}
                       <TableCell className="text-xs">
-                        {t.category ? (
-                          <span className="font-medium text-foreground">{t.category.name}</span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
+                        {(() => {
+                          const catName =
+                            t.category?.name ||
+                            categories.find((c) => c.id === t.category_id)?.name ||
+                            (t as unknown as { category_name?: string }).category_name;
+                          return catName ? (
+                            <span className="font-medium text-foreground">{catName}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          );
+                        })()}
                       </TableCell>
 
                       {/* Centro de Custo */}
-                      <TableCell className="text-xs text-muted-foreground">
-                        {t.cost_center?.name || "—"}
+                      <TableCell className="text-xs text-muted-foreground font-medium">
+                        {t.cost_center?.name ||
+                          costCenters.find((c) => c.id === t.cost_center_id)?.name ||
+                          (t as unknown as { cost_center_name?: string }).cost_center_name ||
+                          "—"}
                       </TableCell>
 
                       {/* Fornecedor */}
                       <TableCell className="text-xs text-muted-foreground">
-                        {t.supplier?.name || t.supplier_name || "—"}
+                        {(suppliers.find((s) => s.id === t.supplier_id) || t.supplier)?.name ||
+                          t.supplier_name ||
+                          "—"}
                       </TableCell>
 
                       {/* Valor */}
@@ -805,7 +816,10 @@ function LancamentosPage() {
       {/* Modais Compartilhados */}
       <LancamentoDialog
         open={openLancamento}
-        onOpenChange={setOpenLancamento}
+        onOpenChange={(open) => {
+          setOpenLancamento(open);
+          if (!open) setEditingTransaction(null);
+        }}
         transactionToEdit={editingTransaction}
       />
 

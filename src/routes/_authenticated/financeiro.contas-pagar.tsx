@@ -603,11 +603,15 @@ function ContasPagarPage() {
                             </TableCell>
 
                             <TableCell className="text-xs text-muted-foreground">
-                              {t.category?.name || "—"}
+                              {t.category?.name ||
+                                (t as unknown as { category_name?: string }).category_name ||
+                                "—"}
                             </TableCell>
 
                             <TableCell className="text-xs text-muted-foreground">
-                              {t.cost_center?.name || "—"}
+                              {t.cost_center?.name ||
+                                (t as unknown as { cost_center_name?: string }).cost_center_name ||
+                                "—"}
                             </TableCell>
 
                             <TableCell className="text-right font-semibold text-rose-600 dark:text-rose-400">
@@ -698,7 +702,10 @@ function ContasPagarPage() {
       {/* Modais */}
       <LancamentoDialog
         open={openLancamento}
-        onOpenChange={setOpenLancamento}
+        onOpenChange={(open) => {
+          setOpenLancamento(open);
+          if (!open) setEditingTransaction(null);
+        }}
         transactionToEdit={editingTransaction}
         defaultType="despesa"
       />

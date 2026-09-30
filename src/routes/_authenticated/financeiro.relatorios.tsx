@@ -841,10 +841,14 @@ function RelatoriosPage() {
                           </span>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {t.category?.name || "—"}
+                          {t.category?.name ||
+                            (t as unknown as { category_name?: string }).category_name ||
+                            "—"}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {t.cost_center?.name || "—"}
+                          {t.cost_center?.name ||
+                            (t as unknown as { cost_center_name?: string }).cost_center_name ||
+                            "—"}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {t.supplier?.name || t.supplier_name || "—"}

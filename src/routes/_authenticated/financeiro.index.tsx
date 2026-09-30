@@ -491,6 +491,7 @@ function FinanceiroDashboardPage() {
                   <TableHead>Descrição</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead>Categoria</TableHead>
+                  <TableHead>Centro de Custo</TableHead>
                   <TableHead>Fornecedor</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead className="w-28 text-center">Status</TableHead>
@@ -501,7 +502,7 @@ function FinanceiroDashboardPage() {
                 {ultimosLancamentos.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={canWrite ? 8 : 7}
+                      colSpan={canWrite ? 9 : 8}
                       className="h-24 text-center text-sm text-muted-foreground"
                     >
                       Nenhum lançamento registrado no momento.
@@ -548,7 +549,14 @@ function FinanceiroDashboardPage() {
                           </span>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {t.category?.name || "—"}
+                          {t.category?.name ||
+                            (t as unknown as { category_name?: string }).category_name ||
+                            "—"}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground font-medium">
+                          {t.cost_center?.name ||
+                            (t as unknown as { cost_center_name?: string }).cost_center_name ||
+                            "—"}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {t.supplier?.name || t.supplier_name || "—"}
@@ -622,7 +630,10 @@ function FinanceiroDashboardPage() {
       {/* Modais Compartilhados */}
       <LancamentoDialog
         open={openLancamento}
-        onOpenChange={setOpenLancamento}
+        onOpenChange={(open) => {
+          setOpenLancamento(open);
+          if (!open) setEditingTransaction(null);
+        }}
         transactionToEdit={editingTransaction}
       />
 

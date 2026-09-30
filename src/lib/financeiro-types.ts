@@ -125,8 +125,11 @@ export interface UpdateFinancialTransactionInput {
   paid_amount?: number | null | undefined;
   status?: StatusTransacao | undefined;
   category_id?: string | null | undefined;
+  category_name?: string | null | undefined;
   cost_center_id?: string | null | undefined;
+  cost_center_name?: string | null | undefined;
   payment_method_id?: string | null | undefined;
+  payment_method_name?: string | null | undefined;
   supplier_id?: string | null | undefined;
   supplier_name?: string | null | undefined;
   pix_key?: string | null | undefined;

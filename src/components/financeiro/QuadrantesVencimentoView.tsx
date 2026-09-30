@@ -357,16 +357,41 @@ export function QuadrantesVencimentoView({
         if (!matchesAvulsoIsa(tx, costCenters, financialCategories)) return;
       } else if (scopeFilter === "fornecedores") {
         const isSupplier =
-          (tx.supplier_id != null && tx.supplier_id !== "") ||
+          (tx.supplier_id != null && tx.supplier_id !== "" && tx.supplier_id !== "none") ||
           (tx.supplier_name != null && tx.supplier_name.trim() !== "") ||
+          (tx.supplier?.name != null && tx.supplier.name.trim() !== "") ||
           (tx.cost_center?.name || "").toLowerCase().includes("fornecedor");
         if (!isSupplier) return;
       } else if (scopeFilter.startsWith("cc_")) {
         const targetCcId = scopeFilter.replace("cc_", "");
-        if (tx.cost_center_id !== targetCcId) return;
+        const targetCc = costCenters.find((c) => c.id === targetCcId);
+        const targetName = targetCc?.name?.toLowerCase().trim() || "";
+        const txCcName = (
+          tx.cost_center?.name ||
+          costCenters.find((c) => c.id === tx.cost_center_id)?.name ||
+          (tx as unknown as { cost_center_name?: string }).cost_center_name ||
+          ""
+        )
+          .toLowerCase()
+          .trim();
+        const matchesId = tx.cost_center_id === targetCcId || tx.cost_center?.id === targetCcId;
+        const matchesName = targetName !== "" && txCcName === targetName;
+        if (!matchesId && !matchesName) return;
       } else if (scopeFilter.startsWith("cat_")) {
         const targetCatId = scopeFilter.replace("cat_", "");
-        if (tx.category_id !== targetCatId) return;
+        const targetCat = financialCategories.find((c) => c.id === targetCatId);
+        const targetName = targetCat?.name?.toLowerCase().trim() || "";
+        const txCatName = (
+          tx.category?.name ||
+          financialCategories.find((c) => c.id === tx.category_id)?.name ||
+          (tx as unknown as { category_name?: string }).category_name ||
+          ""
+        )
+          .toLowerCase()
+          .trim();
+        const matchesId = tx.category_id === targetCatId || tx.category?.id === targetCatId;
+        const matchesName = targetName !== "" && txCatName === targetName;
+        if (!matchesId && !matchesName) return;
       }
 
       if (map.has(targetDate)) {
@@ -1484,12 +1509,19 @@ export function QuadrantesVencimentoView({
                                       {tx.description}
                                     </span>
                                   )}
-                                  {tx.cost_center?.name && (
-                                    <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.2 rounded w-fit mt-0.5 font-medium">
-                                      <Layers className="h-2.5 w-2.5 text-primary" />
-                                      {tx.cost_center.name}
-                                    </span>
-                                  )}
+                                  {(() => {
+                                    const ccName =
+                                      tx.cost_center?.name ||
+                                      costCenters.find((c) => c.id === tx.cost_center_id)?.name ||
+                                      (tx as unknown as { cost_center_name?: string })
+                                        .cost_center_name;
+                                    return ccName ? (
+                                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.2 rounded w-fit mt-0.5 font-medium">
+                                        <Layers className="h-2.5 w-2.5 text-primary" />
+                                        {ccName}
+                                      </span>
+                                    ) : null;
+                                  })()}
                                 </div>
                               </td>
 
@@ -1737,7 +1769,10 @@ export function QuadrantesVencimentoView({
       {/* Modal de Lançamento / Edição */}
       <LancamentoDialog
         open={lancamentoDialogOpen}
-        onOpenChange={setLancamentoDialogOpen}
+        onOpenChange={(open) => {
+          setLancamentoDialogOpen(open);
+          if (!open) setEditingTransaction(null);
+        }}
         transactionToEdit={editingTransaction}
         defaultType="despesa"
       />

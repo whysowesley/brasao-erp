@@ -129,8 +129,57 @@ export function useFinancialTransactions(filters?: FinancialFilters) {
   return useQuery({
     queryKey: ["financial_transactions", filters],
     queryFn: async (): Promise<FinancialTransaction[]> => {
-      const snap = await getDocs(collection(db, "financial_transactions"));
+      // Busca simultânea de transações e coleções de referência para garantir nomes sempre atualizados após edições
+      const [snap, ccSnap, catSnap, pmSnap, supSnap] = await Promise.all([
+        getDocs(collection(db, "financial_transactions")),
+        getDocs(collection(db, "cost_centers")),
+        getDocs(collection(db, "financial_categories")),
+        getDocs(collection(db, "payment_methods")),
+        getDocs(collection(db, "suppliers")),
+      ]);
       const today = getTodayString();
+
+      const costCentersMap = new Map<string, CostCenter>();
+      ccSnap.docs.forEach((d) => {
+        const cdata = d.data();
+        costCentersMap.set(d.id, {
+          id: d.id,
+          name: (cdata["name"] as string) || "",
+          description: (cdata["description"] as string) || null,
+        });
+      });
+
+      const categoriesMap = new Map<string, FinancialCategory>();
+      catSnap.docs.forEach((d) => {
+        const cdata = d.data();
+        categoriesMap.set(d.id, {
+          id: d.id,
+          name: (cdata["name"] as string) || "",
+          type: (cdata["type"] || "despesa") as TipoTransacao,
+          color: (cdata["color"] as string) || null,
+          icon: (cdata["icon"] as string) || null,
+        });
+      });
+
+      const paymentMethodsMap = new Map<string, PaymentMethod>();
+      pmSnap.docs.forEach((d) => {
+        const pdata = d.data();
+        paymentMethodsMap.set(d.id, {
+          id: d.id,
+          name: (pdata["name"] as string) || "",
+          type: (pdata["type"] || "outros") as string,
+          active: pdata["active"] !== false,
+        });
+      });
+
+      const suppliersMap = new Map<string, { id: string; name: string }>();
+      supSnap.docs.forEach((d) => {
+        const sdata = d.data();
+        suppliersMap.set(d.id, {
+          id: d.id,
+          name: (sdata["name"] as string) || "",
+        });
+      });
 
       let transactions: FinancialTransaction[] = snap.docs.map((d) => {
         const data = d.data() as Record<string, unknown>;
@@ -140,6 +189,76 @@ export function useFinancialTransactions(filters?: FinancialFilters) {
         const updatedDate = (data["updated_at"] as { toDate?: () => Date })?.toDate
           ? (data["updated_at"] as { toDate: () => Date }).toDate().toISOString()
           : (data["updated_at"] as string) || createdDate;
+
+        const ccId =
+          (data["cost_center_id"] as string) ||
+          ((data["cost_center"] as CostCenter)?.id as string) ||
+          null;
+        const ccNameDirect =
+          (data["cost_center_name"] as string) ||
+          ((data["cost_center"] as CostCenter)?.name as string) ||
+          null;
+        const resolvedCostCenter: CostCenter | null =
+          (ccId ? costCentersMap.get(ccId) : null) ||
+          (data["cost_center"] as CostCenter | null) ||
+          (ccNameDirect
+            ? {
+                id: ccId || "",
+                name: ccNameDirect,
+                description: null,
+              }
+            : null);
+
+        const catId =
+          (data["category_id"] as string) ||
+          ((data["category"] as FinancialCategory)?.id as string) ||
+          null;
+        const catNameDirect =
+          (data["category_name"] as string) ||
+          ((data["category"] as FinancialCategory)?.name as string) ||
+          null;
+        const resolvedCategory: FinancialCategory | null =
+          (catId ? categoriesMap.get(catId) : null) ||
+          (data["category"] as FinancialCategory | null) ||
+          (catNameDirect
+            ? {
+                id: catId || "",
+                name: catNameDirect,
+                type: (data["type"] || "despesa") as TipoTransacao,
+                color: null,
+                icon: null,
+              }
+            : null);
+
+        const pmId = (data["payment_method_id"] as string) || null;
+        const resolvedPaymentMethod: PaymentMethod | null = pmId
+          ? paymentMethodsMap.get(pmId) ||
+            ((data["payment_method"] as PaymentMethod)?.id === pmId
+              ? (data["payment_method"] as PaymentMethod)
+              : null) ||
+            (data["payment_method_name"]
+              ? {
+                  id: pmId,
+                  name: data["payment_method_name"] as string,
+                  type: "outros",
+                  active: true,
+                }
+              : null)
+          : null;
+
+        const supId = (data["supplier_id"] as string) || null;
+        const resolvedSupplier = supId
+          ? suppliersMap.get(supId) ||
+            ((data["supplier"] as { id: string; name: string })?.id === supId
+              ? (data["supplier"] as { id: string; name: string })
+              : null) ||
+            (data["supplier_name"]
+              ? {
+                  id: supId,
+                  name: data["supplier_name"] as string,
+                }
+              : null)
+          : null;
 
         return {
           id: d.id,
@@ -157,11 +276,11 @@ export function useFinancialTransactions(filters?: FinancialFilters) {
               ? Number(data["paid_amount"])
               : null,
           status: (data["status"] || "pendente") as StatusTransacao,
-          category_id: (data["category_id"] as string) || null,
-          cost_center_id: (data["cost_center_id"] as string) || null,
-          payment_method_id: (data["payment_method_id"] as string) || null,
-          supplier_id: (data["supplier_id"] as string) || null,
-          supplier_name: (data["supplier_name"] as string) || null,
+          category_id: catId,
+          cost_center_id: ccId,
+          payment_method_id: pmId,
+          supplier_id: supId,
+          supplier_name: resolvedSupplier?.name || (data["supplier_name"] as string) || null,
           pix_key:
             (data["pix_key"] as string) ||
             (data["supplier"] as { pix_key?: string })?.pix_key ||
@@ -178,45 +297,15 @@ export function useFinancialTransactions(filters?: FinancialFilters) {
           created_by: (data["created_by"] as string) || null,
           created_at: createdDate,
           updated_at: updatedDate,
-          category:
-            (data["category"] as FinancialCategory | null | undefined) ||
-            (data["category_name"]
-              ? {
-                  id: (data["category_id"] as string) || "",
-                  name: data["category_name"] as string,
-                  type: (data["type"] || "despesa") as TipoTransacao,
-                  color: null,
-                  icon: null,
-                  created_at: createdDate,
-                }
-              : null),
-          cost_center:
-            (data["cost_center"] as CostCenter | null | undefined) ||
-            (data["cost_center_name"]
-              ? {
-                  id: (data["cost_center_id"] as string) || "",
-                  name: data["cost_center_name"] as string,
-                  description: null,
-                  created_at: createdDate,
-                }
-              : null),
-          payment_method:
-            (data["payment_method"] as PaymentMethod | null | undefined) ||
-            (data["payment_method_name"]
-              ? {
-                  id: (data["payment_method_id"] as string) || "",
-                  name: data["payment_method_name"] as string,
-                  type: "outros",
-                  active: true,
-                  created_at: createdDate,
-                }
-              : null),
+          category: resolvedCategory,
+          cost_center: resolvedCostCenter,
+          payment_method: resolvedPaymentMethod,
           supplier:
             (data["supplier"] as { id: string; name: string } | null | undefined) ||
-            (data["supplier_name"]
+            (resolvedSupplier
               ? {
-                  id: (data["supplier_id"] as string) || "",
-                  name: data["supplier_name"] as string,
+                  id: resolvedSupplier.id,
+                  name: resolvedSupplier.name,
                   cnpj_cpf: null,
                   pix_key: null,
                   bank_name: null,
@@ -815,12 +904,86 @@ export async function updateFinancialTransaction(
   if (input.payment_date !== undefined) updatePayload["payment_date"] = input.payment_date;
   if (input.paid_amount !== undefined) updatePayload["paid_amount"] = input.paid_amount;
   if (input.status !== undefined) updatePayload["status"] = input.status;
-  if (input.category_id !== undefined) updatePayload["category_id"] = input.category_id;
-  if (input.cost_center_id !== undefined) updatePayload["cost_center_id"] = input.cost_center_id;
-  if (input.payment_method_id !== undefined)
+  if (input.category_id !== undefined) {
+    updatePayload["category_id"] = input.category_id;
+    let catName = input.category_name;
+    if (input.category_id && !catName) {
+      try {
+        const snap = await getDoc(doc(db, "financial_categories", input.category_id));
+        if (snap.exists()) catName = (snap.data()["name"] as string) || null;
+      } catch {
+        // ignore
+      }
+    }
+    updatePayload["category_name"] = catName || null;
+    updatePayload["category"] = catName
+      ? {
+          id: input.category_id,
+          name: catName,
+          type: input.type || "despesa",
+          color: null,
+          icon: null,
+        }
+      : null;
+  }
+
+  if (input.cost_center_id !== undefined) {
+    updatePayload["cost_center_id"] = input.cost_center_id;
+    let ccName = input.cost_center_name;
+    if (input.cost_center_id && !ccName) {
+      try {
+        const snap = await getDoc(doc(db, "cost_centers", input.cost_center_id));
+        if (snap.exists()) ccName = (snap.data()["name"] as string) || null;
+      } catch {
+        // ignore
+      }
+    }
+    updatePayload["cost_center_name"] = ccName || null;
+    updatePayload["cost_center"] = ccName
+      ? {
+          id: input.cost_center_id,
+          name: ccName,
+          description: null,
+        }
+      : null;
+  }
+
+  if (input.payment_method_id !== undefined) {
     updatePayload["payment_method_id"] = input.payment_method_id;
-  if (input.supplier_id !== undefined) updatePayload["supplier_id"] = input.supplier_id;
-  if (input.supplier_name !== undefined) updatePayload["supplier_name"] = input.supplier_name;
+    let pmName = input.payment_method_name;
+    if (input.payment_method_id && !pmName) {
+      try {
+        const snap = await getDoc(doc(db, "payment_methods", input.payment_method_id));
+        if (snap.exists()) pmName = (snap.data()["name"] as string) || null;
+      } catch {
+        // ignore
+      }
+    }
+    updatePayload["payment_method_name"] = pmName || null;
+    updatePayload["payment_method"] = pmName
+      ? {
+          id: input.payment_method_id,
+          name: pmName,
+          type: "outros",
+          active: true,
+        }
+      : null;
+  }
+
+  if (input.supplier_id !== undefined) {
+    updatePayload["supplier_id"] = input.supplier_id;
+    let sName = input.supplier_name;
+    if (input.supplier_id && !sName) {
+      try {
+        const snap = await getDoc(doc(db, "suppliers", input.supplier_id));
+        if (snap.exists()) sName = (snap.data()["name"] as string) || null;
+      } catch {
+        // ignore
+      }
+    }
+    updatePayload["supplier_name"] = sName || null;
+    updatePayload["supplier"] = sName ? { id: input.supplier_id, name: sName } : null;
+  }
   if (input.pix_key !== undefined)
     updatePayload["pix_key"] = input.pix_key ? input.pix_key.trim() : null;
   if (input.notes !== undefined) updatePayload["notes"] = input.notes;
@@ -831,10 +994,83 @@ export async function updateFinancialTransaction(
 }
 
 export function useUpdateFinancialTransaction() {
+  const qc = useQueryClient();
   const invalidate = useInvalidateFinancial();
   return useMutation({
     mutationFn: updateFinancialTransaction,
-    onSuccess: invalidate,
+    onMutate: async (updated) => {
+      await qc.cancelQueries({ queryKey: ["financial_transactions"] });
+      qc.setQueriesData<FinancialTransaction[]>({ queryKey: ["financial_transactions"] }, (old) => {
+        if (!old) return [];
+        return old.map((t) => {
+          if (t.id !== updated.id) return t;
+          const newCostCenterName =
+            updated.cost_center_name !== undefined
+              ? updated.cost_center_name
+              : updated.cost_center_id
+                ? t.cost_center?.name
+                : null;
+          const newCostCenter: CostCenter | null =
+            updated.cost_center_id || newCostCenterName
+              ? {
+                  id: updated.cost_center_id || t.cost_center_id || "",
+                  name: newCostCenterName || t.cost_center?.name || "",
+                  description: null,
+                  created_at: t.cost_center?.created_at || new Date().toISOString(),
+                }
+              : null;
+
+          const newCategoryName =
+            updated.category_name !== undefined
+              ? updated.category_name
+              : updated.category_id
+                ? t.category?.name
+                : null;
+          const newCategory: FinancialCategory | null =
+            updated.category_id || newCategoryName
+              ? {
+                  id: updated.category_id || t.category_id || "",
+                  name: newCategoryName || t.category?.name || "",
+                  type: updated.type || t.type,
+                  color: null,
+                  icon: null,
+                  created_at: t.category?.created_at || new Date().toISOString(),
+                }
+              : null;
+
+          const newSupplierName =
+            updated.supplier_name !== undefined
+              ? updated.supplier_name
+              : updated.supplier_id
+                ? t.supplier?.name
+                : null;
+          const newSupplier =
+            updated.supplier_id || newSupplierName
+              ? {
+                  id: updated.supplier_id || t.supplier_id || "",
+                  name: newSupplierName || t.supplier?.name || "",
+                }
+              : null;
+
+          return {
+            ...t,
+            ...updated,
+            category_id: updated.category_id !== undefined ? updated.category_id : t.category_id,
+            category: updated.category_id !== undefined ? newCategory : t.category,
+            cost_center_id:
+              updated.cost_center_id !== undefined ? updated.cost_center_id : t.cost_center_id,
+            cost_center: updated.cost_center_id !== undefined ? newCostCenter : t.cost_center,
+            supplier_id: updated.supplier_id !== undefined ? updated.supplier_id : t.supplier_id,
+            supplier_name:
+              updated.supplier_name !== undefined ? updated.supplier_name : t.supplier_name,
+            supplier: updated.supplier_id !== undefined ? newSupplier : t.supplier,
+          };
+        });
+      });
+    },
+    onSettled: async () => {
+      await invalidate();
+    },
   });
 }
 

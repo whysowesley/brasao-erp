@@ -125,8 +125,46 @@ export function LancamentoDialog({
         setIssueDate(undefined);
       }
       setCode(transactionToEdit.code ? String(transactionToEdit.code) : "");
-      setCategoryId(transactionToEdit.category_id || "none");
-      setCostCenterId(transactionToEdit.cost_center_id || "none");
+
+      const catMatch =
+        (transactionToEdit.category_id &&
+        categories.some((c) => c.id === transactionToEdit.category_id)
+          ? transactionToEdit.category_id
+          : undefined) ||
+        (transactionToEdit.category?.id &&
+        categories.some((c) => c.id === transactionToEdit.category!.id)
+          ? transactionToEdit.category!.id
+          : undefined) ||
+        (transactionToEdit.category?.name
+          ? categories.find(
+              (c) =>
+                c.name.toLowerCase().trim() ===
+                transactionToEdit.category!.name.toLowerCase().trim(),
+            )?.id
+          : undefined) ||
+        transactionToEdit.category_id ||
+        "none";
+      setCategoryId(catMatch);
+
+      const ccMatch =
+        (transactionToEdit.cost_center_id &&
+        costCenters.some((c) => c.id === transactionToEdit.cost_center_id)
+          ? transactionToEdit.cost_center_id
+          : undefined) ||
+        (transactionToEdit.cost_center?.id &&
+        costCenters.some((c) => c.id === transactionToEdit.cost_center!.id)
+          ? transactionToEdit.cost_center!.id
+          : undefined) ||
+        (transactionToEdit.cost_center?.name
+          ? costCenters.find(
+              (c) =>
+                c.name.toLowerCase().trim() ===
+                transactionToEdit.cost_center!.name.toLowerCase().trim(),
+            )?.id
+          : undefined) ||
+        transactionToEdit.cost_center_id ||
+        "none";
+      setCostCenterId(ccMatch);
       setSupplierId(transactionToEdit.supplier_id || "none");
       setPaymentMethodId(transactionToEdit.payment_method_id || "none");
       setPixKey(transactionToEdit.pix_key || transactionToEdit.supplier?.pix_key || "");
@@ -152,7 +190,7 @@ export function LancamentoDialog({
       setInstallmentTotal("2");
       setRecurrenceMonths("12");
     }
-  }, [transactionToEdit, defaultType, open]);
+  }, [transactionToEdit, defaultType, open, categories, costCenters]);
 
   // Categorias filtradas pelo tipo (receita ou despesa)
   const filteredCategories = categories.filter((c) => c.type === tipo);
@@ -178,6 +216,9 @@ export function LancamentoDialog({
     const formattedIssueDate = issueDate ? format(issueDate, "yyyy-MM-dd") : null;
     const parsedCode = code ? parseInt(code, 10) || null : null;
     const selectedSupplier = suppliers.find((s) => s.id === supplierId);
+    const selectedCostCenter = costCenters.find((c) => c.id === costCenterId);
+    const selectedCategory = categories.find((c) => c.id === categoryId);
+    const selectedPaymentMethod = paymentMethods.find((p) => p.id === paymentMethodId);
 
     try {
       if (isEditing && transactionToEdit) {
@@ -191,10 +232,13 @@ export function LancamentoDialog({
           issue_date: formattedIssueDate,
           code: parsedCode,
           category_id: categoryId !== "none" ? categoryId : null,
+          category_name: selectedCategory ? selectedCategory.name : null,
           cost_center_id: costCenterId !== "none" ? costCenterId : null,
+          cost_center_name: selectedCostCenter ? selectedCostCenter.name : null,
           supplier_id: supplierId !== "none" ? supplierId : null,
           supplier_name: selectedSupplier ? selectedSupplier.name : null,
           payment_method_id: paymentMethodId !== "none" ? paymentMethodId : null,
+          payment_method_name: selectedPaymentMethod ? selectedPaymentMethod.name : null,
           pix_key: pixKey.trim() || null,
           notes: notes.trim() || null,
           document_url: documentUrl.trim() || null,
@@ -210,10 +254,13 @@ export function LancamentoDialog({
           issue_date: formattedIssueDate,
           code: parsedCode,
           category_id: categoryId !== "none" ? categoryId : null,
+          category_name: selectedCategory ? selectedCategory.name : null,
           cost_center_id: costCenterId !== "none" ? costCenterId : null,
+          cost_center_name: selectedCostCenter ? selectedCostCenter.name : null,
           supplier_id: supplierId !== "none" ? supplierId : null,
           supplier_name: selectedSupplier ? selectedSupplier.name : null,
           payment_method_id: paymentMethodId !== "none" ? paymentMethodId : null,
+          payment_method_name: selectedPaymentMethod ? selectedPaymentMethod.name : null,
           pix_key: pixKey.trim() || null,
           notes: notes.trim() || null,
           document_url: documentUrl.trim() || null,
