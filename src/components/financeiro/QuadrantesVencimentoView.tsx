@@ -27,6 +27,8 @@ import {
   MessageSquare,
   QrCode,
   Copy,
+  Layers,
+  Tag,
 } from "lucide-react";
 import {
   format,
@@ -77,6 +79,8 @@ import { Calendar } from "@/components/ui/calendar";
 
 import {
   useFinancialTransactions,
+  useCostCenters,
+  useFinancialCategories,
   useMoveFinancialTransactionDay,
   useDeleteFinancialTransaction,
   useReversePayment,
@@ -87,7 +91,12 @@ import {
 } from "@/lib/financeiro";
 import { useSuppliers } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
-import type { FinancialTransaction, StatusTransacao } from "@/lib/financeiro-types";
+import type {
+  FinancialTransaction,
+  StatusTransacao,
+  CostCenter,
+  FinancialCategory,
+} from "@/lib/financeiro-types";
 import { LancamentoDialog } from "./LancamentoDialog";
 import { MarcarPagoDialog } from "./MarcarPagoDialog";
 import { TransactionPixPopover } from "./TransactionPixPopover";
@@ -121,6 +130,53 @@ function formatShortDate(dateStr: string | null | undefined): string {
   } catch {
     return dateStr;
   }
+}
+
+/** Identifica se uma transação pertence ao Centro de Custo, Categoria ou Lançamento de "Avulso ISA" */
+export function matchesAvulsoIsa(
+  tx: FinancialTransaction,
+  costCenters: CostCenter[] = [],
+  categories: FinancialCategory[] = [],
+): boolean {
+  const ccName = (
+    tx.cost_center?.name ||
+    costCenters.find((c) => c.id === tx.cost_center_id)?.name ||
+    ""
+  )
+    .toLowerCase()
+    .trim();
+
+  const catName = (tx.category?.name || categories.find((c) => c.id === tx.category_id)?.name || "")
+    .toLowerCase()
+    .trim();
+
+  const supName = (tx.supplier_name || "").toLowerCase().trim();
+  const desc = (tx.description || "").toLowerCase().trim();
+  const notes = (tx.notes || "").toLowerCase().trim();
+
+  // Verifica centro de custo
+  if (ccName.includes("isa") || (ccName.includes("avulso") && ccName.includes("isa"))) {
+    return true;
+  }
+  // Verifica categoria
+  if (catName.includes("isa") || (catName.includes("avulso") && catName.includes("isa"))) {
+    return true;
+  }
+  // Verifica fornecedor, descrição ou observações
+  if (
+    desc.includes("avulso isa") ||
+    desc.includes("avulsos isa") ||
+    notes.includes("avulso isa") ||
+    notes.includes("avulsos isa") ||
+    supName.includes("avulso isa") ||
+    supName.includes("avulsos isa") ||
+    supName === "isa" ||
+    supName.startsWith("isa ")
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export type QuadrantSortOption =
@@ -164,6 +220,25 @@ export function QuadrantesVencimentoView({
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"todos" | "pendentes" | "pagos">("todos");
   const [supplierFilter, setSupplierFilter] = useState<string>("todos");
+  // Filtro de Escopo pré-fixado como "exceto_avulso_isa" por padrão conforme solicitado
+  const [scopeFilter, setScopeFilter] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem("financeiro_quadrantes_scope_filter");
+      if (saved) return saved;
+    } catch {
+      // ignore
+    }
+    return "exceto_avulso_isa";
+  });
+
+  const handleScopeFilterChange = (val: string) => {
+    setScopeFilter(val);
+    try {
+      localStorage.setItem("financeiro_quadrantes_scope_filter", val);
+    } catch {
+      // ignore
+    }
+  };
   const [dateCriterion, setDateCriterion] = useState<"expected_or_due" | "due_only">(
     "expected_or_due",
   );
@@ -191,6 +266,8 @@ export function QuadrantesVencimentoView({
 
   // Queries
   const { data: suppliers = [] } = useSuppliers();
+  const { data: costCenters = [] } = useCostCenters();
+  const { data: financialCategories = [] } = useFinancialCategories();
   const { data: allTransactions = [], isLoading } = useFinancialTransactions({
     type: "despesa", // Focado em contas a pagar e fornecedores
   });
@@ -273,6 +350,25 @@ export function QuadrantesVencimentoView({
       if (statusFilter === "pendentes" && tx.status === "pago") return;
       if (statusFilter === "pagos" && tx.status !== "pago") return;
 
+      // Filtro de Escopo / Centros de Custo (Pré-fixado Exceto Avulsos ISA)
+      if (scopeFilter === "exceto_avulso_isa") {
+        if (matchesAvulsoIsa(tx, costCenters, financialCategories)) return;
+      } else if (scopeFilter === "somente_avulso_isa") {
+        if (!matchesAvulsoIsa(tx, costCenters, financialCategories)) return;
+      } else if (scopeFilter === "fornecedores") {
+        const isSupplier =
+          (tx.supplier_id != null && tx.supplier_id !== "") ||
+          (tx.supplier_name != null && tx.supplier_name.trim() !== "") ||
+          (tx.cost_center?.name || "").toLowerCase().includes("fornecedor");
+        if (!isSupplier) return;
+      } else if (scopeFilter.startsWith("cc_")) {
+        const targetCcId = scopeFilter.replace("cc_", "");
+        if (tx.cost_center_id !== targetCcId) return;
+      } else if (scopeFilter.startsWith("cat_")) {
+        const targetCatId = scopeFilter.replace("cat_", "");
+        if (tx.category_id !== targetCatId) return;
+      }
+
       if (map.has(targetDate)) {
         map.get(targetDate)!.push(tx);
       } else {
@@ -335,9 +431,21 @@ export function QuadrantesVencimentoView({
     searchTerm,
     supplierFilter,
     statusFilter,
+    scopeFilter,
+    costCenters,
+    financialCategories,
     currentMonthDate,
     quadrantSort,
   ]);
+
+  // Estatísticas de Avulsos ISA no mês
+  const avulsosStats = useMemo(() => {
+    const list = mappedTransactions.filter((tx) =>
+      matchesAvulsoIsa(tx, costCenters, financialCategories),
+    );
+    const total = list.reduce((acc, curr) => acc + curr.amount, 0);
+    return { count: list.length, total };
+  }, [mappedTransactions, costCenters, financialCategories]);
 
   // Estatísticas do Mês
   const monthStats = useMemo(() => {
@@ -750,8 +858,127 @@ export function QuadrantesVencimentoView({
           </div>
         </div>
 
+        {/* Linha de Filtros de Escopo / Centros de Custo (Pré-fixado: Exceto Avulsos ISA) */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t text-xs">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-semibold text-muted-foreground mr-1 flex items-center gap-1">
+              <Layers className="h-3.5 w-3.5 text-primary" />
+              Filtrar Contas:
+            </span>
+
+            {/* Botão Pré-fixado Padrão */}
+            <button
+              type="button"
+              onClick={() => handleScopeFilterChange("exceto_avulso_isa")}
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all border cursor-pointer ${
+                scopeFilter === "exceto_avulso_isa"
+                  ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                  : "bg-background hover:bg-muted text-muted-foreground border-border/80"
+              }`}
+            >
+              Exceto Avulsos ISA (Padrão)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleScopeFilterChange("todos")}
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all border cursor-pointer ${
+                scopeFilter === "todos"
+                  ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                  : "bg-background hover:bg-muted text-muted-foreground border-border/80"
+              }`}
+            >
+              Ver Tudo
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleScopeFilterChange("somente_avulso_isa")}
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all border cursor-pointer ${
+                scopeFilter === "somente_avulso_isa"
+                  ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                  : "bg-background hover:bg-muted text-muted-foreground border-border/80"
+              }`}
+            >
+              Apenas Avulsos ISA
+              {avulsosStats.count > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-black/20 text-white font-mono">
+                  {avulsosStats.count}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleScopeFilterChange("fornecedores")}
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all border cursor-pointer ${
+                scopeFilter === "fornecedores"
+                  ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                  : "bg-background hover:bg-muted text-muted-foreground border-border/80"
+              }`}
+            >
+              Fornecedores
+            </button>
+
+            {/* Dropdown com todos os Centros de Custo e Categorias criados */}
+            <Select value={scopeFilter} onValueChange={handleScopeFilterChange}>
+              <SelectTrigger className="w-[200px] h-7 text-xs bg-background border-border/80 font-medium">
+                <SelectValue placeholder="Centro de Custo / Mais..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="exceto_avulso_isa">Exceto Avulsos ISA (Padrão)</SelectItem>
+                <SelectItem value="todos">Ver Tudo (Todas as Contas)</SelectItem>
+                <SelectItem value="somente_avulso_isa">Apenas Avulsos ISA</SelectItem>
+                <SelectItem value="fornecedores">Apenas Fornecedores</SelectItem>
+
+                {costCenters.length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-t mt-1">
+                      Centros de Custo
+                    </div>
+                    {costCenters.map((cc) => (
+                      <SelectItem key={cc.id} value={`cc_${cc.id}`}>
+                        {cc.name}
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
+
+                {financialCategories.length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-t mt-1">
+                      Categorias Financeiras
+                    </div>
+                    {financialCategories.map((cat) => (
+                      <SelectItem key={cat.id} value={`cat_${cat.id}`}>
+                        {cat.name}
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {scopeFilter === "exceto_avulso_isa" && avulsosStats.count > 0 && (
+            <div className="text-[11px] text-muted-foreground bg-muted/40 px-2 py-0.5 rounded border border-border/60 flex items-center gap-1.5">
+              <span>
+                {avulsosStats.count} lançamento(s) de Avulso ISA oculto(s) neste mês (
+                {formatCurrency(avulsosStats.total)})
+              </span>
+              <button
+                type="button"
+                onClick={() => handleScopeFilterChange("somente_avulso_isa")}
+                className="text-primary hover:underline font-semibold cursor-pointer"
+              >
+                ver avulsos
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Linha de Filtros e Critérios */}
-        <div className="flex flex-wrap items-center gap-3 pt-2 border-t text-xs">
+        <div className="flex flex-wrap items-center gap-3 pt-1 border-t text-xs">
           {/* Busca */}
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1238,13 +1465,29 @@ export function QuadrantesVencimentoView({
                               {/* Descrição / Fornecedor */}
                               <td className="px-3 py-2">
                                 <div className="flex flex-col">
-                                  <span className="font-semibold text-foreground flex items-center gap-1.5">
-                                    <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                    {tx.supplier_name || tx.description || "Sem descrição"}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-semibold text-foreground flex items-center gap-1">
+                                      <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                      {tx.supplier_name || tx.description || "Sem descrição"}
+                                    </span>
+                                    {matchesAvulsoIsa(tx, costCenters, financialCategories) && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[9px] px-1 py-0 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 font-medium"
+                                      >
+                                        Avulso ISA
+                                      </Badge>
+                                    )}
+                                  </div>
                                   {tx.supplier_name && tx.description && (
                                     <span className="text-[11px] text-muted-foreground">
                                       {tx.description}
+                                    </span>
+                                  )}
+                                  {tx.cost_center?.name && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.2 rounded w-fit mt-0.5 font-medium">
+                                      <Layers className="h-2.5 w-2.5 text-primary" />
+                                      {tx.cost_center.name}
                                     </span>
                                   )}
                                 </div>
