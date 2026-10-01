@@ -230,7 +230,7 @@
   [data-radix-portal]
     > div:not(:has(#printable-purchase-order)):not(:has(#printable-holerite)):not(
       :has(#printable-replenishment-report)
-    ),
+    ):not(:has(#printable-extrato-financeiro)),
   [role="dialog"] > button {
     display: none !important;
   }
@@ -238,7 +238,9 @@
   .printable-purchase-order,
   #printable-purchase-order,
   #printable-holerite,
-  #printable-replenishment-report {
+  #printable-replenishment-report,
+  #printable-extrato-financeiro,
+  .printable-extrato-financeiro {
     box-shadow: none !important;
     border: none !important;
     padding: 0 !important;
@@ -248,6 +250,16 @@
     zoom: 100% !important;
     color: #000000 !important;
     background: #ffffff !important;
+  }
+
+  .a4-print-page {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .a4-print-page:last-child {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
   }
 
   [role="dialog"] {

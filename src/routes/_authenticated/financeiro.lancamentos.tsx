@@ -23,14 +23,17 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  FileText,
 } from "lucide-react";
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/PageHeader";
 import { LancamentoDialog } from "@/components/financeiro/LancamentoDialog";
 import { MarcarPagoDialog } from "@/components/financeiro/MarcarPagoDialog";
 import { CategoriasDialog } from "@/components/financeiro/CategoriasDialog";
+import { ExtratoFinanceiroPdfModal } from "@/components/financeiro/ExtratoFinanceiroPdfModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -164,6 +167,7 @@ function LancamentosPage() {
   // Modais
   const [openLancamento, setOpenLancamento] = useState(false);
   const [openCategorias, setOpenCategorias] = useState(false);
+  const [openExtratoPdf, setOpenExtratoPdf] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
   const [payingTransaction, setPayingTransaction] = useState<FinancialTransaction | null>(null);
 
@@ -218,6 +222,28 @@ function LancamentosPage() {
       };
     }
     return { startDate: undefined, endDate: undefined };
+  }, [periodPreset, customStartDate, customEndDate]);
+
+  // Rótulo textual amigável do período selecionado para o Extrato
+  const periodLabelFormatted = useMemo(() => {
+    if (periodPreset === "mes_atual") {
+      return `Mês Atual (${format(new Date(), "MMMM 'de' yyyy", { locale: ptBR })})`;
+    }
+    if (periodPreset === "mes_anterior") {
+      const prev = subMonths(new Date(), 1);
+      return `Mês Anterior (${format(prev, "MMMM 'de' yyyy", { locale: ptBR })})`;
+    }
+    if (periodPreset === "proximo_mes") {
+      const next = addMonths(new Date(), 1);
+      return `Próximo Mês (${format(next, "MMMM 'de' yyyy", { locale: ptBR })})`;
+    }
+    if (periodPreset === "ano_atual") {
+      return `Ano Atual (${new Date().getFullYear()})`;
+    }
+    if (periodPreset === "custom" && customStartDate && customEndDate) {
+      return `${format(parseISO(customStartDate), "dd/MM/yyyy")} até ${format(parseISO(customEndDate), "dd/MM/yyyy")}`;
+    }
+    return "Todos os Lançamentos";
   }, [periodPreset, customStartDate, customEndDate]);
 
   // Consulta transações com os filtros aplicados
@@ -390,6 +416,16 @@ function LancamentosPage() {
         description="Controle de entradas, saídas e compromissos financeiros"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOpenExtratoPdf(true)}
+              className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10 font-semibold"
+              title="Gerar e imprimir extrato financeiro completo em folha A4 com paginação automática"
+            >
+              <FileText className="h-4 w-4 text-primary" />
+              <span>Extrato em PDF (A4)</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -1133,6 +1169,16 @@ function LancamentosPage() {
       />
 
       <CategoriasDialog open={openCategorias} onOpenChange={setOpenCategorias} />
+
+      {/* Modal de Extrato Financeiro em PDF A4 */}
+      <ExtratoFinanceiroPdfModal
+        open={openExtratoPdf}
+        onOpenChange={setOpenExtratoPdf}
+        transactions={sortedTransactions}
+        periodLabel={periodLabelFormatted}
+        startDate={startDate}
+        endDate={endDate}
+      />
 
       {/* Alert Dialog de Confirmação de Exclusão */}
       <AlertDialog
