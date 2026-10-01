@@ -5,17 +5,16 @@ import {
   Printer,
   Download,
   FileText,
-  X,
-  ArrowUpRight,
-  ArrowDownRight,
-  DollarSign,
+  SlidersHorizontal,
   CheckCircle2,
   Clock,
   AlertTriangle,
   Loader2,
-  SlidersHorizontal,
+  Building,
 } from "lucide-react";
 import { toast } from "sonner";
+import { toPng } from "html-to-image";
+import { jsPDF } from "jspdf";
 
 import {
   Dialog,
@@ -26,7 +25,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -37,7 +35,7 @@ import {
 import { useBranding } from "@/lib/branding";
 import { formatCurrencyBRL } from "@/lib/currency-utils";
 import { resolveTransactionStatus, getTodayString } from "@/lib/financeiro";
-import type { FinancialTransaction, TipoTransacao, StatusTransacao } from "@/lib/financeiro-types";
+import type { FinancialTransaction } from "@/lib/financeiro-types";
 
 interface ExtratoFinanceiroPdfModalProps {
   open: boolean;
@@ -46,6 +44,56 @@ interface ExtratoFinanceiroPdfModalProps {
   periodLabel?: string;
   startDate?: string;
   endDate?: string;
+}
+
+// Limita tamanho de caracteres para garantir padronização e evitar quebras indesejadas
+function truncateText(text: string | null | undefined, maxLength: number): string {
+  if (!text) return "";
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return trimmed.substring(0, maxLength).trimEnd() + "…";
+}
+
+// Trata exibição: se não tiver descrição, destaca claramente o fornecedor no lugar da descrição
+function resolveTransactionDisplay(tx: FinancialTransaction) {
+  const rawDesc = (tx.description || "").trim();
+  const rawSupplier = (tx.supplier?.name || tx.supplier_name || "").trim();
+  const rawCostCenter = (tx.cost_center?.name || tx.cost_center_name || "").trim();
+  const rawCategory = (tx.category?.name || tx.category_name || "").trim();
+
+  const hasDescription = rawDesc.length > 0;
+  const isSupplierFallback = !hasDescription && rawSupplier.length > 0;
+
+  let mainTitle = "";
+  if (hasDescription) {
+    mainTitle = rawDesc;
+  } else if (rawSupplier.length > 0) {
+    mainTitle = rawSupplier;
+  } else if (rawCategory.length > 0) {
+    mainTitle = `Lançamento (${rawCategory})`;
+  } else {
+    mainTitle = "Lançamento Avulso";
+  }
+
+  // Coluna secundária (Centro de Custo / Referência)
+  let secondaryTitle = "";
+  if (isSupplierFallback) {
+    // Se o fornecedor já é o título principal, aqui mostramos o Centro de Custo
+    secondaryTitle = rawCostCenter || "Geral";
+  } else {
+    // Se há descrição própria, mostramos o Centro de Custo ou Fornecedor
+    secondaryTitle = rawCostCenter || (rawSupplier ? rawSupplier : "—");
+  }
+
+  return {
+    mainTitle,
+    isSupplierFallback,
+    supplierName: rawSupplier,
+    costCenterName: rawCostCenter,
+    categoryName: rawCategory || "Geral",
+    secondaryTitle,
+    notes: (tx.notes || "").trim(),
+  };
 }
 
 export function ExtratoFinanceiroPdfModal({
@@ -74,7 +122,7 @@ export function ExtratoFinanceiroPdfModal({
   const now = new Date();
   const emissionDateFormatted = format(now, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
 
-  // 1. Filtragem dos Lançamentos do Extrato
+  // 1. Filtragem e ordenação dos lançamentos
   const filteredList = useMemo(() => {
     let list = [...transactions];
 
@@ -89,7 +137,6 @@ export function ExtratoFinanceiroPdfModal({
       });
     }
 
-    // Ordenação
     list.sort((a, b) => {
       switch (sortOption) {
         case "date_asc":
@@ -101,8 +148,11 @@ export function ExtratoFinanceiroPdfModal({
           const amtB = b.status === "pago" && b.paid_amount ? b.paid_amount : b.amount;
           return amtB - amtA;
         }
-        case "desc_asc":
-          return (a.description || "").localeCompare(b.description || "", "pt-BR");
+        case "desc_asc": {
+          const titleA = resolveTransactionDisplay(a).mainTitle;
+          const titleB = resolveTransactionDisplay(b).mainTitle;
+          return titleA.localeCompare(titleB, "pt-BR");
+        }
         default:
           return 0;
       }
@@ -146,22 +196,20 @@ export function ExtratoFinanceiroPdfModal({
     };
   }, [filteredList, today]);
 
-  // 3. Paginação A4 Dinâmica e Harmônica
-  // Página 1 tem cabeçalho principal e resumo executivo (cabe menos linhas)
-  // Páginas 2+ têm apenas cabeçalho compacto (cabe mais linhas)
+  // 3. Paginação A4 com capacidades conservadoras para evitar qualquer corte
+  // Página 1 inclui cabeçalho completo e resumo executivo
+  // Páginas seguintes contêm cabeçalho compacto
   const pages = useMemo(() => {
-    const page1Capacity = density === "compact" ? 24 : 18;
-    const pageNextCapacity = density === "compact" ? 32 : 24;
+    const page1Capacity = density === "compact" ? 20 : 16;
+    const pageNextCapacity = density === "compact" ? 26 : 22;
 
     const result: FinancialTransaction[][] = [];
     if (filteredList.length === 0) {
       return [[]];
     }
 
-    // Primeira página
     result.push(filteredList.slice(0, page1Capacity));
 
-    // Páginas subsequentes
     let currentIndex = page1Capacity;
     while (currentIndex < filteredList.length) {
       result.push(filteredList.slice(currentIndex, currentIndex + pageNextCapacity));
@@ -173,37 +221,34 @@ export function ExtratoFinanceiroPdfModal({
 
   const totalPages = pages.length;
 
-  // Impressão nativa do navegador (Salvar como PDF ou Imprimir)
+  // Impressão nativa do navegador
   const handlePrint = () => {
     window.print();
   };
 
-  // Download direto do arquivo PDF multi-página via jsPDF e html2canvas
+  // Download direto do arquivo PDF multi-página usando html-to-image + jsPDF
   const handleDownloadPdf = async () => {
     if (!printContainerRef.current) return;
     setIsGeneratingPdf(true);
-    const toastId = toast.loading("Gerando arquivo PDF em alta definição...");
+    const toastId = toast.loading("Gerando arquivo PDF A4 em alta definição...");
 
     try {
-      const html2canvas = (await import("html2canvas")).default;
-      const { jsPDF } = await import("jspdf");
+      const pageElements =
+        printContainerRef.current.querySelectorAll<HTMLElement>(".a4-sheet-page");
+
+      if (pageElements.length === 0) {
+        throw new Error("Nenhuma folha encontrada para exportar.");
+      }
 
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
         format: "a4",
+        compress: true,
       });
 
       const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
       const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
-
-      // Seleciona cada página A4 individual renderizada
-      const pageElements =
-        printContainerRef.current.querySelectorAll<HTMLElement>(".a4-sheet-page");
-
-      if (pageElements.length === 0) {
-        throw new Error("Nenhuma folha para exportar");
-      }
 
       for (let i = 0; i < pageElements.length; i++) {
         const pageEl = pageElements[i];
@@ -211,27 +256,49 @@ export function ExtratoFinanceiroPdfModal({
           pdf.addPage();
         }
 
-        const canvas = await html2canvas(pageEl, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          backgroundColor: "#ffffff",
-        });
+        let imgData: string;
+        try {
+          imgData = await toPng(pageEl, {
+            quality: 0.98,
+            pixelRatio: 2,
+            backgroundColor: "#ffffff",
+            cacheBust: true,
+            skipFonts: true,
+          });
+        } catch (firstErr) {
+          console.warn("Tentativa padrão falhou, tentando fallback com pixelRatio 1.5:", firstErr);
+          imgData = await toPng(pageEl, {
+            quality: 0.95,
+            pixelRatio: 1.5,
+            backgroundColor: "#ffffff",
+            skipFonts: true,
+          });
+        }
 
-        const imgData = canvas.toDataURL("image/png");
-        // Preenche a página A4 perfeitamente sem corte
         pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight, undefined, "FAST");
       }
 
       const cleanPeriod = (periodLabel || "extrato").replace(/[/\\?%*:|"<> ]/g, "_");
-      const filename = `Extrato_Financeiro_${cleanPeriod}_${format(now, "yyyyMMdd")}.pdf`;
+      const filename = `Extrato_Financeiro_${cleanPeriod}_${format(now, "yyyyMMdd_HHmm")}.pdf`;
 
-      pdf.save(filename);
-      toast.success("PDF do extrato baixado com sucesso!", { id: toastId });
-    } catch (err) {
+      // Download confiável via Blob e link temporário
+      const blob = pdf.output("blob");
+      const blobUrl = URL.createObjectURL(blob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = blobUrl;
+      downloadLink.download = filename;
+      downloadLink.style.display = "none";
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+
+      toast.success("PDF do extrato gerado e baixado com sucesso!", { id: toastId });
+    } catch (err: unknown) {
       console.error("Erro ao gerar PDF:", err);
+      const errorMsg = err instanceof Error ? err.message : "Erro na conversão";
       toast.error(
-        "Não foi possível converter automaticamente. Use o botão 'Imprimir' e escolha 'Salvar como PDF'.",
+        `Falha ao converter (${errorMsg}). Você também pode clicar em 'Imprimir / Salvar como PDF' para obter o PDF com a mesma perfeição.`,
         { id: toastId },
       );
     } finally {
@@ -242,19 +309,20 @@ export function ExtratoFinanceiroPdfModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl w-[96vw] max-h-[94vh] p-0 flex flex-col bg-background overflow-hidden border-border shadow-2xl">
-        {/* Barra Superior / Cabeçalho de Ações (Oculto na Impressão) */}
+        {/* Barra Superior de Ações (Oculta na Impressão) */}
         <div className="p-4 border-b bg-card flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0 print:hidden">
           <div>
             <DialogHeader className="p-0 text-left">
               <DialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
                 <FileText className="h-5 w-5 text-primary" />
-                <span>Extrato Financeiro Oficial (Formato A4)</span>
+                <span>Extrato Financeiro Oficial (Folha A4)</span>
                 <Badge variant="outline" className="text-[11px] font-mono">
                   {totalPages} {totalPages === 1 ? "página A4" : "páginas A4"}
                 </Badge>
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                Extrato harmônico pronto para impressão e exportação em PDF de alta qualidade.
+                Documento com margens A4 seguras, padronização de caracteres e identificação
+                automática de fornecedores.
               </DialogDescription>
             </DialogHeader>
           </div>
@@ -293,7 +361,7 @@ export function ExtratoFinanceiroPdfModal({
           </div>
         </div>
 
-        {/* Barra de Filtros e Customização do Extrato (Oculto na Impressão) */}
+        {/* Barra de Filtros e Opções (Oculta na Impressão) */}
         <div className="px-4 py-2.5 bg-muted/30 border-b flex items-center justify-between gap-2 flex-wrap text-xs print:hidden">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5">
@@ -338,7 +406,7 @@ export function ExtratoFinanceiroPdfModal({
                 <SelectItem value="date_desc">Vencimento (Mais recente)</SelectItem>
                 <SelectItem value="date_asc">Vencimento (Mais antigo)</SelectItem>
                 <SelectItem value="amount_desc">Valor (Maior para menor)</SelectItem>
-                <SelectItem value="desc_asc">Descrição (A-Z)</SelectItem>
+                <SelectItem value="desc_asc">Descrição/Nome (A-Z)</SelectItem>
               </SelectContent>
             </Select>
 
@@ -359,12 +427,12 @@ export function ExtratoFinanceiroPdfModal({
           </div>
         </div>
 
-        {/* Visualizador de Páginas A4 com Scroll (Área que é impressa ou convertida em PDF) */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-neutral-200/70 dark:bg-neutral-900/80 flex flex-col items-center gap-6">
+        {/* Visualizador de Páginas A4 com Scroll Centralizado */}
+        <div className="flex-1 overflow-auto p-4 sm:p-8 bg-neutral-300 dark:bg-neutral-950 flex flex-col items-center">
           <div
             ref={printContainerRef}
             id="printable-extrato-financeiro"
-            className="w-full flex flex-col items-center gap-6"
+            className="w-[210mm] min-w-[210mm] max-w-[210mm] flex flex-col items-center gap-8 mx-auto"
           >
             {pages.map((pageTransactions, pageIdx) => {
               const pageNumber = pageIdx + 1;
@@ -373,50 +441,58 @@ export function ExtratoFinanceiroPdfModal({
               return (
                 <div
                   key={`a4-page-${pageNumber}`}
-                  className="a4-sheet-page a4-print-page bg-white text-neutral-900 shadow-xl border border-neutral-300 w-full max-w-[210mm] min-h-[297mm] p-[10mm] flex flex-col justify-between box-border select-none print:shadow-none print:border-none print:m-0 print:p-[10mm] print:w-[210mm] print:min-h-[297mm]"
+                  className="a4-sheet-page a4-print-page bg-white text-neutral-900 shadow-2xl border border-neutral-300 w-[210mm] min-w-[210mm] max-w-[210mm] h-[297mm] min-h-[297mm] max-h-[297mm] p-[12mm] flex flex-col justify-between box-border overflow-hidden select-none print:shadow-none print:border-none print:m-0 print:p-[12mm] print:w-[210mm] print:h-[297mm]"
                   style={{
+                    width: "210mm",
+                    minWidth: "210mm",
+                    maxWidth: "210mm",
+                    height: "297mm",
+                    minHeight: "297mm",
+                    maxHeight: "297mm",
+                    boxSizing: "border-box",
+                    backgroundColor: "#ffffff",
                     fontFamily:
                       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
                   }}
                 >
-                  {/* TOPO DA PÁGINA */}
-                  <div>
+                  {/* CONTEÚDO SUPERIOR E TABELA */}
+                  <div className="flex-1 overflow-hidden flex flex-col">
                     {isFirstPage ? (
                       /* CABEÇALHO COMPLETO NA PÁGINA 1 */
-                      <div className="border-b-2 border-neutral-900 pb-3 mb-3">
+                      <div className="border-b-2 border-neutral-900 pb-3 mb-2.5 shrink-0">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex items-center gap-3">
                             {logoUrl ? (
                               <img
                                 src={logoUrl}
                                 alt="Logo"
-                                className="h-12 w-12 object-contain rounded-md border border-neutral-200"
+                                className="h-11 w-11 object-contain rounded border border-neutral-200"
                               />
                             ) : (
-                              <div className="h-12 w-12 rounded-md bg-neutral-900 text-white flex items-center justify-center font-bold text-lg">
+                              <div className="h-11 w-11 rounded bg-neutral-900 text-white flex items-center justify-center font-bold text-base">
                                 GB
                               </div>
                             )}
                             <div>
-                              <h1 className="text-lg font-black tracking-tight uppercase text-neutral-900 leading-tight">
+                              <h1 className="text-base font-black tracking-tight uppercase text-neutral-900 leading-tight">
                                 {companyName || "Galeteria Brasão"}
                               </h1>
-                              <p className="text-[11px] font-medium text-neutral-500 uppercase tracking-wide">
+                              <p className="text-[10px] font-medium text-neutral-500 uppercase tracking-wide">
                                 {subtitle || "Sistema de Gestão Financeira & Caixa"}
                               </p>
                             </div>
                           </div>
 
                           <div className="text-right">
-                            <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-black uppercase bg-neutral-900 text-white tracking-widest">
+                            <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase bg-neutral-900 text-white tracking-wider">
                               Extrato de Fluxo de Caixa
                             </span>
-                            <p className="text-[11px] text-neutral-600 font-semibold mt-1">
+                            <p className="text-[10px] text-neutral-600 font-semibold mt-1">
                               Período:{" "}
                               <span className="text-neutral-900 font-bold">{periodLabel}</span>
                             </p>
                             {startDate && endDate && (
-                              <p className="text-[10px] text-neutral-500 font-mono">
+                              <p className="text-[9px] text-neutral-500 font-mono">
                                 ({format(parseISO(startDate), "dd/MM/yyyy")} a{" "}
                                 {format(parseISO(endDate), "dd/MM/yyyy")})
                               </p>
@@ -425,9 +501,9 @@ export function ExtratoFinanceiroPdfModal({
                         </div>
 
                         {/* QUADRO DE RESUMO FINANCEIRO EXECUTIVO */}
-                        <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-neutral-200">
-                          <div className="p-2 rounded bg-emerald-50 border border-emerald-200">
-                            <span className="text-[9px] font-bold text-emerald-800 uppercase tracking-wider block">
+                        <div className="grid grid-cols-4 gap-2 mt-2.5 pt-2 border-t border-neutral-200">
+                          <div className="p-1.5 rounded bg-emerald-50 border border-emerald-300">
+                            <span className="text-[8.5px] font-bold text-emerald-800 uppercase tracking-wider block">
                               Total Entradas (+)
                             </span>
                             <span className="text-xs font-black text-emerald-700 font-mono">
@@ -435,8 +511,8 @@ export function ExtratoFinanceiroPdfModal({
                             </span>
                           </div>
 
-                          <div className="p-2 rounded bg-rose-50 border border-rose-200">
-                            <span className="text-[9px] font-bold text-rose-800 uppercase tracking-wider block">
+                          <div className="p-1.5 rounded bg-rose-50 border border-rose-300">
+                            <span className="text-[8.5px] font-bold text-rose-800 uppercase tracking-wider block">
                               Total Saídas (-)
                             </span>
                             <span className="text-xs font-black text-rose-700 font-mono">
@@ -445,13 +521,13 @@ export function ExtratoFinanceiroPdfModal({
                           </div>
 
                           <div
-                            className={`p-2 rounded border ${
+                            className={`p-1.5 rounded border ${
                               metrics.saldo >= 0
-                                ? "bg-blue-50 border-blue-200"
-                                : "bg-amber-50 border-amber-200"
+                                ? "bg-blue-50 border-blue-300"
+                                : "bg-amber-50 border-amber-300"
                             }`}
                           >
-                            <span className="text-[9px] font-bold text-neutral-700 uppercase tracking-wider block">
+                            <span className="text-[8.5px] font-bold text-neutral-700 uppercase tracking-wider block">
                               Saldo Líquido (=)
                             </span>
                             <span
@@ -463,8 +539,8 @@ export function ExtratoFinanceiroPdfModal({
                             </span>
                           </div>
 
-                          <div className="p-2 rounded bg-neutral-50 border border-neutral-200 text-right">
-                            <span className="text-[9px] font-bold text-neutral-600 uppercase tracking-wider block">
+                          <div className="p-1.5 rounded bg-neutral-100 border border-neutral-300 text-right">
+                            <span className="text-[8.5px] font-bold text-neutral-600 uppercase tracking-wider block">
                               Lançamentos
                             </span>
                             <span className="text-xs font-black text-neutral-900 font-mono">
@@ -475,40 +551,40 @@ export function ExtratoFinanceiroPdfModal({
                       </div>
                     ) : (
                       /* CABEÇALHO COMPACTO NAS PÁGINAS 2 EM DIANTE */
-                      <div className="border-b border-neutral-400 pb-2 mb-2 flex items-center justify-between">
+                      <div className="border-b border-neutral-400 pb-1.5 mb-2 flex items-center justify-between shrink-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-black uppercase text-neutral-900">
+                          <span className="text-[11px] font-black uppercase text-neutral-900">
                             {companyName || "Galeteria Brasão"}
                           </span>
                           <span className="text-neutral-400">•</span>
-                          <span className="text-[11px] font-bold text-neutral-700 uppercase">
+                          <span className="text-[10px] font-bold text-neutral-700 uppercase">
                             Extrato de Fluxo de Caixa (Continuação)
                           </span>
                         </div>
-                        <div className="text-[10px] text-neutral-500 font-mono">
+                        <div className="text-[9.5px] text-neutral-500 font-mono">
                           {periodLabel} | Pág. {pageNumber} de {totalPages}
                         </div>
                       </div>
                     )}
 
-                    {/* TABELA DE LANÇAMENTOS HARMÔNICA PARA A4 */}
-                    <div className="w-full">
-                      <table className="w-full border-collapse text-left">
+                    {/* TABELA DE LANÇAMENTOS COM TABLE-LAYOUT FIXED PARA GARANTIR MARGENS */}
+                    <div className="w-full flex-1 overflow-hidden">
+                      <table className="w-full table-fixed border-collapse text-left">
                         <thead>
-                          <tr className="bg-neutral-900 text-white text-[9px] font-bold uppercase tracking-wider">
-                            <th className="py-1.5 px-2 w-[16%]">Vencimento</th>
-                            <th className="py-1.5 px-2 w-[28%]">Descrição / Identificação</th>
-                            <th className="py-1.5 px-2 w-[16%]">Categoria</th>
-                            <th className="py-1.5 px-2 w-[14%]">Centro / Fornec.</th>
-                            <th className="py-1.5 px-2 text-center w-[8%]">Tipo</th>
-                            <th className="py-1.5 px-2 text-right w-[11%]">Valor</th>
-                            <th className="py-1.5 px-2 text-center w-[7%]">Status</th>
+                          <tr className="bg-neutral-900 text-white text-[8.5px] font-bold uppercase tracking-wider">
+                            <th className="py-1 px-2 w-[15%]">Vencimento</th>
+                            <th className="py-1 px-2 w-[33%]">Descrição / Fornecedor</th>
+                            <th className="py-1 px-2 w-[15%]">Categoria</th>
+                            <th className="py-1 px-2 w-[13%]">Centro / Ref</th>
+                            <th className="py-1 px-2 text-center w-[7%]">Tipo</th>
+                            <th className="py-1 px-2 text-right w-[10%]">Valor</th>
+                            <th className="py-1 px-2 text-center w-[7%]">Status</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-neutral-200 text-[10px]">
+                        <tbody className="divide-y divide-neutral-200 text-[9.5px]">
                           {pageTransactions.length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="py-8 text-center text-neutral-500 italic">
+                              <td colSpan={7} className="py-6 text-center text-neutral-500 italic">
                                 Nenhum lançamento encontrado para os filtros selecionados.
                               </td>
                             </tr>
@@ -524,68 +600,97 @@ export function ExtratoFinanceiroPdfModal({
                               const effectiveAmt =
                                 isPaid && tx.paid_amount ? tx.paid_amount : tx.amount;
 
+                              const info = resolveTransactionDisplay(tx);
+
                               return (
                                 <tr
                                   key={tx.id || idx}
                                   className={`${
-                                    idx % 2 === 0 ? "bg-white" : "bg-neutral-50/70"
-                                  } hover:bg-neutral-100 transition-colors`}
+                                    idx % 2 === 0 ? "bg-white" : "bg-neutral-50"
+                                  } leading-tight`}
                                 >
-                                  {/* Data */}
-                                  <td className="py-1.5 px-2 font-mono text-[9.5px] leading-tight">
+                                  {/* Data de Vencimento e Pagamento */}
+                                  <td className="py-1.5 px-2 font-mono text-[9px] overflow-hidden">
                                     <div className="font-bold text-neutral-900">
                                       {format(parseISO(tx.due_date), "dd/MM/yyyy")}
                                     </div>
                                     {isPaid && tx.payment_date && (
-                                      <div className="text-[8px] text-emerald-700">
+                                      <div className="text-[7.5px] text-emerald-700 font-semibold truncate">
                                         Pago: {format(parseISO(tx.payment_date), "dd/MM")}
                                       </div>
                                     )}
                                     {!isPaid &&
                                       tx.expected_payment_date &&
                                       tx.expected_payment_date !== tx.due_date && (
-                                        <div className="text-[8px] text-blue-600">
+                                        <div className="text-[7.5px] text-blue-600 font-semibold truncate">
                                           Prev:{" "}
                                           {format(parseISO(tx.expected_payment_date), "dd/MM")}
                                         </div>
                                       )}
                                   </td>
 
-                                  {/* Descrição */}
-                                  <td className="py-1.5 px-2 font-medium text-neutral-900 leading-snug">
-                                    <div className="line-clamp-1 font-semibold">
-                                      {tx.description || "Lançamento sem descrição"}
+                                  {/* Descrição / Fornecedor com Destaque Claro se não tiver descrição */}
+                                  <td className="py-1.5 px-2 overflow-hidden">
+                                    <div className="flex items-center gap-1 overflow-hidden">
+                                      <span
+                                        className={`truncate ${
+                                          info.isSupplierFallback
+                                            ? "font-black text-neutral-950 uppercase"
+                                            : "font-semibold text-neutral-900"
+                                        }`}
+                                        title={info.mainTitle}
+                                      >
+                                        {truncateText(info.mainTitle, 40)}
+                                      </span>
+
+                                      {/* Destaque visual nítido quando é fornecedor */}
+                                      {info.isSupplierFallback && (
+                                        <span className="inline-flex items-center gap-0.5 text-[7px] font-black uppercase tracking-wider px-1 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
+                                          <Building className="h-2 w-2" />
+                                          Fornecedor
+                                        </span>
+                                      )}
                                     </div>
-                                    {tx.notes && (
-                                      <div className="text-[8.5px] text-neutral-500 line-clamp-1 italic">
-                                        {tx.notes}
+
+                                    {info.notes && (
+                                      <div
+                                        className="text-[8px] text-neutral-500 italic truncate mt-0.5"
+                                        title={info.notes}
+                                      >
+                                        {truncateText(info.notes, 36)}
                                       </div>
                                     )}
                                   </td>
 
                                   {/* Categoria */}
-                                  <td className="py-1.5 px-2 text-neutral-700 leading-tight">
-                                    <div className="line-clamp-1">
-                                      {tx.category?.name || tx.category_name || "Geral"}
+                                  <td className="py-1.5 px-2 text-neutral-700 overflow-hidden">
+                                    <div className="truncate" title={info.categoryName}>
+                                      {truncateText(info.categoryName, 18)}
                                     </div>
                                   </td>
 
-                                  {/* Centro de Custo / Fornecedor */}
-                                  <td className="py-1.5 px-2 text-neutral-600 leading-tight text-[9px]">
-                                    <div className="line-clamp-1 font-medium text-neutral-800">
-                                      {tx.cost_center?.name || tx.cost_center_name || "—"}
+                                  {/* Centro de Custo / Referência */}
+                                  <td className="py-1.5 px-2 text-neutral-600 text-[8.5px] overflow-hidden">
+                                    <div
+                                      className="truncate font-medium text-neutral-800"
+                                      title={info.secondaryTitle}
+                                    >
+                                      {truncateText(info.secondaryTitle, 16)}
                                     </div>
-                                    {(tx.supplier?.name || tx.supplier_name) && (
-                                      <div className="line-clamp-1 text-[8px] text-neutral-500">
-                                        {tx.supplier?.name || tx.supplier_name}
+                                    {!info.isSupplierFallback && info.supplierName && (
+                                      <div
+                                        className="truncate text-[7.5px] text-neutral-500"
+                                        title={info.supplierName}
+                                      >
+                                        {truncateText(info.supplierName, 18)}
                                       </div>
                                     )}
                                   </td>
 
-                                  {/* Tipo */}
-                                  <td className="py-1.5 px-2 text-center">
+                                  {/* Tipo (Entrada / Saída) */}
+                                  <td className="py-1.5 px-1.5 text-center overflow-hidden">
                                     <span
-                                      className={`inline-block px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase ${
+                                      className={`inline-block px-1 py-0.5 rounded text-[8px] font-black uppercase ${
                                         isEntrada
                                           ? "bg-emerald-100 text-emerald-800"
                                           : "bg-rose-100 text-rose-800"
@@ -596,7 +701,7 @@ export function ExtratoFinanceiroPdfModal({
                                   </td>
 
                                   {/* Valor */}
-                                  <td className="py-1.5 px-2 text-right font-mono font-bold whitespace-nowrap">
+                                  <td className="py-1.5 px-2 text-right font-mono font-bold whitespace-nowrap overflow-hidden">
                                     <span
                                       className={isEntrada ? "text-emerald-700" : "text-rose-700"}
                                     >
@@ -606,18 +711,18 @@ export function ExtratoFinanceiroPdfModal({
                                   </td>
 
                                   {/* Status */}
-                                  <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                                  <td className="py-1.5 px-1 text-center whitespace-nowrap overflow-hidden">
                                     {status === "pago" ? (
-                                      <span className="inline-flex items-center gap-0.5 text-[8.5px] font-bold text-emerald-700">
-                                        <CheckCircle2 className="h-2.5 w-2.5" /> Pago
+                                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-emerald-700">
+                                        <CheckCircle2 className="h-2.5 w-2.5 shrink-0" /> Pago
                                       </span>
                                     ) : status === "atrasado" ? (
-                                      <span className="inline-flex items-center gap-0.5 text-[8.5px] font-bold text-rose-600">
-                                        <AlertTriangle className="h-2.5 w-2.5" /> Atrasado
+                                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-rose-600">
+                                        <AlertTriangle className="h-2.5 w-2.5 shrink-0" /> Atraso
                                       </span>
                                     ) : (
-                                      <span className="inline-flex items-center gap-0.5 text-[8.5px] font-bold text-amber-600">
-                                        <Clock className="h-2.5 w-2.5" /> Pendente
+                                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-amber-600">
+                                        <Clock className="h-2.5 w-2.5 shrink-0" /> Pend.
                                       </span>
                                     )}
                                   </td>
@@ -630,15 +735,15 @@ export function ExtratoFinanceiroPdfModal({
                     </div>
                   </div>
 
-                  {/* RODAPÉ DA FOLHA A4 */}
-                  <div className="pt-2 border-t border-neutral-300 mt-3 flex items-center justify-between text-[9px] text-neutral-500 font-mono">
+                  {/* RODAPÉ HARMÔNICO DA FOLHA A4 */}
+                  <div className="pt-2 border-t border-neutral-300 mt-2 flex items-center justify-between text-[8.5px] text-neutral-500 font-mono shrink-0">
                     <div className="flex items-center gap-2">
                       <span>Emitido em: {emissionDateFormatted}</span>
                       <span>•</span>
                       <span>{companyName || "Galeteria Brasão"}</span>
                     </div>
 
-                    <div className="font-bold text-neutral-800">
+                    <div className="font-bold text-neutral-900">
                       Página {pageNumber} de {totalPages}
                     </div>
                   </div>
