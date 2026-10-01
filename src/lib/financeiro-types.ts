@@ -2,7 +2,7 @@ export type TipoTransacao = "receita" | "despesa";
 
 export type StatusTransacao = "pendente" | "pago" | "atrasado" | "cancelado";
 
-export type TipoRecorrencia = "unica" | "mensal" | "parcelada";
+export type TipoRecorrencia = "unica" | "semanal" | "quinzenal" | "mensal" | "parcelada";
 
 export interface FinancialCategory {
   id: string;
@@ -109,6 +109,8 @@ export interface CreateFinancialTransactionInput {
   recurrence_type?: TipoRecorrencia | undefined;
   installment_total?: number | undefined; // Para compras parceladas (ex: 3x, 12x)
   recurrence_months?: number | undefined; // Para recorrências mensais fixas geradas adiantadas
+  recurrence_weeks?: number | undefined; // Para recorrências semanais fixas (ex: domingos, 12 a 52 semanas)
+  recurrence_day_of_week?: number | undefined; // 0 (Domingo) a 6 (Sábado)
 }
 
 export interface UpdateFinancialTransactionInput {

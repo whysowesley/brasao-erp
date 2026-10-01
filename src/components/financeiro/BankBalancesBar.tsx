@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { format, parseISO } from "date-fns";
 import {
   Wallet,
   Pencil,
@@ -9,6 +10,7 @@ import {
   Trash2,
   ShieldCheck,
   AlertCircle,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,7 @@ interface BankBalancesBarProps {
   dayTotalAmount: number;
   canWrite?: boolean;
   compact?: boolean;
+  date?: string;
 }
 
 interface AccountDraft {
@@ -40,9 +43,10 @@ export function BankBalancesBar({
   dayTotalAmount,
   canWrite = true,
   compact = false,
+  date,
 }: BankBalancesBarProps) {
-  const { accounts, total, isLoading } = useBankBalances();
-  const updateMutation = useUpdateBankBalances();
+  const { accounts, total, isLoading, isReplicated, replicatedFromDate } = useBankBalances(date);
+  const updateMutation = useUpdateBankBalances(date);
 
   const [isOpen, setIsOpen] = useState(false);
   const [accountDrafts, setAccountDrafts] = useState<AccountDraft[]>([]);
@@ -119,8 +123,12 @@ export function BankBalancesBar({
     }));
 
     try {
-      await updateMutation.mutateAsync({ accounts: parsedAccounts });
-      toast.success("Saldos e métodos atualizados com sucesso!");
+      await updateMutation.mutateAsync({ accounts: parsedAccounts, date });
+      toast.success(
+        date
+          ? `Saldos do dia ${format(parseISO(date), "dd/MM")} gravados com sucesso!`
+          : "Saldos e métodos atualizados com sucesso!",
+      );
       setIsOpen(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao atualizar saldos.";
@@ -144,7 +152,7 @@ export function BankBalancesBar({
         <button
           type="button"
           className="group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/25 transition-all text-[11px] font-medium text-white border border-white/20 cursor-pointer select-none text-left shadow-sm"
-          title="Clique para gerenciar contas, métodos e saldos bancários manuais"
+          title={`Clique para gerenciar saldos deste dia (${date ? format(parseISO(date), "dd/MM/yyyy") : "manual"})`}
         >
           <Wallet className="h-3.5 w-3.5 text-blue-200 group-hover:scale-110 transition-transform shrink-0" />
 
@@ -192,18 +200,20 @@ export function BankBalancesBar({
         </button>
       </PopoverTrigger>
 
-      <PopoverContent className="w-[360px] sm:w-[460px] p-4 space-y-4" align="start">
+      <PopoverContent className="w-[360px] sm:w-[480px] p-4 space-y-4" align="start">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="flex items-center justify-between border-b pb-2">
             <div className="flex items-center gap-2">
               <Building className="h-4 w-4 text-primary shrink-0" />
               <div>
                 <h4 className="font-bold text-xs sm:text-sm text-foreground">
-                  Saldos Bancários & Métodos de Pagamento
+                  {date
+                    ? `Saldos Bancários — ${format(parseISO(date), "dd/MM/yyyy")}`
+                    : "Saldos Bancários & Métodos"}
                 </h4>
                 <p className="text-[10px] text-muted-foreground">
-                  Adicione, edite ou exclua métodos/bancos. Reconhece valores com vírgula (4901,17),
-                  mil, milhão, etc.
+                  Cada dia possui seu próprio saldo. Você pode editar qualquer dia a qualquer
+                  momento.
                 </p>
               </div>
             </div>
@@ -219,6 +229,30 @@ export function BankBalancesBar({
               Add Método
             </Button>
           </div>
+
+          {/* Indicador de herança ou histórico individual do dia */}
+          {date && isReplicated && replicatedFromDate && (
+            <div className="flex items-start gap-2 p-2 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-800 dark:text-amber-300 text-[11px]">
+              <History className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+              <div>
+                <span className="font-semibold">
+                  Sugerido a partir do histórico de{" "}
+                  {format(parseISO(replicatedFromDate), "dd/MM/yyyy")}.
+                </span>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Ao atualizar os valores abaixo e salvar, este dia terá sua própria conta salva sem
+                  afetar os dias anteriores.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {date && !isReplicated && (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/25 text-emerald-800 dark:text-emerald-300 text-[11px] font-medium">
+              <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              <span>Histórico individual gravado deste dia (editável a qualquer momento).</span>
+            </div>
+          )}
 
           {/* Atalhos rápidos para adicionar métodos comuns se não existirem */}
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -378,7 +412,9 @@ export function BankBalancesBar({
                 className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1"
               >
                 <Check className="h-3.5 w-3.5" />
-                Salvar Saldos
+                {date
+                  ? `Salvar Saldo deste Dia (${format(parseISO(date), "dd/MM")})`
+                  : "Salvar Saldos"}
               </Button>
             </div>
           </div>

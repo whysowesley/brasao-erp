@@ -20,6 +20,9 @@ import {
   CreditCard,
   ChevronDown,
   AlertTriangle,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import { toast } from "sonner";
@@ -105,6 +108,19 @@ function formatCurrency(val: number): string {
   }).format(val);
 }
 
+type SortField =
+  | "due_date"
+  | "expected_payment_date"
+  | "description"
+  | "type"
+  | "category"
+  | "cost_center"
+  | "supplier"
+  | "amount"
+  | "status";
+
+type SortDirection = "asc" | "desc";
+
 function LancamentosPage() {
   const { canWrite } = useAuth();
 
@@ -116,6 +132,29 @@ function LancamentosPage() {
   const [costCenterFilter, setCostCenterFilter] = useState<string>("todos");
   const [supplierFilter, setSupplierFilter] = useState<string>("todos");
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("todos");
+
+  // Ordenação da Tabela
+  const [sortField, setSortField] = useState<SortField>("due_date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  function handleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      // Para texto A-Z por padrão, para data/valor mais recente/maior por padrão
+      if (field === "amount" || field === "due_date" || field === "expected_payment_date") {
+        setSortDirection("desc");
+      } else {
+        setSortDirection("asc");
+      }
+    }
+  }
+
+  function handleResetSort() {
+    setSortField("due_date");
+    setSortDirection("desc");
+  }
 
   // Período
   const [periodPreset, setPeriodPreset] = useState<string>("mes_atual");
@@ -212,6 +251,72 @@ function LancamentosPage() {
       saldoPeriodo: rec - desp,
     };
   }, [transactions]);
+
+  // Lista ordenada pelos cabeçalhos interativos da tabela (A-Z, Maior/Menor, Datas, etc.)
+  const sortedTransactions = useMemo(() => {
+    if (!transactions.length) return [];
+    const list = [...transactions];
+
+    list.sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case "due_date":
+          comparison = a.due_date.localeCompare(b.due_date);
+          break;
+        case "expected_payment_date": {
+          const dateA = a.expected_payment_date || a.due_date;
+          const dateB = b.expected_payment_date || b.due_date;
+          comparison = dateA.localeCompare(dateB);
+          break;
+        }
+        case "description": {
+          const descA = a.description || "";
+          const descB = b.description || "";
+          comparison = descA.localeCompare(descB, "pt-BR", { sensitivity: "base" });
+          break;
+        }
+        case "type":
+          comparison = a.type.localeCompare(b.type);
+          break;
+        case "category": {
+          const catA = a.category?.name || a.category_name || "";
+          const catB = b.category?.name || b.category_name || "";
+          comparison = catA.localeCompare(catB, "pt-BR", { sensitivity: "base" });
+          break;
+        }
+        case "cost_center": {
+          const ccA = a.cost_center?.name || a.cost_center_name || "";
+          const ccB = b.cost_center?.name || b.cost_center_name || "";
+          comparison = ccA.localeCompare(ccB, "pt-BR", { sensitivity: "base" });
+          break;
+        }
+        case "supplier": {
+          const supA = a.supplier?.name || a.supplier_name || "";
+          const supB = b.supplier?.name || b.supplier_name || "";
+          comparison = supA.localeCompare(supB, "pt-BR", { sensitivity: "base" });
+          break;
+        }
+        case "amount": {
+          const amtA = a.status === "pago" && a.paid_amount ? a.paid_amount : a.amount;
+          const amtB = b.status === "pago" && b.paid_amount ? b.paid_amount : b.amount;
+          comparison = amtA - amtB;
+          break;
+        }
+        case "status": {
+          const statusA = resolveTransactionStatus(a.status, a.due_date, today);
+          const statusB = resolveTransactionStatus(b.status, b.due_date, today);
+          comparison = statusA.localeCompare(statusB);
+          break;
+        }
+        default:
+          comparison = 0;
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return list;
+  }, [transactions, sortField, sortDirection, today]);
 
   function handleOpenCreate() {
     if (!canWrite) return;
@@ -515,6 +620,42 @@ function LancamentosPage() {
 
       {/* Tabela Principal */}
       <div className="rounded-lg border border-border bg-card shadow-sm">
+        {/* Barra de Status da Ordenação */}
+        <div className="flex items-center justify-between px-3 py-1.5 bg-muted/20 border-b text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <ArrowUpDown className="h-3.5 w-3.5 text-primary" />
+            <span>Ordenado por:</span>
+            <Badge
+              variant="outline"
+              className="text-[10px] font-semibold bg-background py-0 h-5 gap-1"
+            >
+              {sortField === "due_date" && "Dia de Vencimento"}
+              {sortField === "expected_payment_date" && "Nova Data Pgto (Postergada)"}
+              {sortField === "description" && "Descrição"}
+              {sortField === "type" && "Tipo"}
+              {sortField === "category" && "Categoria"}
+              {sortField === "cost_center" && "Centro de Custo"}
+              {sortField === "supplier" && "Fornecedor"}
+              {sortField === "amount" && "Valor (R$)"}
+              {sortField === "status" && "Status"}
+              <span className="text-primary font-bold">
+                ({sortDirection === "asc" ? "A-Z / Menor / Antigo" : "Z-A / Maior / Recente"})
+              </span>
+            </Badge>
+          </div>
+
+          {(sortField !== "due_date" || sortDirection !== "desc") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleResetSort}
+              className="h-6 text-[10px] px-2 text-muted-foreground hover:text-foreground"
+            >
+              Restaurar padrão
+            </Button>
+          )}
+        </div>
+
         <div className="sm:hidden flex items-center justify-between px-3 py-2 text-[11px] text-muted-foreground bg-muted/40 border-b">
           <span>Arraste para o lado para ver todas as colunas</span>
           <span className="font-mono text-[10px] text-primary">↔ deslize</span>
@@ -523,15 +664,177 @@ function LancamentosPage() {
           <Table className="min-w-[880px]">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-28">Dia de Vencimento</TableHead>
-                <TableHead className="w-32">Nova Data Pgto (Postergada)</TableHead>
-                <TableHead>Descrição</TableHead>
-                <TableHead className="w-24">Tipo</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Centro de Custo</TableHead>
-                <TableHead>Fornecedor</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
-                <TableHead className="w-28 text-center">Status</TableHead>
+                <TableHead
+                  className="w-32 cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  onClick={() => handleSort("due_date")}
+                  title="Ordenar por Dia de Vencimento"
+                >
+                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
+                    <span>Dia de Vencimento</span>
+                    {sortField === "due_date" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
+                    )}
+                  </div>
+                </TableHead>
+
+                <TableHead
+                  className="w-36 cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  onClick={() => handleSort("expected_payment_date")}
+                  title="Ordenar por Nova Data Prevista de Pagamento"
+                >
+                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
+                    <span>Nova Data Pgto</span>
+                    {sortField === "expected_payment_date" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
+                    )}
+                  </div>
+                </TableHead>
+
+                <TableHead
+                  className="cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  onClick={() => handleSort("description")}
+                  title="Ordenar por Descrição (A-Z ou Z-A)"
+                >
+                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
+                    <span>Descrição</span>
+                    {sortField === "description" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
+                    )}
+                  </div>
+                </TableHead>
+
+                <TableHead
+                  className="w-24 cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  onClick={() => handleSort("type")}
+                  title="Ordenar por Tipo (Receita / Despesa)"
+                >
+                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
+                    <span>Tipo</span>
+                    {sortField === "type" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
+                    )}
+                  </div>
+                </TableHead>
+
+                <TableHead
+                  className="cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  onClick={() => handleSort("category")}
+                  title="Ordenar por Categoria (A-Z)"
+                >
+                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
+                    <span>Categoria</span>
+                    {sortField === "category" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
+                    )}
+                  </div>
+                </TableHead>
+
+                <TableHead
+                  className="cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  onClick={() => handleSort("cost_center")}
+                  title="Ordenar por Centro de Custo (A-Z)"
+                >
+                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
+                    <span>Centro de Custo</span>
+                    {sortField === "cost_center" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
+                    )}
+                  </div>
+                </TableHead>
+
+                <TableHead
+                  className="cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  onClick={() => handleSort("supplier")}
+                  title="Ordenar por Fornecedor (A-Z)"
+                >
+                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
+                    <span>Fornecedor</span>
+                    {sortField === "supplier" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
+                    )}
+                  </div>
+                </TableHead>
+
+                <TableHead
+                  className="text-right cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  onClick={() => handleSort("amount")}
+                  title="Ordenar por Valor (Maior para menor ou menor para maior)"
+                >
+                  <div className="flex items-center justify-end gap-1 font-semibold text-xs text-foreground group">
+                    <span>Valor</span>
+                    {sortField === "amount" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
+                    )}
+                  </div>
+                </TableHead>
+
+                <TableHead
+                  className="w-28 text-center cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  onClick={() => handleSort("status")}
+                  title="Ordenar por Status"
+                >
+                  <div className="flex items-center justify-center gap-1 font-semibold text-xs text-foreground group">
+                    <span>Status</span>
+                    {sortField === "status" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
+                    )}
+                  </div>
+                </TableHead>
+
                 <TableHead className="w-16 text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -554,7 +857,7 @@ function LancamentosPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                transactions.map((t) => {
+                sortedTransactions.map((t) => {
                   const status = resolveTransactionStatus(t.status, t.due_date, today);
                   const isReceita = t.type === "receita";
                   const isPago = status === "pago";

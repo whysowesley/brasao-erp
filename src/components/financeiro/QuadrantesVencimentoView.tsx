@@ -1144,8 +1144,9 @@ export function QuadrantesVencimentoView({
                       </Badge>
                     )}
 
-                    {/* 4 Opções de saldo sutis ao lado de cada nome do dia da semana */}
+                    {/* 4 Opções de saldo sutis ao lado de cada nome do dia da semana (individual por dia) */}
                     <BankBalancesBar
+                      date={dayKey}
                       dayPendingAmount={dayPending}
                       dayTotalAmount={dayTotal}
                       canWrite={canWrite}

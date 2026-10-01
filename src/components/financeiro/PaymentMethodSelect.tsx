@@ -187,9 +187,7 @@ export function PaymentMethodSelect({
               <div className="flex items-center justify-between border-b pb-2">
                 <div className="flex items-center gap-1.5">
                   <Settings2 className="h-4 w-4 text-primary" />
-                  <h4 className="font-bold text-xs text-foreground">
-                    Métodos de Pagamento
-                  </h4>
+                  <h4 className="font-bold text-xs text-foreground">Métodos de Pagamento</h4>
                 </div>
                 <span className="text-[10px] text-muted-foreground">
                   {paymentMethods.length} cadastrados
@@ -278,13 +276,8 @@ export function PaymentMethodSelect({
                       >
                         <div className="flex items-center gap-2 truncate pr-2">
                           {getMethodIcon(pm.type)}
-                          <span className="font-semibold text-foreground truncate">
-                            {pm.name}
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className="text-[9px] uppercase px-1 py-0"
-                          >
+                          <span className="font-semibold text-foreground truncate">{pm.name}</span>
+                          <Badge variant="outline" className="text-[9px] uppercase px-1 py-0">
                             {pm.type}
                           </Badge>
                         </div>

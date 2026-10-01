@@ -820,6 +820,45 @@ export async function createFinancialTransaction(
     return firstId;
   }
 
+  const isWeekly = input.recurrence_type === "semanal";
+
+  if (isWeekly) {
+    const occurrences = Math.min(Math.max(input.recurrence_weeks || 52, 2), 104);
+    const recurrenceGroupId = crypto.randomUUID();
+    let firstId = "";
+
+    const parts = input.due_date.split("-");
+    const baseYear = parseInt(parts[0] || "2026", 10);
+    const baseMonth = parseInt(parts[1] || "1", 10) - 1;
+    const baseDay = parseInt(parts[2] || "1", 10);
+
+    for (let i = 0; i < occurrences; i++) {
+      const nextDate = new Date(baseYear, baseMonth, baseDay + i * 7);
+      const nextDueDate = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}-${String(nextDate.getDate()).padStart(2, "0")}`;
+
+      const recDocRef = doc(collection(db, "financial_transactions"));
+      if (i === 0) firstId = recDocRef.id;
+
+      const isFirstAndPaid = i === 0 && input.status === "pago";
+
+      batch.set(recDocRef, {
+        ...basePayload,
+        amount: input.amount,
+        due_date: nextDueDate,
+        payment_date: isFirstAndPaid ? input.payment_date || nextDueDate : null,
+        paid_amount: isFirstAndPaid ? input.paid_amount || input.amount : null,
+        status: isFirstAndPaid ? "pago" : "pendente",
+        is_recurring: true,
+        recurrence_group_id: recurrenceGroupId,
+        installment_current: i + 1,
+        installment_total: occurrences,
+      });
+    }
+
+    await batch.commit();
+    return firstId;
+  }
+
   const isRecurring = input.recurrence_type === "mensal" || input.is_recurring === true;
 
   if (isRecurring) {

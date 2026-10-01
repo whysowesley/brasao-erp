@@ -50,6 +50,16 @@ import { useAuth } from "@/lib/auth";
 import type { FinancialTransaction, TipoRecorrencia, TipoTransacao } from "@/lib/financeiro-types";
 import { PaymentMethodSelect } from "./PaymentMethodSelect";
 
+const WEEKDAYS = [
+  { value: 0, label: "Domingo", plural: "Domingos" },
+  { value: 1, label: "Segunda-feira", plural: "Segundas" },
+  { value: 2, label: "Terça-feira", plural: "Terças" },
+  { value: 3, label: "Quarta-feira", plural: "Quartas" },
+  { value: 4, label: "Quinta-feira", plural: "Quintas" },
+  { value: 5, label: "Sexta-feira", plural: "Sextas" },
+  { value: 6, label: "Sábado", plural: "Sábados" },
+];
+
 interface LancamentoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -93,6 +103,8 @@ export function LancamentoDialog({
   const [recorrenciaType, setRecorrenciaType] = useState<TipoRecorrencia>("unica");
   const [installmentTotal, setInstallmentTotal] = useState("2");
   const [recurrenceMonths, setRecurrenceMonths] = useState("12");
+  const [recurrenceWeeks, setRecurrenceWeeks] = useState("52");
+  const [recurrenceDayOfWeek, setRecurrenceDayOfWeek] = useState<number>(new Date().getDay());
 
   const isEditing = !!transactionToEdit;
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
@@ -189,6 +201,8 @@ export function LancamentoDialog({
       setRecorrenciaType("unica");
       setInstallmentTotal("2");
       setRecurrenceMonths("12");
+      setRecurrenceWeeks("52");
+      setRecurrenceDayOfWeek(new Date().getDay());
     }
   }, [transactionToEdit, defaultType, open, categories, costCenters]);
 
@@ -270,10 +284,19 @@ export function LancamentoDialog({
             recorrenciaType === "parcelada" ? parseInt(installmentTotal, 10) || 2 : undefined,
           recurrence_months:
             recorrenciaType === "mensal" ? parseInt(recurrenceMonths, 10) || 12 : undefined,
+          recurrence_weeks:
+            recorrenciaType === "semanal" ? parseInt(recurrenceWeeks, 10) || 52 : undefined,
+          recurrence_day_of_week: recorrenciaType === "semanal" ? recurrenceDayOfWeek : undefined,
         });
 
         if (recorrenciaType === "parcelada") {
           toast.success(`Lançamento parcelado criado em ${installmentTotal}x com sucesso!`);
+        } else if (recorrenciaType === "semanal") {
+          const selectedDayName =
+            WEEKDAYS.find((w) => w.value === recurrenceDayOfWeek)?.plural || "Semanas";
+          toast.success(
+            `Pagamento fixo criado para os próximos ${selectedDayName} (${recurrenceWeeks} ocorrências)! Cada lançamento pode ser editado individualmente.`,
+          );
         } else if (recorrenciaType === "mensal") {
           toast.success(`Recorrência mensal criada para os próximos ${recurrenceMonths} meses!`);
         } else {
@@ -407,7 +430,12 @@ export function LancamentoDialog({
                     <Calendar
                       mode="single"
                       selected={dueDate}
-                      onSelect={(d) => d && setDueDate(d)}
+                      onSelect={(d) => {
+                        if (d) {
+                          setDueDate(d);
+                          setRecurrenceDayOfWeek(d.getDay());
+                        }
+                      }}
                       initialFocus
                     />
                   </PopoverContent>
@@ -663,7 +691,7 @@ export function LancamentoDialog({
                 <RadioGroup
                   value={recorrenciaType}
                   onValueChange={(val) => setRecorrenciaType(val as TipoRecorrencia)}
-                  className="grid grid-cols-3 gap-2"
+                  className="grid grid-cols-2 sm:grid-cols-4 gap-2"
                 >
                   <div className="flex items-center space-x-2 rounded-md border border-border bg-card p-2">
                     <RadioGroupItem value="unica" id="rec-unica" />
@@ -672,9 +700,12 @@ export function LancamentoDialog({
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2 rounded-md border border-border bg-card p-2">
-                    <RadioGroupItem value="parcelada" id="rec-parcelada" />
-                    <Label htmlFor="rec-parcelada" className="text-xs cursor-pointer">
-                      Parcelado (Nx)
+                    <RadioGroupItem value="semanal" id="rec-semanal" />
+                    <Label
+                      htmlFor="rec-semanal"
+                      className="text-xs cursor-pointer font-medium text-primary"
+                    >
+                      Fixo Semanal
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2 rounded-md border border-border bg-card p-2">
@@ -683,7 +714,89 @@ export function LancamentoDialog({
                       Fixo Mensal
                     </Label>
                   </div>
+                  <div className="flex items-center space-x-2 rounded-md border border-border bg-card p-2">
+                    <RadioGroupItem value="parcelada" id="rec-parcelada" />
+                    <Label htmlFor="rec-parcelada" className="text-xs cursor-pointer">
+                      Parcelado (Nx)
+                    </Label>
+                  </div>
                 </RadioGroup>
+
+                {recorrenciaType === "semanal" && (
+                  <div className="space-y-3 pt-2 border-t border-border/60">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="rec-weekday-select" className="text-xs font-medium">
+                          Dia da semana fixo:
+                        </Label>
+                        <Select
+                          value={String(recurrenceDayOfWeek)}
+                          onValueChange={(val) => {
+                            const newDay = parseInt(val, 10);
+                            setRecurrenceDayOfWeek(newDay);
+                            // Ajusta a data de vencimento base para cair no dia da semana escolhido
+                            const currDay = dueDate.getDay();
+                            const diff = (newDay - currDay + 7) % 7;
+                            const newDate = new Date(dueDate);
+                            newDate.setDate(dueDate.getDate() + diff);
+                            setDueDate(newDate);
+                          }}
+                        >
+                          <SelectTrigger
+                            id="rec-weekday-select"
+                            className="h-8 text-xs bg-background"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {WEEKDAYS.map((w) => (
+                              <SelectItem key={w.value} value={String(w.value)}>
+                                Todo(a) {w.label} ({w.plural})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label htmlFor="rec-weeks-count" className="text-xs font-medium">
+                          Duração / Repetições:
+                        </Label>
+                        <Select
+                          value={recurrenceWeeks}
+                          onValueChange={(val) => setRecurrenceWeeks(val)}
+                        >
+                          <SelectTrigger id="rec-weeks-count" className="h-8 text-xs bg-background">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="4">4 semanas (1 mês)</SelectItem>
+                            <SelectItem value="12">12 semanas (3 meses)</SelectItem>
+                            <SelectItem value="26">26 semanas (6 meses)</SelectItem>
+                            <SelectItem value="52">52 semanas (1 ano / Contínuo)</SelectItem>
+                            <SelectItem value="104">104 semanas (2 anos)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="rounded-md bg-blue-50/50 dark:bg-blue-950/20 p-2.5 border border-blue-200/50 dark:border-blue-900/50 text-[11px] text-blue-900 dark:text-blue-200 space-y-1">
+                      <p className="font-semibold flex items-center gap-1.5">
+                        <Repeat className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                        Repetir esse pagamento pelos próximos{" "}
+                        <strong className="underline decoration-blue-500">
+                          {WEEKDAYS.find((w) => w.value === recurrenceDayOfWeek)?.plural}
+                        </strong>{" "}
+                        ({recurrenceWeeks} repetições)
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Cada lançamento será criado individualmente na data certa do fluxo de caixa.
+                        Você poderá editar o valor, a data ou cancelar qualquer um dos dias de forma
+                        totalmente independente.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {recorrenciaType === "parcelada" && (
                   <div className="flex items-center gap-3 pt-1">
@@ -695,7 +808,7 @@ export function LancamentoDialog({
                       type="number"
                       min="2"
                       max="48"
-                      className="w-24 h-8 text-xs"
+                      className="w-24 h-8 text-xs bg-background"
                       value={installmentTotal}
                       onChange={(e) => setInstallmentTotal(e.target.value)}
                     />
@@ -715,7 +828,7 @@ export function LancamentoDialog({
                       type="number"
                       min="2"
                       max="24"
-                      className="w-24 h-8 text-xs"
+                      className="w-24 h-8 text-xs bg-background"
                       value={recurrenceMonths}
                       onChange={(e) => setRecurrenceMonths(e.target.value)}
                     />

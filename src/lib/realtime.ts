@@ -16,6 +16,7 @@ const ALL_COLLECTIONS = [
   "categories",
   "units",
   "settings",
+  "daily_bank_balances",
   "daily_sales",
   "holerites",
   "employees",

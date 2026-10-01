@@ -135,6 +135,10 @@ service cloud.firestore {
       allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
+    match /daily_bank_balances/{document=**} {
+      allow read: if isNonCounterApproved();
+      allow write: if canWrite();
+    }
     match /holerites/{document=**} {
       allow read: if isNonCounterApproved();
       allow write: if canWrite();
