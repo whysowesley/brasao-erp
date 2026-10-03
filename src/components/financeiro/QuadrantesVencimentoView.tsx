@@ -1717,6 +1717,32 @@ export function QuadrantesVencimentoView({
                                           Editar Conta
                                         </DropdownMenuItem>
 
+                                        <DropdownMenuItem
+                                          onClick={() => {
+                                            const baseDesc =
+                                              tx.description?.trim() ||
+                                              tx.supplier?.name ||
+                                              tx.supplier_name ||
+                                              "";
+                                            setEditingTransaction({
+                                              ...tx,
+                                              id: "",
+                                              description: baseDesc ? `${baseDesc} (Cópia)` : "",
+                                              status: "pendente",
+                                              payment_date: null,
+                                              paid_amount: null,
+                                              is_recurring: false,
+                                              recurrence_group_id: null,
+                                              installment_current: null,
+                                              installment_total: null,
+                                            });
+                                            setLancamentoDialogOpen(true);
+                                          }}
+                                        >
+                                          <Copy className="h-3.5 w-3.5 mr-2" />
+                                          Duplicar Lançamento
+                                        </DropdownMenuItem>
+
                                         {!isPaid && (
                                           <DropdownMenuItem
                                             onClick={() => setPayingTransaction(tx)}

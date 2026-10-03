@@ -358,14 +358,19 @@ function LancamentosPage() {
 
   function handleDuplicate(t: FinancialTransaction) {
     if (!canWrite) return;
-    // Abre o modal preenchendo os dados porém sem ID para criar novo
+    const baseDesc = t.description?.trim() || t.supplier?.name || t.supplier_name || "";
+    // Abre o modal preenchendo os dados porém sem ID para criar novo lançamento cópia
     setEditingTransaction({
       ...t,
       id: "",
-      description: `${t.description} (Cópia)`,
+      description: baseDesc ? `${baseDesc} (Cópia)` : "",
       status: "pendente",
       payment_date: null,
       paid_amount: null,
+      is_recurring: false,
+      recurrence_group_id: null,
+      installment_current: null,
+      installment_total: null,
     });
     setOpenLancamento(true);
   }

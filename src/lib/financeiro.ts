@@ -702,6 +702,8 @@ export function useInvalidateFinancial() {
     qc.invalidateQueries({ queryKey: ["financial_categories"] });
     qc.invalidateQueries({ queryKey: ["cost_centers"] });
     qc.invalidateQueries({ queryKey: ["payment_methods"] });
+    qc.invalidateQueries({ queryKey: ["bank_balances"] });
+    qc.invalidateQueries({ queryKey: ["suppliers"] });
   };
 }
 
@@ -928,6 +930,10 @@ export function useCreateFinancialTransaction() {
 export async function updateFinancialTransaction(
   input: UpdateFinancialTransactionInput,
 ): Promise<void> {
+  if (!input.id || typeof input.id !== "string" || !input.id.trim()) {
+    throw new Error("ID da transação inválido para atualização.");
+  }
+
   const updatePayload: Record<string, unknown> = {
     updated_at: serverTimestamp(),
   };

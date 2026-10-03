@@ -17,6 +17,7 @@ import {
   ArrowDownRight,
   CalendarDays,
   Table as TableIcon,
+  Copy,
 } from "lucide-react";
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import { toast } from "sonner";
@@ -257,6 +258,24 @@ function ContasPagarPage() {
   function handleOpenEdit(t: FinancialTransaction) {
     if (!canWrite) return;
     setEditingTransaction(t);
+    setOpenLancamento(true);
+  }
+
+  function handleDuplicate(t: FinancialTransaction) {
+    if (!canWrite) return;
+    const baseDesc = t.description?.trim() || t.supplier?.name || t.supplier_name || "";
+    setEditingTransaction({
+      ...t,
+      id: "",
+      description: baseDesc ? `${baseDesc} (Cópia)` : "",
+      status: "pendente",
+      payment_date: null,
+      paid_amount: null,
+      is_recurring: false,
+      recurrence_group_id: null,
+      installment_current: null,
+      installment_total: null,
+    });
     setOpenLancamento(true);
   }
 
@@ -671,6 +690,13 @@ function ContasPagarPage() {
                                       >
                                         <Pencil className="h-3.5 w-3.5" />
                                         <span>Editar</span>
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => handleDuplicate(t)}
+                                        className="gap-2"
+                                      >
+                                        <Copy className="h-3.5 w-3.5" />
+                                        <span>Duplicar</span>
                                       </DropdownMenuItem>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem

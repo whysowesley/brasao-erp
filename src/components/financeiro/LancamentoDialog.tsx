@@ -106,7 +106,10 @@ export function LancamentoDialog({
   const [recurrenceWeeks, setRecurrenceWeeks] = useState("52");
   const [recurrenceDayOfWeek, setRecurrenceDayOfWeek] = useState<number>(new Date().getDay());
 
-  const isEditing = !!transactionToEdit;
+  const isEditing = Boolean(transactionToEdit?.id && transactionToEdit.id.trim() !== "");
+  const isDuplicating = Boolean(
+    transactionToEdit && (!transactionToEdit.id || transactionToEdit.id.trim() === ""),
+  );
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   // Sincroniza formulário ao abrir ou alterar transactionToEdit
@@ -177,8 +180,47 @@ export function LancamentoDialog({
         transactionToEdit.cost_center_id ||
         "none";
       setCostCenterId(ccMatch);
-      setSupplierId(transactionToEdit.supplier_id || "none");
-      setPaymentMethodId(transactionToEdit.payment_method_id || "none");
+
+      const supMatch =
+        (transactionToEdit.supplier_id &&
+        suppliers.some((s) => s.id === transactionToEdit.supplier_id)
+          ? transactionToEdit.supplier_id
+          : undefined) ||
+        (transactionToEdit.supplier?.id &&
+        suppliers.some((s) => s.id === transactionToEdit.supplier!.id)
+          ? transactionToEdit.supplier!.id
+          : undefined) ||
+        (transactionToEdit.supplier?.name
+          ? suppliers.find(
+              (s) =>
+                s.name.toLowerCase().trim() ===
+                transactionToEdit.supplier!.name.toLowerCase().trim(),
+            )?.id
+          : undefined) ||
+        transactionToEdit.supplier_id ||
+        "none";
+      setSupplierId(supMatch);
+
+      const pmMatch =
+        (transactionToEdit.payment_method_id &&
+        paymentMethods.some((p) => p.id === transactionToEdit.payment_method_id)
+          ? transactionToEdit.payment_method_id
+          : undefined) ||
+        (transactionToEdit.payment_method?.id &&
+        paymentMethods.some((p) => p.id === transactionToEdit.payment_method!.id)
+          ? transactionToEdit.payment_method!.id
+          : undefined) ||
+        (transactionToEdit.payment_method_name
+          ? paymentMethods.find(
+              (p) =>
+                p.name.toLowerCase().trim() ===
+                transactionToEdit.payment_method_name!.toLowerCase().trim(),
+            )?.id
+          : undefined) ||
+        transactionToEdit.payment_method_id ||
+        "none";
+      setPaymentMethodId(pmMatch);
+
       setPixKey(transactionToEdit.pix_key || transactionToEdit.supplier?.pix_key || "");
       setNotes(transactionToEdit.notes || "");
       setDocumentUrl(transactionToEdit.document_url || "");
@@ -204,7 +246,7 @@ export function LancamentoDialog({
       setRecurrenceWeeks("52");
       setRecurrenceDayOfWeek(new Date().getDay());
     }
-  }, [transactionToEdit, defaultType, open, categories, costCenters]);
+  }, [transactionToEdit, defaultType, open, categories, costCenters, suppliers, paymentMethods]);
 
   // Categorias filtradas pelo tipo (receita ou despesa)
   const filteredCategories = categories.filter((c) => c.type === tipo);
@@ -235,7 +277,7 @@ export function LancamentoDialog({
     const selectedPaymentMethod = paymentMethods.find((p) => p.id === paymentMethodId);
 
     try {
-      if (isEditing && transactionToEdit) {
+      if (isEditing && transactionToEdit?.id) {
         await updateMutation.mutateAsync({
           id: transactionToEdit.id,
           description: description.trim() || null,
@@ -289,7 +331,9 @@ export function LancamentoDialog({
           recurrence_day_of_week: recorrenciaType === "semanal" ? recurrenceDayOfWeek : undefined,
         });
 
-        if (recorrenciaType === "parcelada") {
+        if (isDuplicating) {
+          toast.success("Lançamento duplicado e salvo com sucesso!");
+        } else if (recorrenciaType === "parcelada") {
           toast.success(`Lançamento parcelado criado em ${installmentTotal}x com sucesso!`);
         } else if (recorrenciaType === "semanal") {
           const selectedDayName =
@@ -321,12 +365,23 @@ export function LancamentoDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-primary" />
-              {isEditing ? "Editar Lançamento" : "Novo Lançamento Financeiro"}
+              {isEditing
+                ? "Editar Lançamento"
+                : isDuplicating
+                  ? "Duplicar Lançamento"
+                  : "Novo Lançamento Financeiro"}
+              {isDuplicating && (
+                <span className="text-xs font-normal px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                  Cópia / Novo Lançamento
+                </span>
+              )}
             </DialogTitle>
             <DialogDescription>
               {isEditing
                 ? "Atualize as informações do lançamento financeiro."
-                : "Preencha os campos abaixo para registrar uma entrada ou saída."}
+                : isDuplicating
+                  ? "Altere a data, valor ou fornecedor para salvar uma nova cópia deste lançamento."
+                  : "Preencha os campos abaixo para registrar uma entrada ou saída."}
             </DialogDescription>
           </DialogHeader>
 
@@ -867,7 +922,13 @@ export function LancamentoDialog({
               id="btn-save-transaction"
               disabled={isSubmitting || !canWrite || !isApproved}
             >
-              {isSubmitting ? "Salvando..." : isEditing ? "Salvar Alterações" : "Criar Lançamento"}
+              {isSubmitting
+                ? "Salvando..."
+                : isEditing
+                  ? "Salvar Alterações"
+                  : isDuplicating
+                    ? "Salvar Cópia (Duplicar)"
+                    : "Criar Lançamento"}
             </Button>
           </DialogFooter>
         </form>

@@ -157,6 +157,24 @@ function FinanceiroDashboardPage() {
     setOpenLancamento(true);
   }
 
+  function handleDuplicate(t: FinancialTransaction) {
+    if (!canWrite) return;
+    const baseDesc = t.description?.trim() || t.supplier?.name || t.supplier_name || "";
+    setEditingTransaction({
+      ...t,
+      id: "",
+      description: baseDesc ? `${baseDesc} (Cópia)` : "",
+      status: "pendente",
+      payment_date: null,
+      paid_amount: null,
+      is_recurring: false,
+      recurrence_group_id: null,
+      installment_current: null,
+      installment_total: null,
+    });
+    setOpenLancamento(true);
+  }
+
   function handleOpenPay(t: FinancialTransaction) {
     if (!canWrite) return;
     setPayingTransaction(t);
@@ -613,6 +631,15 @@ function FinanceiroDashboardPage() {
                                 onClick={() => handleOpenEdit(t)}
                               >
                                 Editar
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                onClick={() => handleDuplicate(t)}
+                                title="Duplicar este lançamento"
+                              >
+                                Duplicar
                               </Button>
                             </div>
                           </TableCell>
