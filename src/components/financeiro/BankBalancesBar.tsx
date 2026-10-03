@@ -226,26 +226,28 @@ export function BankBalancesBar({
           {/* Opções de saldo sutis lado a lado */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-[10px] sm:text-[11px]">
             {/* Flag Editável de SALDO (Restante do dia anterior) */}
-            <span
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-semibold border ${
-                effectiveCarriedBalance > 0
-                  ? "bg-amber-400/25 text-amber-100 border-amber-300/40 shadow-2xs"
-                  : "bg-black/15 text-blue-200 border-transparent"
-              }`}
-              title={
-                priorDate
-                  ? `Saldo restante transportado do dia anterior (${format(
-                      parseISO(priorDate),
-                      "dd/MM",
-                    )}): ${formatCurrencyBRL(effectiveCarriedBalance)}`
-                  : `Saldo transportado: ${formatCurrencyBRL(effectiveCarriedBalance)}`
-              }
-            >
-              <span>SALDO:</span>
-              <strong className="text-white font-bold">
-                {formatCurrencyBRL(effectiveCarriedBalance)}
-              </strong>
-            </span>
+            {(isCarriedFromPrior || effectiveCarriedBalance > 0) && (
+              <span
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-semibold border ${
+                  effectiveCarriedBalance > 0
+                    ? "bg-amber-400/25 text-amber-100 border-amber-300/40 shadow-2xs"
+                    : "bg-black/15 text-blue-200 border-transparent"
+                }`}
+                title={
+                  priorDate
+                    ? `Saldo restante transportado do dia anterior (${format(
+                        parseISO(priorDate),
+                        "dd/MM",
+                      )}): ${formatCurrencyBRL(effectiveCarriedBalance)}`
+                    : `Saldo transportado: ${formatCurrencyBRL(effectiveCarriedBalance)}`
+                }
+              >
+                <span>SALDO:</span>
+                <strong className="text-white font-bold">
+                  {formatCurrencyBRL(effectiveCarriedBalance)}
+                </strong>
+              </span>
+            )}
 
             {/* Contas bancárias (JAM, GBM, TON, SICREDI, etc.) */}
             {effectiveAccounts.map((acc) => (
