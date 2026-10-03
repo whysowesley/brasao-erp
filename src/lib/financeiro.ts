@@ -28,6 +28,7 @@ import type {
   MonthSummary,
   FinancialFilters,
   TransactionComment,
+  HighlightColor,
 } from "@/lib/financeiro-types";
 
 export type {
@@ -44,7 +45,124 @@ export type {
   MonthSummary,
   FinancialFilters,
   TransactionComment,
+  HighlightColor,
 };
+
+export const HIGHLIGHT_COLORS: {
+  id: HighlightColor;
+  label: string;
+  dotClass: string;
+  borderClass: string;
+  badgeClass: string;
+  rowClass: string;
+  name: string;
+}[] = [
+  {
+    id: "none",
+    label: "Sem destaque",
+    name: "Padrão",
+    dotClass: "bg-muted-foreground/30 border border-muted-foreground/40",
+    borderClass: "border-border",
+    badgeClass: "bg-muted text-muted-foreground",
+    rowClass: "",
+  },
+  {
+    id: "orange",
+    label: "Laranja (Novo / Destaque)",
+    name: "Laranja",
+    dotClass: "bg-orange-500",
+    borderClass: "border-orange-500",
+    badgeClass: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/30",
+    rowClass:
+      "bg-orange-500/[0.08] hover:bg-orange-500/[0.14] border-l-4 border-l-orange-500 dark:bg-orange-500/[0.12] dark:hover:bg-orange-500/[0.18]",
+  },
+  {
+    id: "amber",
+    label: "Âmbar Suave",
+    name: "Âmbar",
+    dotClass: "bg-amber-500",
+    borderClass: "border-amber-500",
+    badgeClass: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30",
+    rowClass:
+      "bg-amber-500/[0.08] hover:bg-amber-500/[0.14] border-l-4 border-l-amber-500 dark:bg-amber-500/[0.12] dark:hover:bg-amber-500/[0.18]",
+  },
+  {
+    id: "blue",
+    label: "Azul Suave",
+    name: "Azul",
+    dotClass: "bg-blue-500",
+    borderClass: "border-blue-500",
+    badgeClass: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30",
+    rowClass:
+      "bg-blue-500/[0.08] hover:bg-blue-500/[0.14] border-l-4 border-l-blue-500 dark:bg-blue-500/[0.12] dark:hover:bg-blue-500/[0.18]",
+  },
+  {
+    id: "emerald",
+    label: "Verde Esmeralda",
+    name: "Verde",
+    dotClass: "bg-emerald-500",
+    borderClass: "border-emerald-500",
+    badgeClass:
+      "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30",
+    rowClass:
+      "bg-emerald-500/[0.08] hover:bg-emerald-500/[0.14] border-l-4 border-l-emerald-500 dark:bg-emerald-500/[0.12] dark:hover:bg-emerald-500/[0.18]",
+  },
+  {
+    id: "purple",
+    label: "Roxo / Lavanda",
+    name: "Roxo",
+    dotClass: "bg-purple-500",
+    borderClass: "border-purple-500",
+    badgeClass: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border border-purple-500/30",
+    rowClass:
+      "bg-purple-500/[0.08] hover:bg-purple-500/[0.14] border-l-4 border-l-purple-500 dark:bg-purple-500/[0.12] dark:hover:bg-purple-500/[0.18]",
+  },
+  {
+    id: "rose",
+    label: "Rosa / Coral",
+    name: "Rosa",
+    dotClass: "bg-rose-500",
+    borderClass: "border-rose-500",
+    badgeClass: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30",
+    rowClass:
+      "bg-rose-500/[0.08] hover:bg-rose-500/[0.14] border-l-4 border-l-rose-500 dark:bg-rose-500/[0.12] dark:hover:bg-rose-500/[0.18]",
+  },
+  {
+    id: "yellow",
+    label: "Amarelo Destaque",
+    name: "Amarelo",
+    dotClass: "bg-yellow-400",
+    borderClass: "border-yellow-400",
+    badgeClass: "bg-yellow-500/15 text-yellow-800 dark:text-yellow-400 border border-yellow-500/30",
+    rowClass:
+      "bg-yellow-500/[0.08] hover:bg-yellow-500/[0.14] border-l-4 border-l-yellow-400 dark:bg-yellow-500/[0.12] dark:hover:bg-yellow-500/[0.18]",
+  },
+];
+
+export function getHighlightRowClass(color?: HighlightColor | string | null): string {
+  if (!color || color === "none") return "";
+  const found = HIGHLIGHT_COLORS.find((c) => c.id === color);
+  return found ? found.rowClass : "";
+}
+
+/**
+ * Verifica se um lançamento deve ser exibido com a tag "Novo":
+ * - Se `is_new === true` -> retorna true
+ * - Se `is_new === false` -> retorna false
+ * - Se `is_new` for indefinido/nulo, verifica se foi criado nas últimas 48h
+ */
+export function isTransactionNew(t: FinancialTransaction): boolean {
+  if (t.is_new === true) return true;
+  if (t.is_new === false) return false;
+  if (!t.created_at) return false;
+  try {
+    const createdTime = new Date(t.created_at).getTime();
+    const now = Date.now();
+    return now - createdTime < 48 * 60 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
 
 export interface QuitarTransacaoInput {
   id: string;
@@ -290,6 +408,8 @@ export function useFinancialTransactions(filters?: FinancialFilters) {
             ? (data["comments"] as TransactionComment[])
             : [],
           document_url: (data["document_url"] as string) || null,
+          highlight_color: (data["highlight_color"] as HighlightColor) || null,
+          is_new: data["is_new"] !== undefined ? Boolean(data["is_new"]) : null,
           is_recurring: Boolean(data["is_recurring"]),
           recurrence_group_id: (data["recurrence_group_id"] as string) || null,
           installment_current: (data["installment_current"] as number) || null,
@@ -773,6 +893,8 @@ export async function createFinancialTransaction(
     notes: input.notes?.trim() || null,
     comments: [],
     document_url: input.document_url?.trim() || null,
+    highlight_color: input.highlight_color || null,
+    is_new: input.is_new !== undefined ? input.is_new : true,
     created_at: serverTimestamp(),
     updated_at: serverTimestamp(),
   };
@@ -1034,6 +1156,8 @@ export async function updateFinancialTransaction(
   if (input.notes !== undefined) updatePayload["notes"] = input.notes;
   if (input.comments !== undefined) updatePayload["comments"] = input.comments;
   if (input.document_url !== undefined) updatePayload["document_url"] = input.document_url;
+  if (input.highlight_color !== undefined) updatePayload["highlight_color"] = input.highlight_color;
+  if (input.is_new !== undefined) updatePayload["is_new"] = input.is_new;
 
   await updateDoc(doc(db, "financial_transactions", input.id), updatePayload);
 }

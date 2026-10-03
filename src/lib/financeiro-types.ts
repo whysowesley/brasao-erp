@@ -4,6 +4,9 @@ export type StatusTransacao = "pendente" | "pago" | "atrasado" | "cancelado";
 
 export type TipoRecorrencia = "unica" | "semanal" | "quinzenal" | "mensal" | "parcelada";
 
+export type HighlightColor =
+  "none" | "orange" | "amber" | "blue" | "emerald" | "purple" | "rose" | "yellow";
+
 export interface FinancialCategory {
   id: string;
   name: string;
@@ -62,6 +65,8 @@ export interface FinancialTransaction {
   notes: string | null;
   comments?: TransactionComment[] | null; // Comentários e menções da conta
   document_url: string | null;
+  highlight_color?: HighlightColor | null; // Cor marcante suave para destacar a linha
+  is_new?: boolean | null; // Tag de lançamento novo
   is_recurring: boolean;
   recurrence_group_id: string | null;
   installment_current: number | null;
@@ -105,6 +110,8 @@ export interface CreateFinancialTransactionInput {
   pix_key?: string | null | undefined;
   notes?: string | null | undefined;
   document_url?: string | null | undefined;
+  highlight_color?: HighlightColor | null | undefined;
+  is_new?: boolean | null | undefined;
   is_recurring?: boolean | undefined;
   recurrence_type?: TipoRecorrencia | undefined;
   installment_total?: number | undefined; // Para compras parceladas (ex: 3x, 12x)
@@ -138,6 +145,8 @@ export interface UpdateFinancialTransactionInput {
   notes?: string | null | undefined;
   comments?: TransactionComment[] | undefined;
   document_url?: string | null | undefined;
+  highlight_color?: HighlightColor | null | undefined;
+  is_new?: boolean | null | undefined;
 }
 
 export interface QuitarTransacaoInput {

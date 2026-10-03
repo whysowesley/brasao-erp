@@ -16,6 +16,9 @@ import {
   ArrowUpRight,
   DollarSign,
   Copy,
+  Palette,
+  Sparkles,
+  Check,
 } from "lucide-react";
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import { toast } from "sonner";
@@ -70,12 +73,16 @@ import {
   useCostCenters,
   useDeleteFinancialTransaction,
   useReversePayment,
+  useUpdateFinancialTransaction,
   resolveTransactionStatus,
   getTransactionDisplayTitle,
   getTodayString,
+  HIGHLIGHT_COLORS,
+  getHighlightRowClass,
+  isTransactionNew,
 } from "@/lib/financeiro";
 import { useAuth } from "@/lib/auth";
-import type { FinancialTransaction } from "@/lib/financeiro-types";
+import type { FinancialTransaction, HighlightColor } from "@/lib/financeiro-types";
 
 export const Route = createFileRoute("/_authenticated/financeiro/contas-receber")({
   head: () => ({
@@ -126,6 +133,39 @@ function ContasReceberPage() {
   // Mutações
   const deleteMutation = useDeleteFinancialTransaction();
   const reverseMutation = useReversePayment();
+  const updateMutation = useUpdateFinancialTransaction();
+
+  const handleQuickHighlight = async (t: FinancialTransaction, color: HighlightColor) => {
+    if (!canWrite) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: t.id,
+        highlight_color: color === "none" ? null : color,
+      });
+      const colorLabel = HIGHLIGHT_COLORS.find((c) => c.id === color)?.name || "Padrão";
+      toast.success(
+        color === "none"
+          ? "Destaque de cor removido."
+          : `Cor da linha alterada para ${colorLabel}.`,
+      );
+    } catch {
+      toast.error("Erro ao alterar cor de destaque.");
+    }
+  };
+
+  const handleToggleNew = async (t: FinancialTransaction) => {
+    if (!canWrite) return;
+    const currentIsNew = isTransactionNew(t);
+    try {
+      await updateMutation.mutateAsync({
+        id: t.id,
+        is_new: !currentIsNew,
+      });
+      toast.success(!currentIsNew ? "Marcado com tag Novo!" : "Tag Novo removida.");
+    } catch {
+      toast.error("Erro ao atualizar tag Novo.");
+    }
+  };
 
   // Intervalo de datas
   const { startDate, endDate } = useMemo(() => {
@@ -520,16 +560,32 @@ function ContasReceberPage() {
                     const isPago = status === "pago";
 
                     return (
-                      <TableRow key={t.id} className="hover:bg-muted/30">
+                      <TableRow
+                        key={t.id}
+                        className={`hover:bg-muted/30 transition-colors ${getHighlightRowClass(
+                          t.highlight_color,
+                        )}`}
+                      >
                         <TableCell className="text-xs font-medium">
                           {format(parseISO(t.due_date), "dd/MM/yyyy")}
                         </TableCell>
 
                         <TableCell>
                           <div className="space-y-0.5">
-                            <span className="font-medium text-foreground">
-                              {getTransactionDisplayTitle(t)}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-medium text-foreground">
+                                {getTransactionDisplayTitle(t)}
+                              </span>
+                              {isTransactionNew(t) && (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.2 text-[9px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 shrink-0 shadow-2xs"
+                                  title="Lançamento novo (adicionado recentemente)"
+                                >
+                                  <Sparkles className="h-2.5 w-2.5 text-amber-500" />
+                                  Novo
+                                </span>
+                              )}
+                            </div>
                             {t.supplier_name && (
                               <p className="text-xs text-muted-foreground">
                                 Favorecido: {t.supplier_name}
@@ -619,6 +675,60 @@ function ContasReceberPage() {
                                     <Copy className="h-3.5 w-3.5" />
                                     <span>Duplicar</span>
                                   </DropdownMenuItem>
+
+                                  <DropdownMenuSeparator />
+
+                                  {/* Quick Color Picker */}
+                                  <div className="px-2 py-1.5 space-y-1.5">
+                                    <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+                                      <span className="flex items-center gap-1">
+                                        <Palette className="h-3 w-3" />
+                                        Cor de Destaque
+                                      </span>
+                                      {t.highlight_color && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleQuickHighlight(t, "none")}
+                                          className="text-[10px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+                                        >
+                                          Limpar
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+                                      {HIGHLIGHT_COLORS.map((c) => {
+                                        const isCur = (t.highlight_color || "none") === c.id;
+                                        return (
+                                          <button
+                                            key={c.id}
+                                            type="button"
+                                            onClick={() => handleQuickHighlight(t, c.id)}
+                                            className={`h-6 rounded-md flex items-center justify-center border transition-all cursor-pointer ${
+                                              isCur
+                                                ? "border-primary ring-1 ring-primary shadow-xs font-bold"
+                                                : "border-border/60 hover:border-border hover:bg-muted/50"
+                                            }`}
+                                            title={c.label}
+                                          >
+                                            <span
+                                              className={`h-3 w-3 rounded-full shrink-0 ${c.dotClass}`}
+                                            />
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+
+                                  <DropdownMenuItem
+                                    onClick={() => handleToggleNew(t)}
+                                    className="text-xs"
+                                  >
+                                    <Sparkles className="h-3.5 w-3.5 mr-2 text-amber-500" />
+                                    {isTransactionNew(t)
+                                      ? "Remover tag 'Novo'"
+                                      : "Marcar com tag 'Novo'"}
+                                  </DropdownMenuItem>
+
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem
                                     onClick={() => setDeletingTransaction(t)}

@@ -29,6 +29,7 @@ import {
   Copy,
   Layers,
   Tag,
+  Palette,
 } from "lucide-react";
 import {
   format,
@@ -85,9 +86,13 @@ import {
   useDeleteFinancialTransaction,
   useReversePayment,
   useBatchUpdateTransactionOrder,
+  useUpdateFinancialTransaction,
   resolveTransactionStatus,
   getTransactionDisplayTitle,
   getTodayString,
+  HIGHLIGHT_COLORS,
+  getHighlightRowClass,
+  isTransactionNew,
 } from "@/lib/financeiro";
 import { useSuppliers } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
@@ -96,6 +101,7 @@ import type {
   StatusTransacao,
   CostCenter,
   FinancialCategory,
+  HighlightColor,
 } from "@/lib/financeiro-types";
 import { LancamentoDialog } from "./LancamentoDialog";
 import { MarcarPagoDialog } from "./MarcarPagoDialog";
@@ -293,6 +299,39 @@ export function QuadrantesVencimentoView({
   const deleteMutation = useDeleteFinancialTransaction();
   const reverseMutation = useReversePayment();
   const batchUpdateOrderMutation = useBatchUpdateTransactionOrder();
+  const updateMutation = useUpdateFinancialTransaction();
+
+  const handleQuickHighlight = async (tx: FinancialTransaction, color: HighlightColor) => {
+    if (!canWrite) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: tx.id,
+        highlight_color: color === "none" ? null : color,
+      });
+      const colorLabel = HIGHLIGHT_COLORS.find((c) => c.id === color)?.name || "Padrão";
+      toast.success(
+        color === "none"
+          ? "Destaque de cor removido."
+          : `Cor da linha alterada para ${colorLabel}.`,
+      );
+    } catch {
+      toast.error("Erro ao alterar cor de destaque.");
+    }
+  };
+
+  const handleToggleNew = async (tx: FinancialTransaction) => {
+    if (!canWrite) return;
+    const currentIsNew = isTransactionNew(tx);
+    try {
+      await updateMutation.mutateAsync({
+        id: tx.id,
+        is_new: !currentIsNew,
+      });
+      toast.success(!currentIsNew ? "Marcado com tag Novo!" : "Tag Novo removida.");
+    } catch {
+      toast.error("Erro ao atualizar tag Novo.");
+    }
+  };
 
   // Dias do mês atual
   const monthStart = startOfMonth(currentMonthDate);
@@ -1428,9 +1467,9 @@ export function QuadrantesVencimentoView({
                               onDragOver={(e) => handleRowDragOver(e, tx, dayKey)}
                               onDragLeave={handleRowDragLeave}
                               onDrop={(e) => handleRowDrop(e, tx, dayKey)}
-                              className={`group hover:bg-muted/40 transition-colors ${
-                                isPaid ? "opacity-75 bg-muted/20" : ""
-                              } ${
+                              className={`group hover:bg-muted/40 transition-colors ${getHighlightRowClass(
+                                tx.highlight_color,
+                              )} ${isPaid ? "opacity-75 bg-muted/20" : ""} ${
                                 dragOverRowId === tx.id
                                   ? dragOverPosition === "above"
                                     ? "border-t-2 border-blue-500 bg-blue-50/70 dark:bg-blue-950/50 shadow-inner"
@@ -1496,6 +1535,15 @@ export function QuadrantesVencimentoView({
                                       <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                                       {tx.supplier_name || tx.description || "Sem descrição"}
                                     </span>
+                                    {isTransactionNew(tx) && (
+                                      <span
+                                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.2 text-[9px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 shrink-0 shadow-2xs"
+                                        title="Lançamento novo (adicionado recentemente)"
+                                      >
+                                        <Sparkles className="h-2.5 w-2.5 text-amber-500" />
+                                        Novo
+                                      </span>
+                                    )}
                                     {matchesAvulsoIsa(tx, costCenters, financialCategories) && (
                                       <Badge
                                         variant="outline"
@@ -1765,6 +1813,59 @@ export function QuadrantesVencimentoView({
                                             Estornar Pagamento
                                           </DropdownMenuItem>
                                         )}
+
+                                        <DropdownMenuSeparator />
+
+                                        {/* Quick Color Picker */}
+                                        <div className="px-2 py-1.5 space-y-1.5">
+                                          <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+                                            <span className="flex items-center gap-1">
+                                              <Palette className="h-3 w-3" />
+                                              Cor de Destaque
+                                            </span>
+                                            {tx.highlight_color && (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleQuickHighlight(tx, "none")}
+                                                className="text-[10px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+                                              >
+                                                Limpar
+                                              </button>
+                                            )}
+                                          </div>
+                                          <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+                                            {HIGHLIGHT_COLORS.map((c) => {
+                                              const isCur = (tx.highlight_color || "none") === c.id;
+                                              return (
+                                                <button
+                                                  key={c.id}
+                                                  type="button"
+                                                  onClick={() => handleQuickHighlight(tx, c.id)}
+                                                  className={`h-6 rounded-md flex items-center justify-center border transition-all cursor-pointer ${
+                                                    isCur
+                                                      ? "border-primary ring-1 ring-primary shadow-xs font-bold"
+                                                      : "border-border/60 hover:border-border hover:bg-muted/50"
+                                                  }`}
+                                                  title={c.label}
+                                                >
+                                                  <span
+                                                    className={`h-3 w-3 rounded-full shrink-0 ${c.dotClass}`}
+                                                  />
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+
+                                        <DropdownMenuItem
+                                          onClick={() => handleToggleNew(tx)}
+                                          className="text-xs"
+                                        >
+                                          <Sparkles className="h-3.5 w-3.5 mr-2 text-amber-500" />
+                                          {isTransactionNew(tx)
+                                            ? "Remover tag 'Novo'"
+                                            : "Marcar com tag 'Novo'"}
+                                        </DropdownMenuItem>
 
                                         <DropdownMenuSeparator />
 

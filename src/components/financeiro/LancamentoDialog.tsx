@@ -10,6 +10,9 @@ import {
   CreditCard,
   FileText,
   AlertTriangle,
+  Palette,
+  Sparkles,
+  Check,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -44,10 +47,18 @@ import {
   useCreateFinancialTransaction,
   useUpdateFinancialTransaction,
   getTodayString,
+  isTransactionNew,
+  HIGHLIGHT_COLORS,
+  getHighlightRowClass,
 } from "@/lib/financeiro";
 import { useSuppliers } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
-import type { FinancialTransaction, TipoRecorrencia, TipoTransacao } from "@/lib/financeiro-types";
+import type {
+  FinancialTransaction,
+  TipoRecorrencia,
+  TipoTransacao,
+  HighlightColor,
+} from "@/lib/financeiro-types";
 import { PaymentMethodSelect } from "./PaymentMethodSelect";
 
 const WEEKDAYS = [
@@ -98,6 +109,8 @@ export function LancamentoDialog({
   const [pixKey, setPixKey] = useState<string>("");
   const [notes, setNotes] = useState("");
   const [documentUrl, setDocumentUrl] = useState("");
+  const [highlightColor, setHighlightColor] = useState<HighlightColor>("none");
+  const [isNew, setIsNew] = useState<boolean>(true);
 
   // Recorrência & Parcelamento
   const [recorrenciaType, setRecorrenciaType] = useState<TipoRecorrencia>("unica");
@@ -224,6 +237,8 @@ export function LancamentoDialog({
       setPixKey(transactionToEdit.pix_key || transactionToEdit.supplier?.pix_key || "");
       setNotes(transactionToEdit.notes || "");
       setDocumentUrl(transactionToEdit.document_url || "");
+      setHighlightColor(transactionToEdit.highlight_color || "none");
+      setIsNew(isTransactionNew(transactionToEdit));
       setRecorrenciaType("unica");
     } else {
       setTipo(defaultType);
@@ -240,6 +255,8 @@ export function LancamentoDialog({
       setPixKey("");
       setNotes("");
       setDocumentUrl("");
+      setHighlightColor("none");
+      setIsNew(true);
       setRecorrenciaType("unica");
       setInstallmentTotal("2");
       setRecurrenceMonths("12");
@@ -298,6 +315,8 @@ export function LancamentoDialog({
           pix_key: pixKey.trim() || null,
           notes: notes.trim() || null,
           document_url: documentUrl.trim() || null,
+          highlight_color: highlightColor !== "none" ? highlightColor : null,
+          is_new: isNew,
         });
         toast.success("Lançamento atualizado com sucesso!");
       } else {
@@ -320,6 +339,8 @@ export function LancamentoDialog({
           pix_key: pixKey.trim() || null,
           notes: notes.trim() || null,
           document_url: documentUrl.trim() || null,
+          highlight_color: highlightColor !== "none" ? highlightColor : null,
+          is_new: isNew,
           is_recurring: recorrenciaType !== "unica",
           recurrence_type: recorrenciaType,
           installment_total:
@@ -905,6 +926,98 @@ export function LancamentoDialog({
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
               />
+            </div>
+
+            {/* Destaque Visual e Tag "Novo" */}
+            <div className="rounded-lg border border-border/80 bg-muted/20 p-3.5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-amber-500" />
+                  <Label htmlFor="tx-is-new" className="text-sm font-semibold cursor-pointer">
+                    Tag de Lançamento "Novo"
+                  </Label>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    id="tx-is-new"
+                    type="checkbox"
+                    checked={isNew}
+                    onChange={(e) => setIsNew(e.target.checked)}
+                    className="h-4 w-4 rounded border-border text-amber-600 focus:ring-amber-500 cursor-pointer accent-amber-500"
+                  />
+                  {isNew ? (
+                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                      Ativa (Novo)
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Desativada</span>
+                  )}
+                </label>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Exibe uma etiqueta minimalista laranja no lançamento para você identificar
+                rapidamente novos agendamentos e contas adicionadas recentemente.
+              </p>
+
+              <div className="pt-2.5 border-t border-border/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold flex items-center gap-1.5">
+                    <Palette className="h-3.5 w-3.5 text-primary" />
+                    Cor Marcante da Linha (Quadrante e Tabelas)
+                  </Label>
+                  {highlightColor !== "none" && (
+                    <button
+                      type="button"
+                      onClick={() => setHighlightColor("none")}
+                      className="text-[11px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+                    >
+                      Limpar cor
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  {HIGHLIGHT_COLORS.map((c) => {
+                    const isSelected = highlightColor === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setHighlightColor(c.id)}
+                        className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-all text-left cursor-pointer ${
+                          isSelected
+                            ? "border-primary ring-2 ring-primary/20 shadow-xs " +
+                              (c.id === "none"
+                                ? "bg-muted text-foreground font-bold"
+                                : c.badgeClass)
+                            : "border-border/70 hover:border-border hover:bg-muted/40 text-muted-foreground"
+                        }`}
+                        title={c.label}
+                      >
+                        <span className={`h-3.5 w-3.5 rounded-full shrink-0 ${c.dotClass}`} />
+                        <span className="truncate flex-1">{c.name}</span>
+                        {isSelected && <Check className="h-3 w-3 shrink-0 text-primary" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                {highlightColor !== "none" && (
+                  <div
+                    className={`mt-2 p-2.5 rounded-md text-xs border transition-all ${getHighlightRowClass(
+                      highlightColor,
+                    )} flex items-center justify-between shadow-xs`}
+                  >
+                    <span className="text-[11px] font-medium text-foreground">
+                      Exemplo visual do destaque aplicado na linha
+                    </span>
+                    {isNew && (
+                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                        <Sparkles className="h-2.5 w-2.5 text-amber-500" />
+                        Novo
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
