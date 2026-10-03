@@ -1010,8 +1010,8 @@ export function LancamentoDialog({
                       Exemplo visual do destaque aplicado na linha
                     </span>
                     {isNew && (
-                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
-                        <Sparkles className="h-2.5 w-2.5 text-amber-500" />
+                      <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30">
+                        <span className="h-1.5 w-1.5 rounded-full bg-orange-500 animate-pulse" />
                         Novo
                       </span>
                     )}

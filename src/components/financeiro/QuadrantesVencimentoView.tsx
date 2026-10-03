@@ -110,6 +110,7 @@ import { TransactionObservationDialog } from "./TransactionObservationDialog";
 import { TransactionCommentsDialog } from "./TransactionCommentsDialog";
 import { BankBalancesBar } from "./BankBalancesBar";
 import { MentionsNotificationPopup } from "./MentionsNotificationPopup";
+import { useAllDailyBankBalances, calculateRollingBalances } from "@/lib/bank-balances";
 
 function formatCurrency(val: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -271,6 +272,7 @@ export function QuadrantesVencimentoView({
   const [commentsTransaction, setCommentsTransaction] = useState<FinancialTransaction | null>(null);
 
   // Queries
+  const { balancesMap: allDailyBankBalancesMap } = useAllDailyBankBalances();
   const { data: suppliers = [] } = useSuppliers();
   const { data: costCenters = [] } = useCostCenters();
   const { data: financialCategories = [] } = useFinancialCategories();
@@ -534,6 +536,28 @@ export function QuadrantesVencimentoView({
 
     return { totalPagar, totalPago, totalGeral, countTotal, countPendentes };
   }, [groupedByDay]);
+
+  // Datas ordenadas de todos os dias do mês
+  const sortedMonthDateKeys = useMemo(() => {
+    return monthDays.map((d) => format(d, "yyyy-MM-dd")).sort();
+  }, [monthDays]);
+
+  // Total das contas a pagar lançadas por dia
+  const dayBillsMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    groupedByDay.forEach((items, dayKey) => {
+      map[dayKey] = items.reduce((acc, curr) => acc + curr.amount, 0);
+    });
+    return map;
+  }, [groupedByDay]);
+
+  // Saldos bancários rolantes calculados dinamicamente:
+  // - Restante do dia anterior vai para a flag SALDO do dia seguinte;
+  // - As contas começam zeradas para abastecimento manual;
+  // - Se uma conta for adicionada/corrigida no dia anterior, o saldo do dia seguinte atualiza automaticamente.
+  const rollingBalancesMap = useMemo(() => {
+    return calculateRollingBalances(sortedMonthDateKeys, dayBillsMap, allDailyBankBalancesMap);
+  }, [sortedMonthDateKeys, dayBillsMap, allDailyBankBalancesMap]);
 
   // Manipulação de Drag & Drop (com suporte interno no quadrante e entre dias)
   const handleDragStart = (e: React.DragEvent, tx: FinancialTransaction) => {
@@ -1189,6 +1213,7 @@ export function QuadrantesVencimentoView({
                       dayPendingAmount={dayPending}
                       dayTotalAmount={dayTotal}
                       canWrite={canWrite}
+                      rollingBalance={rollingBalancesMap[dayKey]}
                     />
                   </div>
 
@@ -1478,7 +1503,15 @@ export function QuadrantesVencimentoView({
                               }`}
                             >
                               {/* Reorder Handle & Up/Down Arrows */}
-                              <td className="px-1.5 py-2 text-center whitespace-nowrap">
+                              <td
+                                className={`px-1.5 py-2 text-center whitespace-nowrap transition-colors ${
+                                  tx.highlight_color && tx.highlight_color !== "none"
+                                    ? "border-l-4 " +
+                                      (HIGHLIGHT_COLORS.find((c) => c.id === tx.highlight_color)
+                                        ?.borderClass || "")
+                                    : ""
+                                }`}
+                              >
                                 <div className="flex items-center justify-center gap-0.5">
                                   <div
                                     className="p-1 text-muted-foreground/50 group-hover:text-foreground cursor-grab active:cursor-grabbing hover:bg-muted rounded"
@@ -1537,10 +1570,10 @@ export function QuadrantesVencimentoView({
                                     </span>
                                     {isTransactionNew(tx) && (
                                       <span
-                                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.2 text-[9px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 shrink-0 shadow-2xs"
+                                        className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30 shrink-0 shadow-2xs"
                                         title="Lançamento novo (adicionado recentemente)"
                                       >
-                                        <Sparkles className="h-2.5 w-2.5 text-amber-500" />
+                                        <span className="h-1.5 w-1.5 rounded-full bg-orange-500 animate-pulse" />
                                         Novo
                                       </span>
                                     )}
