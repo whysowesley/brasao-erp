@@ -61,7 +61,6 @@ const financeiroItems = [
   { title: "Dashboard Financeiro", url: "/financeiro", icon: Landmark },
   { title: "Fluxo de Caixa", url: "/financeiro/lancamentos", icon: ArrowLeftRight },
   { title: "Contas a Pagar", url: "/financeiro/contas-pagar", icon: TrendingDown },
-  { title: "Vencimentos por Dia", url: "/financeiro/vencimentos", icon: CalendarDays },
   { title: "Contas a Receber", url: "/financeiro/contas-receber", icon: TrendingUp },
   { title: "Visão Mensal", url: "/financeiro/meses", icon: Calendar },
   { title: "Relatórios / DRE", url: "/financeiro/relatorios", icon: FileSpreadsheet },
