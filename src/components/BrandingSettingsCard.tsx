@@ -1,11 +1,22 @@
 import { useState, useRef } from "react";
-import { Upload, RotateCcw, Check, Sparkles, Image as ImageIcon, AlertCircle } from "lucide-react";
+import {
+  Upload,
+  RotateCcw,
+  Check,
+  Sparkles,
+  Image as ImageIcon,
+  AlertCircle,
+  Palette,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BrasaoLogo } from "@/components/BrasaoLogo";
+import { SidebarThemeDialog } from "@/components/SidebarThemeDialog";
+import { QuadrantesThemeDialog } from "@/components/financeiro/QuadrantesThemeDialog";
+import { useSidebarTheme, useQuadrantesTheme } from "@/lib/theme-manager";
 import {
   useBranding,
   uploadBrandingLogo,
@@ -26,6 +37,10 @@ export function BrandingSettingsCard() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [savingText, setSavingText] = useState(false);
+  const [openSidebarDialog, setOpenSidebarDialog] = useState(false);
+  const [openQuadranteDialog, setOpenQuadranteDialog] = useState(false);
+  const { themeConfig: sidebarTheme } = useSidebarTheme();
+  const { themeConfig: quadranteTheme } = useQuadrantesTheme();
 
   // Permissão: master ou editor podem alterar branding
   const canEdit = isMaster || role === "editor";
@@ -279,6 +294,95 @@ export function BrandingSettingsCard() {
           </form>
         </div>
       </div>
+
+      {/* Seção de Cores do Sistema (Menu Lateral e Quadrantes) */}
+      <div className="mt-6 pt-6 border-t space-y-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <Palette className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">
+              Cores do Sistema (Menu Lateral &amp; Quadrantes de Vencimento)
+            </h3>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Personalize a cor da barra lateral esquerda (Vinho, Dourado com texto preto, etc.) e a
+            cor dos quadrantes diários.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {/* Card 1: Menu Lateral */}
+          <div className="rounded-lg border p-3.5 space-y-3 bg-muted/20">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-foreground">Menu Lateral Esquerdo</span>
+              <span
+                className="h-4 w-4 rounded-full border border-black/20 shadow-xs"
+                style={{ backgroundColor: sidebarTheme.sidebar }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Tema atual: <strong className="text-foreground">{sidebarTheme.name}</strong>
+            </p>
+            <div
+              className="p-2.5 rounded-md text-xs font-medium flex items-center justify-between border"
+              style={{
+                backgroundColor: sidebarTheme.sidebar,
+                color: sidebarTheme.sidebarForeground,
+                borderColor: sidebarTheme.sidebarBorder,
+              }}
+            >
+              <span>Exemplo de Item</span>
+              <span className="text-[10px] opacity-80">Ativo</span>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full text-xs h-8 gap-1.5"
+              onClick={() => setOpenSidebarDialog(true)}
+            >
+              <Palette className="h-3.5 w-3.5" />
+              Alterar Cor do Menu
+            </Button>
+          </div>
+
+          {/* Card 2: Quadrantes por Dia */}
+          <div className="rounded-lg border p-3.5 space-y-3 bg-muted/20">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-foreground">
+                Quadrantes de Vencimento
+              </span>
+              <span
+                className="h-4 w-4 rounded-full border border-black/20 shadow-xs"
+                style={{ backgroundColor: quadranteTheme.previewBg }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Cor atual: <strong className="text-foreground">{quadranteTheme.name}</strong>
+            </p>
+            <div
+              style={quadranteTheme.headerStyle}
+              className={`p-2 rounded-md text-xs font-bold flex items-center justify-between ${quadranteTheme.headerBgClass} ${quadranteTheme.headerTextClass}`}
+            >
+              <span className="uppercase text-[11px]">02 DE OUTUBRO</span>
+              <span className="text-[10px] opacity-90">R$ 1.850,00</span>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full text-xs h-8 gap-1.5"
+              onClick={() => setOpenQuadranteDialog(true)}
+            >
+              <Palette className="h-3.5 w-3.5" />
+              Alterar Cor dos Quadrantes
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <SidebarThemeDialog open={openSidebarDialog} onOpenChange={setOpenSidebarDialog} />
+      <QuadrantesThemeDialog open={openQuadranteDialog} onOpenChange={setOpenQuadranteDialog} />
     </section>
   );
 }

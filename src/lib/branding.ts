@@ -9,6 +9,11 @@ export interface BrandingSettings {
   companyName: string;
   subtitle: string;
   themePrimaryColor?: string;
+  sidebarTheme?: string;
+  quadrantesTheme?: string;
+  customQuadrantColor?: string;
+  customSidebarColor?: string;
+  customSidebarTextColor?: "black" | "white";
   updatedAt?: unknown;
   updatedBy?: string;
 }
@@ -17,6 +22,8 @@ export const DEFAULT_BRANDING: BrandingSettings = {
   logoUrl: "/brasao-logo.jpeg",
   companyName: "Galeteria Brasão",
   subtitle: "Sistema de Gestão & ERP",
+  sidebarTheme: "vinho",
+  quadrantesTheme: "azul",
 };
 
 /**
@@ -65,6 +72,19 @@ export function useBranding() {
               subtitle: data.subtitle || DEFAULT_BRANDING.subtitle,
               ...(data.themePrimaryColor !== undefined
                 ? { themePrimaryColor: data.themePrimaryColor }
+                : {}),
+              ...(data.sidebarTheme !== undefined ? { sidebarTheme: data.sidebarTheme } : {}),
+              ...(data.quadrantesTheme !== undefined
+                ? { quadrantesTheme: data.quadrantesTheme }
+                : {}),
+              ...(data.customQuadrantColor !== undefined
+                ? { customQuadrantColor: data.customQuadrantColor }
+                : {}),
+              ...(data.customSidebarColor !== undefined
+                ? { customSidebarColor: data.customSidebarColor }
+                : {}),
+              ...(data.customSidebarTextColor !== undefined
+                ? { customSidebarTextColor: data.customSidebarTextColor }
                 : {}),
               ...(data.updatedAt !== undefined ? { updatedAt: data.updatedAt } : {}),
               ...(data.updatedBy !== undefined ? { updatedBy: data.updatedBy } : {}),

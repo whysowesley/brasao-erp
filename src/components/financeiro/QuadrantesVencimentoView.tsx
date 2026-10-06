@@ -112,7 +112,9 @@ import { TransactionCommentsDialog } from "./TransactionCommentsDialog";
 import { BankBalancesBar } from "./BankBalancesBar";
 import { MentionsNotificationPopup } from "./MentionsNotificationPopup";
 import { CategoriasDialog } from "./CategoriasDialog";
+import { QuadrantesThemeDialog } from "./QuadrantesThemeDialog";
 import { useAllDailyBankBalances, calculateRollingBalances } from "@/lib/bank-balances";
+import { useQuadrantesTheme } from "@/lib/theme-manager";
 
 function formatCurrency(val: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -225,6 +227,8 @@ export function QuadrantesVencimentoView({
   // Mês selecionado
   const [currentMonthDate, setCurrentMonthDate] = useState<Date>(initialDate);
   const [openCategorias, setOpenCategorias] = useState(false);
+  const [openQuadranteThemeDialog, setOpenQuadranteThemeDialog] = useState(false);
+  const { themeConfig: quadranteTheme } = useQuadrantesTheme();
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState("");
@@ -939,6 +943,20 @@ export function QuadrantesVencimentoView({
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setOpenQuadranteThemeDialog(true)}
+              className="gap-1.5 h-9"
+              title="Personalizar cor dos quadrantes (Vinho, Dourado, Azul, etc.)"
+            >
+              <span
+                className="h-3.5 w-3.5 rounded-full border border-black/20 shrink-0 shadow-xs"
+                style={{ backgroundColor: quadranteTheme.previewBg }}
+              />
+              <span className="hidden sm:inline">Cor dos Quadrantes</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setOpenCategorias(true)}
               className="gap-1.5 h-9"
               title="Configurações Financeiras: Categorias, Centros de Custo e Formas de Pagamento"
@@ -1202,17 +1220,22 @@ export function QuadrantesVencimentoView({
                 onDrop={(e) => handleDrop(e, dayKey)}
                 className={`transition-all duration-200 border rounded-xl overflow-hidden shadow-sm ${
                   isDragTarget
-                    ? "ring-2 ring-blue-500 border-blue-500 bg-blue-50/40 dark:bg-blue-950/20"
+                    ? quadranteTheme.dragRing
                     : isCurrentDay
-                      ? "border-blue-300 dark:border-blue-700/60 shadow-md"
+                      ? `${quadranteTheme.borderHighlight} shadow-md`
                       : "border-border bg-card"
                 }`}
               >
-                {/* Cabeçalho do Quadrante - Azul Real Sólido com Texto em Caixa Alta Conforme Modelo */}
-                <div className="bg-[#0047AB] dark:bg-[#1E3A8A] text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5 select-none">
+                {/* Cabeçalho do Quadrante */}
+                <div
+                  style={quadranteTheme.headerStyle}
+                  className={`${quadranteTheme.headerBgClass} ${quadranteTheme.headerTextClass} px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5 select-none transition-colors`}
+                >
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <CalendarClock className="h-4 w-4 text-blue-200 shrink-0" />
-                    <span className="font-extrabold tracking-wide text-xs sm:text-sm text-white">
+                    <CalendarClock
+                      className={`h-4 w-4 ${quadranteTheme.headerSubtextClass} shrink-0`}
+                    />
+                    <span className="font-extrabold tracking-wide text-xs sm:text-sm">
                       {dayTitle}
                     </span>
                     {isCurrentDay && (
@@ -1233,12 +1256,12 @@ export function QuadrantesVencimentoView({
 
                   <div className="flex items-center gap-3">
                     <div className="text-right">
-                      <span className="text-[11px] text-blue-200 font-medium mr-1.5">
+                      <span
+                        className={`text-[11px] ${quadranteTheme.headerSubtextClass} font-medium mr-1.5`}
+                      >
                         Total do dia:
                       </span>
-                      <span className="font-extrabold text-sm text-white">
-                        {formatCurrency(dayTotal)}
-                      </span>
+                      <span className="font-extrabold text-sm">{formatCurrency(dayTotal)}</span>
                     </div>
 
                     {canWrite && (
@@ -1246,7 +1269,7 @@ export function QuadrantesVencimentoView({
                         size="sm"
                         variant="secondary"
                         onClick={() => handleAddInDay(dayKey)}
-                        className="h-7 text-xs px-2.5 bg-white/20 hover:bg-white/30 text-white border-none font-medium"
+                        className={`h-7 text-xs px-2.5 ${quadranteTheme.headerBtnBg} border-none font-medium`}
                       >
                         <Plus className="h-3.5 w-3.5 mr-1" />
                         Adicionar
@@ -2018,6 +2041,10 @@ export function QuadrantesVencimentoView({
       </AlertDialog>
 
       <CategoriasDialog open={openCategorias} onOpenChange={setOpenCategorias} />
+      <QuadrantesThemeDialog
+        open={openQuadranteThemeDialog}
+        onOpenChange={setOpenQuadranteThemeDialog}
+      />
     </div>
   );
 }

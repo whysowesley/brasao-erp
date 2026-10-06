@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -22,6 +23,7 @@ import {
   FileSpreadsheet,
   CircleDollarSign,
   ReceiptText,
+  Palette,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,6 +31,8 @@ import { BrasaoLogo } from "@/components/BrasaoLogo";
 import { useBranding } from "@/lib/branding";
 import { ROLE_LABEL, fetchUsersList, signOutAuth, useMe } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { SidebarThemeDialog } from "@/components/SidebarThemeDialog";
+import { useSidebarTheme } from "@/lib/theme-manager";
 import {
   Sidebar,
   SidebarContent,
@@ -88,6 +92,8 @@ export function AppSidebar() {
   const { data: me } = useMe();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [openSidebarTheme, setOpenSidebarTheme] = useState(false);
+  useSidebarTheme(); // Garante aplicação do tema ao carregar
 
   const isMaster = me?.role === "master";
   const isCounter = me?.role === "contagem";
@@ -313,12 +319,30 @@ export function AppSidebar() {
               </p>
             </div>
           )}
-          <Button variant="ghost" size="sm" className="justify-start gap-2" onClick={signOut}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            onClick={() => setOpenSidebarTheme(true)}
+            title="Personalizar cor do menu lateral (Vinho, Dourado com texto preto, etc.)"
+          >
+            <Palette className="h-4 w-4" />
+            {!collapsed && <span>Cor do Menu</span>}
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            onClick={signOut}
+          >
             <LogOut className="h-4 w-4" />
             {!collapsed && <span>Sair</span>}
           </Button>
         </SidebarFooter>
       )}
+
+      <SidebarThemeDialog open={openSidebarTheme} onOpenChange={setOpenSidebarTheme} />
     </Sidebar>
   );
 }

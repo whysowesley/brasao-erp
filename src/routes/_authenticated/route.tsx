@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { getCurrentAuthUser, signOutAuth, useAuth, useCanWrite, useMe } from "@/lib/auth";
 import { useBranding } from "@/lib/branding";
+import { useSidebarTheme } from "@/lib/theme-manager";
 import { useRealtimeSync } from "@/lib/realtime";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -32,6 +33,7 @@ function AuthenticatedLayout() {
   const { data: me, isLoading, refetch } = useMe();
   const { isApproved, isMaster, isCounter, signOut } = useAuth();
   const { branding } = useBranding();
+  useSidebarTheme(); // Aplica tema da barra lateral
   const canWrite = useCanWrite();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
