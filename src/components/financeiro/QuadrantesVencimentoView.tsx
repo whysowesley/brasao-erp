@@ -30,6 +30,7 @@ import {
   Layers,
   Tag,
   Palette,
+  FolderPlus,
 } from "lucide-react";
 import {
   format,
@@ -110,6 +111,7 @@ import { TransactionObservationDialog } from "./TransactionObservationDialog";
 import { TransactionCommentsDialog } from "./TransactionCommentsDialog";
 import { BankBalancesBar } from "./BankBalancesBar";
 import { MentionsNotificationPopup } from "./MentionsNotificationPopup";
+import { CategoriasDialog } from "./CategoriasDialog";
 import { useAllDailyBankBalances, calculateRollingBalances } from "@/lib/bank-balances";
 
 function formatCurrency(val: number): string {
@@ -222,6 +224,7 @@ export function QuadrantesVencimentoView({
 
   // Mês selecionado
   const [currentMonthDate, setCurrentMonthDate] = useState<Date>(initialDate);
+  const [openCategorias, setOpenCategorias] = useState(false);
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState("");
@@ -932,6 +935,17 @@ export function QuadrantesVencimentoView({
             </div>
 
             <MentionsNotificationPopup variant="trigger" />
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOpenCategorias(true)}
+              className="gap-1.5 h-9"
+              title="Configurações Financeiras: Categorias, Centros de Custo e Formas de Pagamento"
+            >
+              <FolderPlus className="h-4 w-4 text-primary" />
+              <span className="hidden sm:inline">Configurações</span>
+            </Button>
 
             {canWrite && (
               <Button
@@ -2002,6 +2016,8 @@ export function QuadrantesVencimentoView({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CategoriasDialog open={openCategorias} onOpenChange={setOpenCategorias} />
     </div>
   );
 }

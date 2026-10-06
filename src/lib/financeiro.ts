@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { DocumentReference } from "firebase/firestore";
 import {
   addDoc,
   collection,
@@ -1624,6 +1625,152 @@ export async function saveFinancialCategory(
   return ref.id;
 }
 
+export async function updateFinancialCategory(
+  id: string,
+  category: { name: string; type?: TipoTransacao; color?: string | null; icon?: string | null },
+  oldName?: string,
+) {
+  const newName = category.name.trim();
+  const cleanOldName = oldName?.trim() || "";
+
+  // 1. Atualiza documento da categoria
+  const payload: Record<string, unknown> = {
+    name: newName,
+    updated_at: serverTimestamp(),
+  };
+  if (category.type) payload["type"] = category.type;
+  if (category.color !== undefined) payload["color"] = category.color;
+  if (category.icon !== undefined) payload["icon"] = category.icon;
+
+  await updateDoc(doc(db, "financial_categories", id), payload);
+
+  // 2. Cascata: atualiza todas as transações financeiras vinculadas (por id ou nome antigo)
+  try {
+    const txSnap = await getDocs(collection(db, "financial_transactions"));
+    const updates: Array<{ ref: DocumentReference; data: Record<string, unknown> }> = [];
+
+    for (const d of txSnap.docs) {
+      const data = d.data();
+      const catId = data["category_id"] || (data["category"] as Record<string, unknown>)?.["id"];
+      const catName =
+        data["category_name"] || (data["category"] as Record<string, unknown>)?.["name"];
+
+      const matchesId = Boolean(catId && String(catId) === id);
+      const matchesName = Boolean(
+        cleanOldName &&
+        typeof catName === "string" &&
+        catName.trim().toLowerCase() === cleanOldName.toLowerCase(),
+      );
+
+      if (matchesId || matchesName) {
+        updates.push({
+          ref: d.ref,
+          data: {
+            category_id: id,
+            category_name: newName,
+            category: {
+              id,
+              name: newName,
+              type: category.type || data["type"] || "despesa",
+              color: category.color ?? null,
+              icon: category.icon ?? null,
+            },
+            updated_at: serverTimestamp(),
+          },
+        });
+      }
+    }
+
+    // Cascata em produtos do estoque se vinculados
+    try {
+      const prodSnap = await getDocs(collection(db, "products"));
+      for (const pd of prodSnap.docs) {
+        const pdata = pd.data();
+        const pCatId = pdata["category_id"];
+        const pCatName = pdata["category_name"];
+        if (
+          (pCatId && String(pCatId) === id) ||
+          (cleanOldName &&
+            typeof pCatName === "string" &&
+            pCatName.trim().toLowerCase() === cleanOldName.toLowerCase())
+        ) {
+          updates.push({
+            ref: pd.ref,
+            data: {
+              category_id: id,
+              category_name: newName,
+              updated_at: serverTimestamp(),
+            },
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // Cascata em fornecedores se vinculados
+    try {
+      const supSnap = await getDocs(collection(db, "suppliers"));
+      for (const sp of supSnap.docs) {
+        const sdata = sp.data();
+        const sCatId = sdata["category_id"];
+        const sCatName = sdata["category_name"] || sdata["category"];
+        if (
+          (sCatId && String(sCatId) === id) ||
+          (cleanOldName &&
+            typeof sCatName === "string" &&
+            sCatName.trim().toLowerCase() === cleanOldName.toLowerCase())
+        ) {
+          updates.push({
+            ref: sp.ref,
+            data: {
+              category_id: id,
+              category_name: newName,
+              updated_at: serverTimestamp(),
+            },
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // Gravação em lote (batches de até 400 documentos)
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
+      const chunk = updates.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      for (const item of chunk) {
+        batch.update(item.ref, item.data);
+      }
+      await batch.commit();
+    }
+  } catch (err) {
+    console.error("Erro na cascata de atualização de categoria:", err);
+  }
+
+  return id;
+}
+
+export function useUpdateCategory() {
+  const invalidate = useInvalidateFinancial();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      id: string;
+      category: { name: string; type?: TipoTransacao; color?: string | null; icon?: string | null };
+      oldName?: string;
+    }) => updateFinancialCategory(data.id, data.category, data.oldName),
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["financial_categories"] });
+      qc.invalidateQueries({ queryKey: ["financial_transactions"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["suppliers"] });
+    },
+  });
+}
+
 export function useCreateCategory() {
   const invalidate = useInvalidateFinancial();
   return useMutation({
@@ -1669,6 +1816,118 @@ export async function saveCostCenter(
   return ref.id;
 }
 
+export async function updateCostCenter(
+  id: string,
+  center: { name: string; description?: string | null },
+  oldName?: string,
+) {
+  const newName = center.name.trim();
+  const cleanOldName = oldName?.trim() || "";
+
+  // 1. Atualiza documento do centro de custo
+  await updateDoc(doc(db, "cost_centers", id), {
+    name: newName,
+    description: center.description?.trim() || null,
+    updated_at: serverTimestamp(),
+  });
+
+  // 2. Cascata: atualiza transações vinculadas por ID ou nome
+  try {
+    const txSnap = await getDocs(collection(db, "financial_transactions"));
+    const updates: Array<{ ref: DocumentReference; data: Record<string, unknown> }> = [];
+
+    for (const d of txSnap.docs) {
+      const data = d.data();
+      const ccId =
+        data["cost_center_id"] || (data["cost_center"] as Record<string, unknown>)?.["id"];
+      const ccName =
+        data["cost_center_name"] || (data["cost_center"] as Record<string, unknown>)?.["name"];
+
+      const matchesId = Boolean(ccId && String(ccId) === id);
+      const matchesName = Boolean(
+        cleanOldName &&
+        typeof ccName === "string" &&
+        ccName.trim().toLowerCase() === cleanOldName.toLowerCase(),
+      );
+
+      if (matchesId || matchesName) {
+        updates.push({
+          ref: d.ref,
+          data: {
+            cost_center_id: id,
+            cost_center_name: newName,
+            cost_center: {
+              id,
+              name: newName,
+              description: center.description?.trim() || null,
+            },
+            updated_at: serverTimestamp(),
+          },
+        });
+      }
+    }
+
+    // Cascata em fornecedores se vinculados
+    try {
+      const supSnap = await getDocs(collection(db, "suppliers"));
+      for (const sp of supSnap.docs) {
+        const sdata = sp.data();
+        const sCcId = sdata["cost_center_id"];
+        const sCcName = sdata["cost_center_name"] || sdata["cost_center"];
+        if (
+          (sCcId && String(sCcId) === id) ||
+          (cleanOldName &&
+            typeof sCcName === "string" &&
+            sCcName.trim().toLowerCase() === cleanOldName.toLowerCase())
+        ) {
+          updates.push({
+            ref: sp.ref,
+            data: {
+              cost_center_id: id,
+              cost_center_name: newName,
+              updated_at: serverTimestamp(),
+            },
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
+      const chunk = updates.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      for (const item of chunk) {
+        batch.update(item.ref, item.data);
+      }
+      await batch.commit();
+    }
+  } catch (err) {
+    console.error("Erro na cascata de atualização de centro de custo:", err);
+  }
+
+  return id;
+}
+
+export function useUpdateCostCenter() {
+  const invalidate = useInvalidateFinancial();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      id: string;
+      center: { name: string; description?: string | null };
+      oldName?: string;
+    }) => updateCostCenter(data.id, data.center, data.oldName),
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["cost_centers"] });
+      qc.invalidateQueries({ queryKey: ["financial_transactions"] });
+      qc.invalidateQueries({ queryKey: ["suppliers"] });
+    },
+  });
+}
+
 export function useCreateCostCenter() {
   const invalidate = useInvalidateFinancial();
   return useMutation({
@@ -1708,6 +1967,123 @@ export async function savePaymentMethod(
     created_at: serverTimestamp(),
   });
   return ref.id;
+}
+
+export async function updatePaymentMethod(
+  id: string,
+  method: { name: string; type?: string; active?: boolean },
+  oldName?: string,
+) {
+  const newName = method.name.trim();
+  const cleanOldName = oldName?.trim() || "";
+
+  // 1. Atualiza documento da forma de pagamento
+  const payload: Record<string, unknown> = {
+    name: newName,
+    updated_at: serverTimestamp(),
+  };
+  if (method.type) payload["type"] = method.type;
+  if (method.active !== undefined) payload["active"] = method.active;
+
+  await updateDoc(doc(db, "payment_methods", id), payload);
+
+  // 2. Cascata: atualiza transações vinculadas por ID ou nome
+  try {
+    const txSnap = await getDocs(collection(db, "financial_transactions"));
+    const updates: Array<{ ref: DocumentReference; data: Record<string, unknown> }> = [];
+
+    for (const d of txSnap.docs) {
+      const data = d.data();
+      const pmId =
+        data["payment_method_id"] || (data["payment_method"] as Record<string, unknown>)?.["id"];
+      const pmName =
+        data["payment_method_name"] ||
+        (data["payment_method"] as Record<string, unknown>)?.["name"];
+
+      const matchesId = Boolean(pmId && String(pmId) === id);
+      const matchesName = Boolean(
+        cleanOldName &&
+        typeof pmName === "string" &&
+        pmName.trim().toLowerCase() === cleanOldName.toLowerCase(),
+      );
+
+      if (matchesId || matchesName) {
+        updates.push({
+          ref: d.ref,
+          data: {
+            payment_method_id: id,
+            payment_method_name: newName,
+            payment_method: {
+              id,
+              name: newName,
+              type: method.type || data["payment_method_type"] || "outros",
+              active: method.active !== false,
+            },
+            updated_at: serverTimestamp(),
+          },
+        });
+      }
+    }
+
+    // Cascata em fornecedores se vinculados
+    try {
+      const supSnap = await getDocs(collection(db, "suppliers"));
+      for (const sp of supSnap.docs) {
+        const sdata = sp.data();
+        const sPmId = sdata["payment_method_id"];
+        const sPmName = sdata["payment_method_name"] || sdata["payment_method"];
+        if (
+          (sPmId && String(sPmId) === id) ||
+          (cleanOldName &&
+            typeof sPmName === "string" &&
+            sPmName.trim().toLowerCase() === cleanOldName.toLowerCase())
+        ) {
+          updates.push({
+            ref: sp.ref,
+            data: {
+              payment_method_id: id,
+              payment_method_name: newName,
+              updated_at: serverTimestamp(),
+            },
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
+      const chunk = updates.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      for (const item of chunk) {
+        batch.update(item.ref, item.data);
+      }
+      await batch.commit();
+    }
+  } catch (err) {
+    console.error("Erro na cascata de atualização de forma de pagamento:", err);
+  }
+
+  return id;
+}
+
+export function useUpdatePaymentMethod() {
+  const invalidate = useInvalidateFinancial();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      id: string;
+      method: { name: string; type?: string; active?: boolean };
+      oldName?: string;
+    }) => updatePaymentMethod(data.id, data.method, data.oldName),
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["payment_methods"] });
+      qc.invalidateQueries({ queryKey: ["financial_transactions"] });
+      qc.invalidateQueries({ queryKey: ["suppliers"] });
+    },
+  });
 }
 
 export function useCreatePaymentMethod() {

@@ -1,6 +1,18 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Tag, Layers, CreditCard, Plus, Trash2, AlertTriangle, FolderPlus } from "lucide-react";
+import {
+  Tag,
+  Layers,
+  CreditCard,
+  Plus,
+  Trash2,
+  FolderPlus,
+  Pencil,
+  Check,
+  X,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,10 +32,13 @@ import {
   useCostCenters,
   usePaymentMethods,
   useCreateCategory,
+  useUpdateCategory,
   useDeleteCategory,
   useCreateCostCenter,
+  useUpdateCostCenter,
   useDeleteCostCenter,
   useCreatePaymentMethod,
+  useUpdatePaymentMethod,
   useDeletePaymentMethod,
 } from "@/lib/financeiro";
 import { useAuth } from "@/lib/auth";
@@ -42,16 +57,21 @@ export function CategoriasDialog({
   const { canWrite, isApproved } = useAuth();
 
   // Queries
-  const { data: categories = [], isLoading: loadingCats } = useFinancialCategories();
-  const { data: costCenters = [], isLoading: loadingCost } = useCostCenters();
-  const { data: paymentMethods = [], isLoading: loadingPay } = usePaymentMethods(false);
+  const { data: categories = [] } = useFinancialCategories();
+  const { data: costCenters = [] } = useCostCenters();
+  const { data: paymentMethods = [] } = usePaymentMethods(false);
 
   // Mutações
   const createCatMutation = useCreateCategory();
+  const updateCatMutation = useUpdateCategory();
   const deleteCatMutation = useDeleteCategory();
+
   const createCostMutation = useCreateCostCenter();
+  const updateCostMutation = useUpdateCostCenter();
   const deleteCostMutation = useDeleteCostCenter();
+
   const createPayMutation = useCreatePaymentMethod();
+  const updatePayMutation = useUpdatePaymentMethod();
   const deletePayMutation = useDeletePaymentMethod();
 
   // Estados locais para criação rápida
@@ -62,6 +82,29 @@ export function CategoriasDialog({
   const [newPayName, setNewPayName] = useState("");
   const [newPayType, setNewPayType] = useState("outro");
 
+  // Estados locais para edição
+  const [editingCategory, setEditingCategory] = useState<{
+    id: string;
+    name: string;
+    type: "receita" | "despesa";
+    oldName: string;
+  } | null>(null);
+
+  const [editingCostCenter, setEditingCostCenter] = useState<{
+    id: string;
+    name: string;
+    description: string;
+    oldName: string;
+  } | null>(null);
+
+  const [editingPaymentMethod, setEditingPaymentMethod] = useState<{
+    id: string;
+    name: string;
+    type: string;
+    oldName: string;
+  } | null>(null);
+
+  /* ------------------- HANDLERS CATEGORIA ------------------- */
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canWrite || !isApproved) {
@@ -85,6 +128,34 @@ export function CategoriasDialog({
     }
   };
 
+  const handleSaveCategory = async () => {
+    if (!editingCategory) return;
+    if (!canWrite || !isApproved) {
+      toast.error("Sem permissão para editar.");
+      return;
+    }
+    const trimmed = editingCategory.name.trim();
+    if (!trimmed) {
+      toast.error("O nome da categoria não pode ficar vazio.");
+      return;
+    }
+
+    try {
+      await updateCatMutation.mutateAsync({
+        id: editingCategory.id,
+        category: {
+          name: trimmed,
+          type: editingCategory.type,
+        },
+        oldName: editingCategory.oldName,
+      });
+      toast.success(`Categoria atualizada para "${trimmed}" em todos os lançamentos vinculados!`);
+      setEditingCategory(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao atualizar categoria.");
+    }
+  };
+
   const handleDeleteCategory = async (id: string, name: string) => {
     if (!canWrite || !isApproved) {
       toast.error("Você não tem permissão para excluir.");
@@ -102,6 +173,7 @@ export function CategoriasDialog({
     }
   };
 
+  /* ----------------- HANDLERS CENTRO DE CUSTO ---------------- */
   const handleCreateCostCenter = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canWrite || !isApproved) {
@@ -126,6 +198,36 @@ export function CategoriasDialog({
     }
   };
 
+  const handleSaveCostCenter = async () => {
+    if (!editingCostCenter) return;
+    if (!canWrite || !isApproved) {
+      toast.error("Sem permissão para editar.");
+      return;
+    }
+    const trimmed = editingCostCenter.name.trim();
+    if (!trimmed) {
+      toast.error("O nome do centro de custo não pode ficar vazio.");
+      return;
+    }
+
+    try {
+      await updateCostMutation.mutateAsync({
+        id: editingCostCenter.id,
+        center: {
+          name: trimmed,
+          description: editingCostCenter.description?.trim() || null,
+        },
+        oldName: editingCostCenter.oldName,
+      });
+      toast.success(
+        `Centro de custo atualizado para "${trimmed}" em todos os lançamentos vinculados!`,
+      );
+      setEditingCostCenter(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao atualizar centro de custo.");
+    }
+  };
+
   const handleDeleteCostCenter = async (id: string, name: string) => {
     if (!canWrite || !isApproved) {
       toast.error("Você não tem permissão para excluir.");
@@ -143,6 +245,7 @@ export function CategoriasDialog({
     }
   };
 
+  /* --------------- HANDLERS FORMAS DE PAGAMENTO --------------- */
   const handleCreatePaymentMethod = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canWrite || !isApproved) {
@@ -164,6 +267,36 @@ export function CategoriasDialog({
       toast.success("Forma de pagamento criada!");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Erro ao criar forma de pagamento.");
+    }
+  };
+
+  const handleSavePaymentMethod = async () => {
+    if (!editingPaymentMethod) return;
+    if (!canWrite || !isApproved) {
+      toast.error("Sem permissão para editar.");
+      return;
+    }
+    const trimmed = editingPaymentMethod.name.trim();
+    if (!trimmed) {
+      toast.error("O nome da forma de pagamento não pode ficar vazio.");
+      return;
+    }
+
+    try {
+      await updatePayMutation.mutateAsync({
+        id: editingPaymentMethod.id,
+        method: {
+          name: trimmed,
+          type: editingPaymentMethod.type,
+        },
+        oldName: editingPaymentMethod.oldName,
+      });
+      toast.success(
+        `Forma de pagamento atualizada para "${trimmed}" em todos os lançamentos vinculados!`,
+      );
+      setEditingPaymentMethod(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao atualizar forma de pagamento.");
     }
   };
 
@@ -189,7 +322,7 @@ export function CategoriasDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         id="categorias-dialog-content"
-        className="max-h-[90vh] overflow-y-auto sm:max-w-[650px]"
+        className="max-h-[90vh] overflow-y-auto sm:max-w-[700px]"
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -197,11 +330,21 @@ export function CategoriasDialog({
             Configurações Financeiras
           </DialogTitle>
           <DialogDescription>
-            Gerencie categorias, centros de custo e formas de pagamento do ERP.
+            Gerencie e edite categorias, centros de custo e formas de pagamento do ERP. Ao alterar
+            um nome, ele é atualizado automaticamente em todos os lançamentos e despesas vinculados.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue={defaultTab} className="mt-2 w-full">
+        <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 p-2.5 text-xs text-muted-foreground">
+          <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+          <span>
+            <strong>Edição com propagação automática:</strong> altere nomes a qualquer momento com o
+            ícone do lápis. O novo nome é sincronizado para todos os fornecedores, despesas e
+            relatórios atrelados.
+          </span>
+        </div>
+
+        <Tabs defaultValue={defaultTab} className="mt-1 w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="categorias" className="flex items-center gap-1.5 text-xs">
               <Tag className="h-3.5 w-3.5" />
@@ -263,30 +406,108 @@ export function CategoriasDialog({
                     Categorias de Despesa ({despesasCategories.length})
                   </span>
                 </div>
-                <div className="space-y-1 max-h-[220px] overflow-y-auto pr-1">
+                <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
                   {despesasCategories.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-2 text-center">
                       Nenhuma categoria de despesa.
                     </p>
                   ) : (
-                    despesasCategories.map((c) => (
-                      <div
-                        key={c.id}
-                        className="flex items-center justify-between py-1 px-2 rounded hover:bg-muted text-xs group"
-                      >
-                        <span>{c.name}</span>
-                        {canWrite && isApproved && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-500"
-                            onClick={() => handleDeleteCategory(c.id, c.name)}
+                    despesasCategories.map((c) => {
+                      const isEditing = editingCategory?.id === c.id;
+                      if (isEditing) {
+                        return (
+                          <div
+                            key={c.id}
+                            className="p-1.5 rounded-md border border-primary/50 bg-primary/10 space-y-1"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    ))
+                            <div className="flex items-center gap-1">
+                              <Input
+                                value={editingCategory.name}
+                                onChange={(e) =>
+                                  setEditingCategory({ ...editingCategory, name: e.target.value })
+                                }
+                                className="h-7 text-xs flex-1 bg-background"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleSaveCategory();
+                                  } else if (e.key === "Escape") {
+                                    setEditingCategory(null);
+                                  }
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                size="icon"
+                                className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 shrink-0"
+                                variant="ghost"
+                                disabled={updateCatMutation.isPending}
+                                onClick={handleSaveCategory}
+                                title="Salvar alteração (atualiza todos os lançamentos)"
+                              >
+                                {updateCatMutation.isPending ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Check className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
+                                variant="ghost"
+                                onClick={() => setEditingCategory(null)}
+                                title="Cancelar"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground px-0.5">
+                              Pressione Enter para salvar e propagar
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={c.id}
+                          className="flex items-center justify-between py-1 px-2 rounded hover:bg-muted text-xs group transition-colors"
+                        >
+                          <span className="font-medium truncate pr-2">{c.name}</span>
+                          {canWrite && isApproved && (
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-primary"
+                                onClick={() =>
+                                  setEditingCategory({
+                                    id: c.id,
+                                    name: c.name,
+                                    type: c.type,
+                                    oldName: c.name,
+                                  })
+                                }
+                                title="Editar nome da categoria"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-rose-500"
+                                onClick={() => handleDeleteCategory(c.id, c.name)}
+                                title="Excluir categoria"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -299,30 +520,108 @@ export function CategoriasDialog({
                     Categorias de Receita ({receitasCategories.length})
                   </span>
                 </div>
-                <div className="space-y-1 max-h-[220px] overflow-y-auto pr-1">
+                <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
                   {receitasCategories.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-2 text-center">
                       Nenhuma categoria de receita.
                     </p>
                   ) : (
-                    receitasCategories.map((c) => (
-                      <div
-                        key={c.id}
-                        className="flex items-center justify-between py-1 px-2 rounded hover:bg-muted text-xs group"
-                      >
-                        <span>{c.name}</span>
-                        {canWrite && isApproved && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-500"
-                            onClick={() => handleDeleteCategory(c.id, c.name)}
+                    receitasCategories.map((c) => {
+                      const isEditing = editingCategory?.id === c.id;
+                      if (isEditing) {
+                        return (
+                          <div
+                            key={c.id}
+                            className="p-1.5 rounded-md border border-primary/50 bg-primary/10 space-y-1"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    ))
+                            <div className="flex items-center gap-1">
+                              <Input
+                                value={editingCategory.name}
+                                onChange={(e) =>
+                                  setEditingCategory({ ...editingCategory, name: e.target.value })
+                                }
+                                className="h-7 text-xs flex-1 bg-background"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleSaveCategory();
+                                  } else if (e.key === "Escape") {
+                                    setEditingCategory(null);
+                                  }
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                size="icon"
+                                className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 shrink-0"
+                                variant="ghost"
+                                disabled={updateCatMutation.isPending}
+                                onClick={handleSaveCategory}
+                                title="Salvar alteração (atualiza todos os lançamentos)"
+                              >
+                                {updateCatMutation.isPending ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Check className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
+                                variant="ghost"
+                                onClick={() => setEditingCategory(null)}
+                                title="Cancelar"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground px-0.5">
+                              Pressione Enter para salvar e propagar
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={c.id}
+                          className="flex items-center justify-between py-1 px-2 rounded hover:bg-muted text-xs group transition-colors"
+                        >
+                          <span className="font-medium truncate pr-2">{c.name}</span>
+                          {canWrite && isApproved && (
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-primary"
+                                onClick={() =>
+                                  setEditingCategory({
+                                    id: c.id,
+                                    name: c.name,
+                                    type: c.type,
+                                    oldName: c.name,
+                                  })
+                                }
+                                title="Editar nome da categoria"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-rose-500"
+                                onClick={() => handleDeleteCategory(c.id, c.name)}
+                                title="Excluir categoria"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -371,29 +670,142 @@ export function CategoriasDialog({
                   Nenhum centro de custo cadastrado.
                 </p>
               ) : (
-                costCenters.map((cc) => (
-                  <div
-                    key={cc.id}
-                    className="flex items-center justify-between p-2.5 text-xs hover:bg-muted/50"
-                  >
-                    <div>
-                      <p className="font-semibold text-foreground">{cc.name}</p>
-                      {cc.description && (
-                        <p className="text-muted-foreground text-[11px]">{cc.description}</p>
+                costCenters.map((cc) => {
+                  const isEditing = editingCostCenter?.id === cc.id;
+                  if (isEditing) {
+                    return (
+                      <div
+                        key={cc.id}
+                        className="p-3 bg-primary/5 border-l-4 border-l-primary space-y-2"
+                      >
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground uppercase font-semibold">
+                              Nome do Centro de Custo
+                            </Label>
+                            <Input
+                              value={editingCostCenter.name}
+                              onChange={(e) =>
+                                setEditingCostCenter({
+                                  ...editingCostCenter,
+                                  name: e.target.value,
+                                })
+                              }
+                              className="h-7 text-xs bg-background mt-0.5"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handleSaveCostCenter();
+                                } else if (e.key === "Escape") {
+                                  setEditingCostCenter(null);
+                                }
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground uppercase font-semibold">
+                              Descrição (opcional)
+                            </Label>
+                            <Input
+                              value={editingCostCenter.description}
+                              onChange={(e) =>
+                                setEditingCostCenter({
+                                  ...editingCostCenter,
+                                  description: e.target.value,
+                                })
+                              }
+                              className="h-7 text-xs bg-background mt-0.5"
+                              placeholder="Descrição opcional"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handleSaveCostCenter();
+                                } else if (e.key === "Escape") {
+                                  setEditingCostCenter(null);
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <Sparkles className="h-3 w-3 text-primary shrink-0" />
+                            Atualiza automaticamente todos os lançamentos vinculados
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setEditingCostCenter(null)}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 px-3 text-xs"
+                              disabled={updateCostMutation.isPending}
+                              onClick={handleSaveCostCenter}
+                            >
+                              {updateCostMutation.isPending ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                              ) : (
+                                <Check className="h-3.5 w-3.5 mr-1" />
+                              )}
+                              Salvar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={cc.id}
+                      className="flex items-center justify-between p-2.5 text-xs hover:bg-muted/50 group transition-colors"
+                    >
+                      <div>
+                        <p className="font-semibold text-foreground">{cc.name}</p>
+                        {cc.description && (
+                          <p className="text-muted-foreground text-[11px]">{cc.description}</p>
+                        )}
+                      </div>
+                      {canWrite && isApproved && (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-primary"
+                            onClick={() =>
+                              setEditingCostCenter({
+                                id: cc.id,
+                                name: cc.name,
+                                description: cc.description || "",
+                                oldName: cc.name,
+                              })
+                            }
+                            title="Editar centro de custo"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-rose-500"
+                            onClick={() => handleDeleteCostCenter(cc.id, cc.name)}
+                            title="Excluir centro de custo"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       )}
                     </div>
-                    {canWrite && isApproved && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-rose-500"
-                        onClick={() => handleDeleteCostCenter(cc.id, cc.name)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </TabsContent>
@@ -446,30 +858,142 @@ export function CategoriasDialog({
                   Nenhuma forma de pagamento cadastrada.
                 </p>
               ) : (
-                paymentMethods.map((pm) => (
-                  <div
-                    key={pm.id}
-                    className="flex items-center justify-between p-2.5 text-xs hover:bg-muted/50"
-                  >
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-semibold text-foreground">{pm.name}</span>
-                      <Badge variant="outline" className="text-[10px] uppercase">
-                        {pm.type}
-                      </Badge>
-                    </div>
-                    {canWrite && isApproved && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-rose-500"
-                        onClick={() => handleDeletePaymentMethod(pm.id, pm.name)}
+                paymentMethods.map((pm) => {
+                  const isEditing = editingPaymentMethod?.id === pm.id;
+                  if (isEditing) {
+                    return (
+                      <div
+                        key={pm.id}
+                        className="p-3 bg-primary/5 border-l-4 border-l-primary space-y-2"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                ))
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground uppercase font-semibold">
+                              Nome da Forma de Pagamento
+                            </Label>
+                            <Input
+                              value={editingPaymentMethod.name}
+                              onChange={(e) =>
+                                setEditingPaymentMethod({
+                                  ...editingPaymentMethod,
+                                  name: e.target.value,
+                                })
+                              }
+                              className="h-7 text-xs bg-background mt-0.5"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handleSavePaymentMethod();
+                                } else if (e.key === "Escape") {
+                                  setEditingPaymentMethod(null);
+                                }
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground uppercase font-semibold">
+                              Tipo
+                            </Label>
+                            <select
+                              value={editingPaymentMethod.type}
+                              onChange={(e) =>
+                                setEditingPaymentMethod({
+                                  ...editingPaymentMethod,
+                                  type: e.target.value,
+                                })
+                              }
+                              className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs mt-0.5"
+                            >
+                              <option value="pix">PIX</option>
+                              <option value="boleto">Boleto</option>
+                              <option value="cartao_credito">Cartão de Crédito</option>
+                              <option value="cartao_debito">Cartão de Débito</option>
+                              <option value="dinheiro">Dinheiro</option>
+                              <option value="transferencia">Transferência</option>
+                              <option value="outro">Outro</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <Sparkles className="h-3 w-3 text-primary shrink-0" />
+                            Atualiza automaticamente todos os lançamentos vinculados
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setEditingPaymentMethod(null)}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 px-3 text-xs"
+                              disabled={updatePayMutation.isPending}
+                              onClick={handleSavePaymentMethod}
+                            >
+                              {updatePayMutation.isPending ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                              ) : (
+                                <Check className="h-3.5 w-3.5 mr-1" />
+                              )}
+                              Salvar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={pm.id}
+                      className="flex items-center justify-between p-2.5 text-xs hover:bg-muted/50 group transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-semibold text-foreground">{pm.name}</span>
+                        <Badge variant="outline" className="text-[10px] uppercase">
+                          {pm.type}
+                        </Badge>
+                      </div>
+                      {canWrite && isApproved && (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-primary"
+                            onClick={() =>
+                              setEditingPaymentMethod({
+                                id: pm.id,
+                                name: pm.name,
+                                type: pm.type,
+                                oldName: pm.name,
+                              })
+                            }
+                            title="Editar forma de pagamento"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-rose-500"
+                            onClick={() => handleDeletePaymentMethod(pm.id, pm.name)}
+                            title="Excluir forma de pagamento"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
           </TabsContent>

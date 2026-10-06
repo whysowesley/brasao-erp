@@ -21,6 +21,7 @@ import {
   Palette,
   Sparkles,
   Check,
+  FolderPlus,
 } from "lucide-react";
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import { toast } from "sonner";
@@ -30,6 +31,7 @@ import { FinanceiroStatCard } from "@/components/financeiro/FinanceiroStatCard";
 import { LancamentoDialog } from "@/components/financeiro/LancamentoDialog";
 import { MarcarPagoDialog } from "@/components/financeiro/MarcarPagoDialog";
 import { QuadrantesVencimentoView } from "@/components/financeiro/QuadrantesVencimentoView";
+import { CategoriasDialog } from "@/components/financeiro/CategoriasDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -130,6 +132,7 @@ function ContasPagarPage() {
   const [openLancamento, setOpenLancamento] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
   const [payingTransaction, setPayingTransaction] = useState<FinancialTransaction | null>(null);
+  const [openCategorias, setOpenCategorias] = useState(false);
   const [deletingTransaction, setDeletingTransaction] = useState<FinancialTransaction | null>(null);
   const [deleteGroupOption, setDeleteGroupOption] = useState(false);
 
@@ -353,16 +356,28 @@ function ContasPagarPage() {
         title="Contas a Pagar"
         description="Gerenciamento de despesas, vencimentos e quitações com fornecedores"
         actions={
-          canWrite && (
+          <div className="flex items-center gap-2">
             <Button
+              variant="outline"
               size="sm"
-              onClick={handleOpenCreate}
-              className="gap-1.5 bg-primary font-medium text-primary-foreground shadow hover:bg-primary/90"
+              onClick={() => setOpenCategorias(true)}
+              className="gap-1.5 h-9"
+              title="Configurações Financeiras: Categorias, Centros de Custo e Formas de Pagamento"
             >
-              <Plus className="h-4 w-4" />
-              <span>+ Nova Despesa</span>
+              <FolderPlus className="h-4 w-4 text-primary" />
+              <span>Configurações</span>
             </Button>
-          )
+            {canWrite && (
+              <Button
+                size="sm"
+                onClick={handleOpenCreate}
+                className="gap-1.5 bg-primary font-medium text-primary-foreground shadow hover:bg-primary/90 h-9"
+              >
+                <Plus className="h-4 w-4" />
+                <span>+ Nova Despesa</span>
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -906,6 +921,8 @@ function ContasPagarPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CategoriasDialog open={openCategorias} onOpenChange={setOpenCategorias} />
     </div>
   );
 }
