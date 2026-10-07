@@ -31,6 +31,7 @@ import {
   Tag,
   Palette,
   FolderPlus,
+  X,
 } from "lucide-react";
 import {
   format,
@@ -115,6 +116,7 @@ import { CategoriasDialog } from "./CategoriasDialog";
 import { QuadrantesThemeDialog } from "./QuadrantesThemeDialog";
 import { useAllDailyBankBalances, calculateRollingBalances } from "@/lib/bank-balances";
 import { useQuadrantesTheme } from "@/lib/theme-manager";
+import { FiltroListaCheckbox, type FilterListItem } from "./FiltroListaCheckbox";
 
 function formatCurrency(val: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -234,25 +236,58 @@ export function QuadrantesVencimentoView({
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"todos" | "pendentes" | "pagos">("todos");
   const [supplierFilter, setSupplierFilter] = useState<string>("todos");
-  // Filtro de Escopo pré-fixado como "exceto_avulso_isa" por padrão conforme solicitado
-  const [scopeFilter, setScopeFilter] = useState<string>(() => {
+
+  // Filtros combinados de Categoria Financeira e Centro de Custo (Checkbox)
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem("financeiro_quadrantes_scope_filter");
-      if (saved) return saved;
+      const saved = localStorage.getItem("financeiro_quadrantes_categories");
+      if (saved) return JSON.parse(saved);
     } catch {
       // ignore
     }
-    return "exceto_avulso_isa";
+    return [];
   });
 
-  const handleScopeFilterChange = (val: string) => {
-    setScopeFilter(val);
+  const [selectedCostCenterIds, setSelectedCostCenterIds] = useState<string[]>(() => {
     try {
-      localStorage.setItem("financeiro_quadrantes_scope_filter", val);
+      const saved = localStorage.getItem("financeiro_quadrantes_cost_centers");
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
+  const handleCategoriesChange = (ids: string[]) => {
+    setSelectedCategoryIds(ids);
+    try {
+      localStorage.setItem("financeiro_quadrantes_categories", JSON.stringify(ids));
     } catch {
       // ignore
     }
   };
+
+  const handleCostCentersChange = (ids: string[]) => {
+    setSelectedCostCenterIds(ids);
+    try {
+      localStorage.setItem("financeiro_quadrantes_cost_centers", JSON.stringify(ids));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleVerTudo = () => {
+    setSelectedCategoryIds([]);
+    setSelectedCostCenterIds([]);
+    try {
+      localStorage.removeItem("financeiro_quadrantes_categories");
+      localStorage.removeItem("financeiro_quadrantes_cost_centers");
+    } catch {
+      // ignore
+    }
+  };
+
+  const hasActiveFilters = selectedCategoryIds.length > 0 || selectedCostCenterIds.length > 0;
   const [dateCriterion, setDateCriterion] = useState<"expected_or_due" | "due_only">(
     "expected_or_due",
   );
@@ -369,6 +404,69 @@ export function QuadrantesVencimentoView({
     [dateCriterion],
   );
 
+  // Itens para o filtro de Categoria Financeira com contagem em tempo real
+  const categoryFilterItems = useMemo<FilterListItem[]>(() => {
+    const counts = new Map<string, number>();
+    let noneCount = 0;
+
+    mappedTransactions.forEach((tx) => {
+      const catId = tx.category_id || tx.category?.id;
+      if (catId && catId !== "none") {
+        counts.set(catId, (counts.get(catId) || 0) + 1);
+      } else {
+        noneCount++;
+      }
+    });
+
+    const items: FilterListItem[] = financialCategories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      color: c.color,
+      count: counts.get(c.id) || 0,
+    }));
+
+    if (noneCount > 0) {
+      items.push({
+        id: "__none__",
+        name: "Sem Categoria",
+        count: noneCount,
+      });
+    }
+
+    return items;
+  }, [mappedTransactions, financialCategories]);
+
+  // Itens para o filtro de Centro de Custo com contagem em tempo real
+  const costCenterFilterItems = useMemo<FilterListItem[]>(() => {
+    const counts = new Map<string, number>();
+    let noneCount = 0;
+
+    mappedTransactions.forEach((tx) => {
+      const ccId = tx.cost_center_id || tx.cost_center?.id;
+      if (ccId && ccId !== "none") {
+        counts.set(ccId, (counts.get(ccId) || 0) + 1);
+      } else {
+        noneCount++;
+      }
+    });
+
+    const items: FilterListItem[] = costCenters.map((cc) => ({
+      id: cc.id,
+      name: cc.name,
+      count: counts.get(cc.id) || 0,
+    }));
+
+    if (noneCount > 0) {
+      items.push({
+        id: "__none__",
+        name: "Sem Centro de Custo",
+        count: noneCount,
+      });
+    }
+
+    return items;
+  }, [mappedTransactions, costCenters]);
+
   // Agrupamento vertical por data (dia 1, 2, 3...)
   const groupedByDay = useMemo(() => {
     const map = new Map<string, FinancialTransaction[]>();
@@ -398,48 +496,47 @@ export function QuadrantesVencimentoView({
       if (statusFilter === "pendentes" && tx.status === "pago") return;
       if (statusFilter === "pagos" && tx.status !== "pago") return;
 
-      // Filtro de Escopo / Centros de Custo (Pré-fixado Exceto Avulsos ISA)
-      if (scopeFilter === "exceto_avulso_isa") {
-        if (matchesAvulsoIsa(tx, costCenters, financialCategories)) return;
-      } else if (scopeFilter === "somente_avulso_isa") {
-        if (!matchesAvulsoIsa(tx, costCenters, financialCategories)) return;
-      } else if (scopeFilter === "fornecedores") {
-        const isSupplier =
-          (tx.supplier_id != null && tx.supplier_id !== "" && tx.supplier_id !== "none") ||
-          (tx.supplier_name != null && tx.supplier_name.trim() !== "") ||
-          (tx.supplier?.name != null && tx.supplier.name.trim() !== "") ||
-          (tx.cost_center?.name || "").toLowerCase().includes("fornecedor");
-        if (!isSupplier) return;
-      } else if (scopeFilter.startsWith("cc_")) {
-        const targetCcId = scopeFilter.replace("cc_", "");
-        const targetCc = costCenters.find((c) => c.id === targetCcId);
-        const targetName = targetCc?.name?.toLowerCase().trim() || "";
-        const txCcName = (
-          tx.cost_center?.name ||
-          costCenters.find((c) => c.id === tx.cost_center_id)?.name ||
-          (tx as unknown as { cost_center_name?: string }).cost_center_name ||
-          ""
-        )
-          .toLowerCase()
-          .trim();
-        const matchesId = tx.cost_center_id === targetCcId || tx.cost_center?.id === targetCcId;
-        const matchesName = targetName !== "" && txCcName === targetName;
-        if (!matchesId && !matchesName) return;
-      } else if (scopeFilter.startsWith("cat_")) {
-        const targetCatId = scopeFilter.replace("cat_", "");
-        const targetCat = financialCategories.find((c) => c.id === targetCatId);
-        const targetName = targetCat?.name?.toLowerCase().trim() || "";
-        const txCatName = (
+      // Filtro Combinado de Categorias Financeiras e Centros de Custo (Checkbox)
+      if (selectedCategoryIds.length > 0) {
+        const catId = tx.category_id || tx.category?.id;
+        const catName = (
           tx.category?.name ||
-          financialCategories.find((c) => c.id === tx.category_id)?.name ||
+          financialCategories.find((c) => c.id === catId)?.name ||
           (tx as unknown as { category_name?: string }).category_name ||
           ""
         )
           .toLowerCase()
           .trim();
-        const matchesId = tx.category_id === targetCatId || tx.category?.id === targetCatId;
-        const matchesName = targetName !== "" && txCatName === targetName;
-        if (!matchesId && !matchesName) return;
+
+        const matchCat = selectedCategoryIds.some((id) => {
+          if (id === "__none__") return !catId || catId === "none";
+          if (catId === id) return true;
+          const targetCat = financialCategories.find((c) => c.id === id);
+          return targetCat && targetCat.name.toLowerCase().trim() === catName && catName !== "";
+        });
+
+        if (!matchCat) return;
+      }
+
+      if (selectedCostCenterIds.length > 0) {
+        const ccId = tx.cost_center_id || tx.cost_center?.id;
+        const ccName = (
+          tx.cost_center?.name ||
+          costCenters.find((c) => c.id === ccId)?.name ||
+          (tx as unknown as { cost_center_name?: string }).cost_center_name ||
+          ""
+        )
+          .toLowerCase()
+          .trim();
+
+        const matchCc = selectedCostCenterIds.some((id) => {
+          if (id === "__none__") return !ccId || ccId === "none";
+          if (ccId === id) return true;
+          const targetCc = costCenters.find((c) => c.id === id);
+          return targetCc && targetCc.name.toLowerCase().trim() === ccName && ccName !== "";
+        });
+
+        if (!matchCc) return;
       }
 
       if (map.has(targetDate)) {
@@ -504,21 +601,13 @@ export function QuadrantesVencimentoView({
     searchTerm,
     supplierFilter,
     statusFilter,
-    scopeFilter,
+    selectedCategoryIds,
+    selectedCostCenterIds,
     costCenters,
     financialCategories,
     currentMonthDate,
     quadrantSort,
   ]);
-
-  // Estatísticas de Avulsos ISA no mês
-  const avulsosStats = useMemo(() => {
-    const list = mappedTransactions.filter((tx) =>
-      matchesAvulsoIsa(tx, costCenters, financialCategories),
-    );
-    const total = list.reduce((acc, curr) => acc + curr.amount, 0);
-    return { count: list.length, total };
-  }, [mappedTransactions, costCenters, financialCategories]);
 
   // Estatísticas do Mês
   const monthStats = useMemo(() => {
@@ -978,121 +1067,134 @@ export function QuadrantesVencimentoView({
           </div>
         </div>
 
-        {/* Linha de Filtros de Escopo / Centros de Custo (Pré-fixado: Exceto Avulsos ISA) */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t text-xs">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[11px] font-semibold text-muted-foreground mr-1 flex items-center gap-1">
-              <Layers className="h-3.5 w-3.5 text-primary" />
-              Filtrar Contas:
-            </span>
-
-            {/* Botão Pré-fixado Padrão */}
-            <button
-              type="button"
-              onClick={() => handleScopeFilterChange("exceto_avulso_isa")}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all border cursor-pointer ${
-                scopeFilter === "exceto_avulso_isa"
-                  ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                  : "bg-background hover:bg-muted text-muted-foreground border-border/80"
-              }`}
-            >
-              Exceto Avulsos ISA (Padrão)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleScopeFilterChange("todos")}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all border cursor-pointer ${
-                scopeFilter === "todos"
-                  ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                  : "bg-background hover:bg-muted text-muted-foreground border-border/80"
-              }`}
-            >
-              Ver Tudo
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleScopeFilterChange("somente_avulso_isa")}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all border cursor-pointer ${
-                scopeFilter === "somente_avulso_isa"
-                  ? "bg-amber-600 text-white border-amber-600 shadow-xs"
-                  : "bg-background hover:bg-muted text-muted-foreground border-border/80"
-              }`}
-            >
-              Apenas Avulsos ISA
-              {avulsosStats.count > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-black/20 text-white font-mono">
-                  {avulsosStats.count}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleScopeFilterChange("fornecedores")}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all border cursor-pointer ${
-                scopeFilter === "fornecedores"
-                  ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                  : "bg-background hover:bg-muted text-muted-foreground border-border/80"
-              }`}
-            >
-              Fornecedores
-            </button>
-
-            {/* Dropdown com todos os Centros de Custo e Categorias criados */}
-            <Select value={scopeFilter} onValueChange={handleScopeFilterChange}>
-              <SelectTrigger className="w-[200px] h-7 text-xs bg-background border-border/80 font-medium">
-                <SelectValue placeholder="Centro de Custo / Mais..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="exceto_avulso_isa">Exceto Avulsos ISA (Padrão)</SelectItem>
-                <SelectItem value="todos">Ver Tudo (Todas as Contas)</SelectItem>
-                <SelectItem value="somente_avulso_isa">Apenas Avulsos ISA</SelectItem>
-                <SelectItem value="fornecedores">Apenas Fornecedores</SelectItem>
-
-                {costCenters.length > 0 && (
-                  <>
-                    <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-t mt-1">
-                      Centros de Custo
-                    </div>
-                    {costCenters.map((cc) => (
-                      <SelectItem key={cc.id} value={`cc_${cc.id}`}>
-                        {cc.name}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
-
-                {financialCategories.length > 0 && (
-                  <>
-                    <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-t mt-1">
-                      Categorias Financeiras
-                    </div>
-                    {financialCategories.map((cat) => (
-                      <SelectItem key={cat.id} value={`cat_${cat.id}`}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {scopeFilter === "exceto_avulso_isa" && avulsosStats.count > 0 && (
-            <div className="text-[11px] text-muted-foreground bg-muted/40 px-2 py-0.5 rounded border border-border/60 flex items-center gap-1.5">
-              <span>
-                {avulsosStats.count} lançamento(s) de Avulso ISA oculto(s) neste mês (
-                {formatCurrency(avulsosStats.total)})
+        {/* Linha de Filtros Combinados: Categoria Financeira e Centro de Custo */}
+        <div className="flex flex-col gap-2 pt-2 border-t text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] font-semibold text-muted-foreground mr-0.5 flex items-center gap-1">
+                <Layers className="h-3.5 w-3.5 text-primary" />
+                Filtrar Contas:
               </span>
+
+              {/* Filtro Categoria Financeira (Lista com Checkbox) */}
+              <FiltroListaCheckbox
+                title="Categoria Financeira"
+                icon={<Tag className="h-3.5 w-3.5 text-primary" />}
+                items={categoryFilterItems}
+                selectedIds={selectedCategoryIds}
+                onSelectionChange={handleCategoriesChange}
+                placeholder="Buscar categoria..."
+                allLabel="Todas as Categorias"
+              />
+
+              {/* Filtro Centro de Custo (Lista com Checkbox) */}
+              <FiltroListaCheckbox
+                title="Centro de Custo"
+                icon={<Building2 className="h-3.5 w-3.5 text-primary" />}
+                items={costCenterFilterItems}
+                selectedIds={selectedCostCenterIds}
+                onSelectionChange={handleCostCentersChange}
+                placeholder="Buscar centro de custo..."
+                allLabel="Todos os Centros"
+              />
+
+              {/* Botão Ver Tudo */}
               <button
                 type="button"
-                onClick={() => handleScopeFilterChange("somente_avulso_isa")}
-                className="text-primary hover:underline font-semibold cursor-pointer"
+                onClick={handleVerTudo}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all border cursor-pointer flex items-center gap-1.5 ${
+                  !hasActiveFilters
+                    ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                    : "bg-background hover:bg-muted text-muted-foreground border-border/80"
+                }`}
+                title={
+                  hasActiveFilters
+                    ? "Limpar filtros de categoria e centro de custo para ver todas as contas"
+                    : "Exibindo todas as contas (sem restrição de categoria ou centro de custo)"
+                }
               >
-                ver avulsos
+                {!hasActiveFilters ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    <span>Ver Tudo (Ativo)</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-3.5 w-3.5" />
+                    <span>Ver Tudo</span>
+                  </>
+                )}
               </button>
+            </div>
+
+            {hasActiveFilters && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleVerTudo}
+                className="h-7 text-xs text-muted-foreground hover:text-destructive gap-1 px-2 cursor-pointer"
+              >
+                <X className="h-3 w-3" />
+                Limpar seleção
+              </Button>
+            )}
+          </div>
+
+          {/* Chips dos filtros combinados ativos */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border/40">
+              <span className="text-[11px] text-muted-foreground font-medium mr-1">
+                Filtro combinado:
+              </span>
+
+              {selectedCategoryIds.map((catId) => {
+                const item = categoryFilterItems.find((c) => c.id === catId);
+                const name = item?.name || (catId === "__none__" ? "Sem Categoria" : catId);
+                return (
+                  <Badge
+                    key={`cat-chip-${catId}`}
+                    variant="outline"
+                    className="h-6 text-[11px] pl-2 pr-1 gap-1 border-primary/40 bg-primary/5 text-primary font-medium"
+                  >
+                    <Tag className="h-2.5 w-2.5 shrink-0" />
+                    <span className="max-w-[130px] truncate">{name}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCategoriesChange(selectedCategoryIds.filter((id) => id !== catId))
+                      }
+                      className="hover:bg-primary/20 rounded-full p-0.5 text-primary cursor-pointer ml-0.5"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </Badge>
+                );
+              })}
+
+              {selectedCostCenterIds.map((ccId) => {
+                const item = costCenterFilterItems.find((c) => c.id === ccId);
+                const name = item?.name || (ccId === "__none__" ? "Sem Centro de Custo" : ccId);
+                return (
+                  <Badge
+                    key={`cc-chip-${ccId}`}
+                    variant="outline"
+                    className="h-6 text-[11px] pl-2 pr-1 gap-1 border-primary/40 bg-primary/5 text-primary font-medium"
+                  >
+                    <Building2 className="h-2.5 w-2.5 shrink-0" />
+                    <span className="max-w-[130px] truncate">{name}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCostCentersChange(selectedCostCenterIds.filter((id) => id !== ccId))
+                      }
+                      className="hover:bg-primary/20 rounded-full p-0.5 text-primary cursor-pointer ml-0.5"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </Badge>
+                );
+              })}
             </div>
           )}
         </div>

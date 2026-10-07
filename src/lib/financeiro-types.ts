@@ -162,7 +162,9 @@ export interface FinancialFilters {
   type?: TipoTransacao | "todas" | undefined;
   status?: StatusTransacao | "todos" | undefined;
   category_id?: string | "todas" | undefined;
+  category_ids?: string[] | undefined;
   cost_center_id?: string | "todos" | undefined;
+  cost_center_ids?: string[] | undefined;
   payment_method_id?: string | "todos" | undefined;
   supplier_id?: string | "todos" | undefined;
   startDate?: string | undefined; // YYYY-MM-DD

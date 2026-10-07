@@ -22,6 +22,8 @@ import {
   Sparkles,
   Check,
   FolderPlus,
+  Tag,
+  Eye,
 } from "lucide-react";
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import { toast } from "sonner";
@@ -32,6 +34,10 @@ import { LancamentoDialog } from "@/components/financeiro/LancamentoDialog";
 import { MarcarPagoDialog } from "@/components/financeiro/MarcarPagoDialog";
 import { QuadrantesVencimentoView } from "@/components/financeiro/QuadrantesVencimentoView";
 import { CategoriasDialog } from "@/components/financeiro/CategoriasDialog";
+import {
+  FiltroListaCheckbox,
+  type FilterListItem,
+} from "@/components/financeiro/FiltroListaCheckbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -119,8 +125,8 @@ function ContasPagarPage() {
   // Estados de Filtros
   const [activeTab, setActiveTab] = useState<string>("todas");
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("todas");
-  const [costCenterFilter, setCostCenterFilter] = useState<string>("todos");
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+  const [selectedCostCenterIds, setSelectedCostCenterIds] = useState<string[]>([]);
   const [supplierFilter, setSupplierFilter] = useState<string>("todos");
 
   // Período
@@ -220,8 +226,8 @@ function ContasPagarPage() {
   const { data: transactions = [], isLoading } = useFinancialTransactions({
     type: "despesa",
     search: searchTerm,
-    category_id: categoryFilter,
-    cost_center_id: costCenterFilter,
+    category_ids: selectedCategoryIds.length > 0 ? selectedCategoryIds : undefined,
+    cost_center_ids: selectedCostCenterIds.length > 0 ? selectedCostCenterIds : undefined,
     supplier_id: supplierFilter,
     startDate,
     endDate,
@@ -277,6 +283,23 @@ function ContasPagarPage() {
       qtdPago: qPago,
     };
   }, [transactions, today]);
+
+  const categoryFilterItems = useMemo<FilterListItem[]>(() => {
+    return categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      color: c.color,
+    }));
+  }, [categories]);
+
+  const costCenterFilterItems = useMemo<FilterListItem[]>(() => {
+    return costCenters.map((cc) => ({
+      id: cc.id,
+      name: cc.name,
+    }));
+  }, [costCenters]);
+
+  const hasActiveFilters = selectedCategoryIds.length > 0 || selectedCostCenterIds.length > 0;
 
   // Filtro por Aba Ativa
   const filteredTransactions = useMemo(() => {
@@ -492,8 +515,7 @@ function ContasPagarPage() {
                 </Select>
 
                 {(searchTerm ||
-                  categoryFilter !== "todas" ||
-                  costCenterFilter !== "todos" ||
+                  hasActiveFilters ||
                   supplierFilter !== "todos" ||
                   periodPreset !== "mes_atual") && (
                   <Button
@@ -501,8 +523,8 @@ function ContasPagarPage() {
                     size="sm"
                     onClick={() => {
                       setSearchTerm("");
-                      setCategoryFilter("todas");
-                      setCostCenterFilter("todos");
+                      setSelectedCategoryIds([]);
+                      setSelectedCostCenterIds([]);
                       setSupplierFilter("todos");
                       setPeriodPreset("mes_atual");
                     }}
@@ -553,34 +575,94 @@ function ContasPagarPage() {
                 </SelectContent>
               </Select>
 
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todas">Categorias (Todas)</SelectItem>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Filtro de Categoria Financeira com Checkbox */}
+              <FiltroListaCheckbox
+                title="Categoria Financeira"
+                icon={<Tag className="h-3.5 w-3.5 text-primary" />}
+                items={categoryFilterItems}
+                selectedIds={selectedCategoryIds}
+                onSelectionChange={setSelectedCategoryIds}
+                placeholder="Buscar categoria..."
+                allLabel="Todas as Categorias"
+              />
 
-              <Select value={costCenterFilter} onValueChange={setCostCenterFilter}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Centro de Custo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Centros de Custo (Todos)</SelectItem>
-                  {costCenters.map((cc) => (
-                    <SelectItem key={cc.id} value={cc.id}>
-                      {cc.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Filtro de Centro de Custo com Checkbox */}
+              <FiltroListaCheckbox
+                title="Centro de Custo"
+                icon={<Building2 className="h-3.5 w-3.5 text-primary" />}
+                items={costCenterFilterItems}
+                selectedIds={selectedCostCenterIds}
+                onSelectionChange={setSelectedCostCenterIds}
+                placeholder="Buscar centro de custo..."
+                allLabel="Todos os Centros"
+              />
             </div>
+
+            {/* Chips de filtros ativos se houver */}
+            {hasActiveFilters && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/50 text-xs">
+                <span className="text-[11px] text-muted-foreground font-medium mr-1">
+                  Filtro combinado:
+                </span>
+                {selectedCategoryIds.map((catId) => {
+                  const item = categoryFilterItems.find((c) => c.id === catId);
+                  return (
+                    <Badge
+                      key={`t-cat-${catId}`}
+                      variant="outline"
+                      className="h-5.5 text-[10px] pl-2 pr-1 gap-1 border-primary/40 bg-primary/5 text-primary font-medium"
+                    >
+                      <Tag className="h-2.5 w-2.5 shrink-0" />
+                      <span>{item?.name || catId}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedCategoryIds(selectedCategoryIds.filter((id) => id !== catId))
+                        }
+                        className="hover:bg-primary/20 rounded-full p-0.5 text-primary cursor-pointer ml-0.5"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </Badge>
+                  );
+                })}
+                {selectedCostCenterIds.map((ccId) => {
+                  const item = costCenterFilterItems.find((c) => c.id === ccId);
+                  return (
+                    <Badge
+                      key={`t-cc-${ccId}`}
+                      variant="outline"
+                      className="h-5.5 text-[10px] pl-2 pr-1 gap-1 border-primary/40 bg-primary/5 text-primary font-medium"
+                    >
+                      <Building2 className="h-2.5 w-2.5 shrink-0" />
+                      <span>{item?.name || ccId}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedCostCenterIds(
+                            selectedCostCenterIds.filter((id) => id !== ccId),
+                          )
+                        }
+                        className="hover:bg-primary/20 rounded-full p-0.5 text-primary cursor-pointer ml-0.5"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </Badge>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategoryIds([]);
+                    setSelectedCostCenterIds([]);
+                  }}
+                  className="text-[11px] text-muted-foreground hover:text-destructive font-medium underline ml-1 cursor-pointer"
+                >
+                  Ver Tudo (Limpar)
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Abas de Navegação / Status */}

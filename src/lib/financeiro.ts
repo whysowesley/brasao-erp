@@ -449,10 +449,24 @@ export function useFinancialTransactions(filters?: FinancialFilters) {
         if (filters.status && filters.status !== "todos") {
           transactions = transactions.filter((t) => t.status === filters.status);
         }
-        if (filters.category_id && filters.category_id !== "todas") {
+        if (filters.category_ids && filters.category_ids.length > 0) {
+          transactions = transactions.filter((t) => {
+            const catId = t.category_id || t.category?.id;
+            return filters.category_ids!.some((id) =>
+              id === "__none__" ? !catId || catId === "none" : catId === id,
+            );
+          });
+        } else if (filters.category_id && filters.category_id !== "todas") {
           transactions = transactions.filter((t) => t.category_id === filters.category_id);
         }
-        if (filters.cost_center_id && filters.cost_center_id !== "todos") {
+        if (filters.cost_center_ids && filters.cost_center_ids.length > 0) {
+          transactions = transactions.filter((t) => {
+            const ccId = t.cost_center_id || t.cost_center?.id;
+            return filters.cost_center_ids!.some((id) =>
+              id === "__none__" ? !ccId || ccId === "none" : ccId === id,
+            );
+          });
+        } else if (filters.cost_center_id && filters.cost_center_id !== "todos") {
           transactions = transactions.filter((t) => t.cost_center_id === filters.cost_center_id);
         }
         if (filters.payment_method_id && filters.payment_method_id !== "todos") {
