@@ -287,6 +287,10 @@ export function useSuppliers() {
           bank_account: data["bank_account"] ?? null,
           bank_account_type: data["bank_account_type"] ?? null,
           notes: data["notes"] ?? null,
+          default_due_days:
+            typeof data["default_due_days"] === "number" && !isNaN(data["default_due_days"])
+              ? data["default_due_days"]
+              : null,
         };
       });
       items.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
@@ -728,6 +732,7 @@ export type SupplierInput = {
   bank_agency?: string | null;
   bank_account?: string | null;
   notes?: string | null;
+  default_due_days?: number | null;
 };
 
 export async function saveSupplier(input: SupplierInput, supplierId?: string) {
@@ -743,6 +748,12 @@ export async function saveSupplier(input: SupplierInput, supplierId?: string) {
     bank_agency: input.bank_agency?.trim() || null,
     bank_account: input.bank_account?.trim() || null,
     notes: input.notes?.trim() || null,
+    default_due_days:
+      typeof input.default_due_days === "number" &&
+      !isNaN(input.default_due_days) &&
+      input.default_due_days > 0
+        ? Math.round(input.default_due_days)
+        : null,
     updated_at: serverTimestamp(),
   };
 
@@ -756,6 +767,14 @@ export async function saveSupplier(input: SupplierInput, supplierId?: string) {
     });
     return { id: docRef.id };
   }
+}
+
+export async function updateSupplierDueDays(supplierId: string, days: number | null) {
+  await updateDoc(doc(db, "suppliers", supplierId), {
+    default_due_days:
+      typeof days === "number" && !isNaN(days) && days > 0 ? Math.round(days) : null,
+    updated_at: serverTimestamp(),
+  });
 }
 
 export async function deleteSupplier(supplierId: string) {

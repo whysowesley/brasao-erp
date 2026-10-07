@@ -327,6 +327,28 @@
         "created_at": { "type": "timestamp", "description": "Data e hora de criação" },
         "updated_at": { "type": "timestamp", "description": "Data e hora da última atualização" }
       }
+    },
+    "suppliers": {
+      "description": "Cadastro de fornecedores compartilhados com dados de contato, bancários, PIX e prazo padrão de vencimento em dias",
+      "fields": {
+        "name": { "type": "string", "description": "Razão social ou nome fantasia do fornecedor" },
+        "cnpj_cpf": { "type": "string", "description": "CNPJ ou CPF formatado", "optional": true },
+        "contact": { "type": "string", "description": "Nome do contato principal", "optional": true },
+        "phone": { "type": "string", "description": "Telefone ou WhatsApp", "optional": true },
+        "email": { "type": "string", "description": "E-mail de contato", "optional": true },
+        "pix_key": { "type": "string", "description": "Chave PIX", "optional": true },
+        "bank_name": { "type": "string", "description": "Nome do banco", "optional": true },
+        "bank_agency": { "type": "string", "description": "Agência bancária", "optional": true },
+        "bank_account": { "type": "string", "description": "Conta bancária", "optional": true },
+        "notes": { "type": "string", "description": "Observações e notas gerais", "optional": true },
+        "default_due_days": {
+          "type": "number",
+          "description": "Prazo padrão em dias para sugestão automática de vencimento",
+          "optional": true
+        },
+        "created_at": { "type": "timestamp", "description": "Data de cadastro", "optional": true },
+        "updated_at": { "type": "timestamp", "description": "Data da última atualização", "optional": true }
+      }
     }
   }
 }

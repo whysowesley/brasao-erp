@@ -13,8 +13,10 @@ import {
   Palette,
   Sparkles,
   Check,
+  CalendarClock,
+  Clock,
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 import { Button } from "@/components/ui/button";
@@ -118,6 +120,12 @@ export function LancamentoDialog({
   const [recurrenceMonths, setRecurrenceMonths] = useState("12");
   const [recurrenceWeeks, setRecurrenceWeeks] = useState("52");
   const [recurrenceDayOfWeek, setRecurrenceDayOfWeek] = useState<number>(new Date().getDay());
+
+  // Sugestão de Vencimento com base no Prazo do Fornecedor
+  const [suggestedDueDaysBadge, setSuggestedDueDaysBadge] = useState<{
+    days: number;
+    supplierName: string;
+  } | null>(null);
 
   const isEditing = Boolean(transactionToEdit?.id && transactionToEdit.id.trim() !== "");
   const isDuplicating = Boolean(
@@ -240,6 +248,7 @@ export function LancamentoDialog({
       setHighlightColor(transactionToEdit.highlight_color || "none");
       setIsNew(isTransactionNew(transactionToEdit));
       setRecorrenciaType("unica");
+      setSuggestedDueDaysBadge(null);
     } else {
       setTipo(defaultType);
       setDescription("");
@@ -262,8 +271,69 @@ export function LancamentoDialog({
       setRecurrenceMonths("12");
       setRecurrenceWeeks("52");
       setRecurrenceDayOfWeek(new Date().getDay());
+      setSuggestedDueDaysBadge(null);
     }
   }, [transactionToEdit, defaultType, open, categories, costCenters, suppliers, paymentMethods]);
+
+  // Manipulador de troca de fornecedor com sugestão automática de vencimento
+  const handleSupplierChange = (newSupplierId: string) => {
+    setSupplierId(newSupplierId);
+
+    if (newSupplierId === "none") {
+      setSuggestedDueDaysBadge(null);
+      return;
+    }
+
+    const selectedSup = suppliers.find((s) => s.id === newSupplierId);
+    if (!selectedSup) return;
+
+    // Preenche chave PIX caso vazia
+    if (selectedSup.pix_key && !pixKey) {
+      setPixKey(selectedSup.pix_key);
+    }
+
+    // Se o fornecedor tiver prazo configurado, calcula sugestão automática de vencimento
+    if (typeof selectedSup.default_due_days === "number" && selectedSup.default_due_days > 0) {
+      // Aplica sugestão quando for novo lançamento ou se o usuário estiver escolhendo um fornecedor
+      if (!isEditing) {
+        const base = issueDate || new Date();
+        const suggestedDueDate = addDays(base, selectedSup.default_due_days);
+        setDueDate(suggestedDueDate);
+        setRecurrenceDayOfWeek(suggestedDueDate.getDay());
+        setSuggestedDueDaysBadge({
+          days: selectedSup.default_due_days,
+          supplierName: selectedSup.name,
+        });
+        toast.info(
+          `Prazo do fornecedor (+${selectedSup.default_due_days} dias) aplicado: vencimento em ${format(suggestedDueDate, "dd/MM/yyyy")}.`,
+        );
+      }
+    } else {
+      // Se NÃO tiver prazo configurado, mantém a escolha manual livre
+      setSuggestedDueDaysBadge(null);
+    }
+  };
+
+  // Manipulador de troca de data de emissão
+  const handleIssueDateSelect = (d: Date | undefined) => {
+    setIssueDate(d);
+    if (d && supplierId !== "none" && !isEditing) {
+      const selectedSup = suppliers.find((s) => s.id === supplierId);
+      if (
+        selectedSup &&
+        typeof selectedSup.default_due_days === "number" &&
+        selectedSup.default_due_days > 0
+      ) {
+        const suggestedDueDate = addDays(d, selectedSup.default_due_days);
+        setDueDate(suggestedDueDate);
+        setRecurrenceDayOfWeek(suggestedDueDate.getDay());
+        setSuggestedDueDaysBadge({
+          days: selectedSup.default_due_days,
+          supplierName: selectedSup.name,
+        });
+      }
+    }
+  };
 
   // Categorias filtradas pelo tipo (receita ou despesa)
   const filteredCategories = categories.filter((c) => c.type === tipo);
@@ -484,15 +554,26 @@ export function LancamentoDialog({
             {/* Vencimento, Nova Data (Postergada) e Emissão */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
-                <Label>
-                  Dia de Vencimento <span className="text-rose-500">*</span>
+                <Label className="flex items-center justify-between">
+                  <span>
+                    Dia de Vencimento <span className="text-rose-500">*</span>
+                  </span>
+                  {suggestedDueDaysBadge && (
+                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                      +{suggestedDueDaysBadge.days}d Sugerido
+                    </span>
+                  )}
                 </Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       id="tx-due-date-btn"
                       variant="outline"
-                      className="w-full justify-start text-left font-normal"
+                      className={`w-full justify-start text-left font-normal ${
+                        suggestedDueDaysBadge
+                          ? "border-emerald-500/50 bg-emerald-50/50 text-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-300 font-medium"
+                          : ""
+                      }`}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
                       {dueDate ? (
@@ -516,6 +597,26 @@ export function LancamentoDialog({
                     />
                   </PopoverContent>
                 </Popover>
+                {suggestedDueDaysBadge && (
+                  <div className="flex items-center justify-between rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-800 dark:text-emerald-300">
+                    <span className="flex items-center gap-1">
+                      <Sparkles className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>
+                        Prazo: <strong>+{suggestedDueDaysBadge.days} dias</strong>
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDueDate(new Date());
+                        setSuggestedDueDaysBadge(null);
+                      }}
+                      className="text-[10px] text-emerald-700 dark:text-emerald-400 hover:underline"
+                    >
+                      Usar hoje
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -590,7 +691,7 @@ export function LancamentoDialog({
                       <Calendar
                         mode="single"
                         selected={issueDate}
-                        onSelect={(d) => setIssueDate(d)}
+                        onSelect={handleIssueDateSelect}
                         initialFocus
                       />
                     </PopoverContent>
@@ -629,7 +730,7 @@ export function LancamentoDialog({
                   <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
                   {tipo === "despesa" ? "Fornecedor / Beneficiário" : "Cliente / Origem"}
                 </Label>
-                <Select value={supplierId} onValueChange={setSupplierId}>
+                <Select value={supplierId} onValueChange={handleSupplierChange}>
                   <SelectTrigger id="tx-supplier-select">
                     <SelectValue placeholder="Selecione o fornecedor..." />
                   </SelectTrigger>
@@ -637,7 +738,14 @@ export function LancamentoDialog({
                     <SelectItem value="none">Nenhum / Não informado</SelectItem>
                     {suppliers.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
-                        {s.name}
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <span>{s.name}</span>
+                          {s.default_due_days && (
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                              +{s.default_due_days}d
+                            </span>
+                          )}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -645,22 +753,61 @@ export function LancamentoDialog({
                 {supplierId !== "none" &&
                   (() => {
                     const selectedSup = suppliers.find((s) => s.id === supplierId);
-                    if (!selectedSup || (!selectedSup.cnpj_cpf && !selectedSup.pix_key))
-                      return null;
+                    if (!selectedSup) return null;
                     return (
-                      <div className="mt-1 rounded border border-border/60 bg-muted/40 p-2 text-[11px] text-muted-foreground space-y-0.5">
-                        {selectedSup.cnpj_cpf && (
-                          <p className="flex items-center gap-1">
-                            <span className="font-semibold text-foreground">Doc:</span>
-                            <span className="font-mono">{selectedSup.cnpj_cpf}</span>
+                      <div className="mt-1 space-y-1">
+                        {selectedSup.default_due_days ? (
+                          <div className="flex items-center justify-between rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-800 dark:text-emerald-300">
+                            <span className="flex items-center gap-1">
+                              <CalendarClock className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <span>
+                                Prazo cadastrado:{" "}
+                                <strong>+{selectedSup.default_due_days} dias</strong>
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const base = issueDate || new Date();
+                                const calculatedDate = addDays(base, selectedSup.default_due_days!);
+                                setDueDate(calculatedDate);
+                                setRecurrenceDayOfWeek(calculatedDate.getDay());
+                                setSuggestedDueDaysBadge({
+                                  days: selectedSup.default_due_days!,
+                                  supplierName: selectedSup.name,
+                                });
+                                toast.success(
+                                  `Vencimento recalculado para ${format(calculatedDate, "dd/MM/yyyy")}.`,
+                                );
+                              }}
+                              className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 hover:underline"
+                            >
+                              Reaplicar prazo
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground flex items-center gap-1 italic">
+                            <Clock className="h-3 w-3 shrink-0" />
+                            <span>Sem prazo cadastrado (vencimento livre)</span>
                           </p>
                         )}
-                        {selectedSup.pix_key && (
-                          <p className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
-                            <CreditCard className="h-3 w-3 shrink-0" />
-                            <span className="font-semibold">PIX:</span>
-                            <span className="font-mono">{selectedSup.pix_key}</span>
-                          </p>
+
+                        {(selectedSup.cnpj_cpf || selectedSup.pix_key) && (
+                          <div className="rounded border border-border/60 bg-muted/40 p-2 text-[11px] text-muted-foreground space-y-0.5">
+                            {selectedSup.cnpj_cpf && (
+                              <p className="flex items-center gap-1">
+                                <span className="font-semibold text-foreground">Doc:</span>
+                                <span className="font-mono">{selectedSup.cnpj_cpf}</span>
+                              </p>
+                            )}
+                            {selectedSup.pix_key && (
+                              <p className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                                <CreditCard className="h-3 w-3 shrink-0" />
+                                <span className="font-semibold">PIX:</span>
+                                <span className="font-mono">{selectedSup.pix_key}</span>
+                              </p>
+                            )}
+                          </div>
                         )}
                       </div>
                     );

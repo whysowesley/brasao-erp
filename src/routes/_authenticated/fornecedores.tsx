@@ -15,6 +15,7 @@ import {
   Ruler,
   AlertTriangle,
   Upload,
+  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -51,6 +52,7 @@ import {
   saveUnit,
   updateCategory,
   updateUnit,
+  updateSupplierDueDays,
   useCategories,
   useInvalidateAll,
   useProducts,
@@ -122,7 +124,8 @@ function FornecedoresPage() {
         (sup.contact && sup.contact.toLowerCase().includes(s)) ||
         (sup.phone && sup.phone.toLowerCase().includes(s)) ||
         (sup.pix_key && sup.pix_key.toLowerCase().includes(s)) ||
-        (sup.bank_name && sup.bank_name.toLowerCase().includes(s)),
+        (sup.bank_name && sup.bank_name.toLowerCase().includes(s)) ||
+        (sup.default_due_days && `${sup.default_due_days}`.includes(s)),
     );
   }, [suppliers, searchTerm]);
 
@@ -285,6 +288,7 @@ function FornecedoresPage() {
                     <TableRow className="bg-muted/40">
                       <TableHead>Fornecedor</TableHead>
                       <TableHead>Contato & Comunicação</TableHead>
+                      <TableHead>Prazo Vencimento</TableHead>
                       <TableHead>Dados Financeiros / PIX</TableHead>
                       <TableHead className="text-center">Produtos</TableHead>
                       <TableHead className="w-24 text-right">Ações</TableHead>
@@ -294,7 +298,7 @@ function FornecedoresPage() {
                     {loadingSuppliers ? (
                       <TableRow>
                         <TableCell
-                          colSpan={5}
+                          colSpan={6}
                           className="h-32 text-center text-sm text-muted-foreground"
                         >
                           Carregando fornecedores...
@@ -303,7 +307,7 @@ function FornecedoresPage() {
                     ) : filteredSuppliers.length === 0 ? (
                       <TableRow>
                         <TableCell
-                          colSpan={5}
+                          colSpan={6}
                           className="h-32 text-center text-sm text-muted-foreground"
                         >
                           {searchTerm
@@ -351,6 +355,76 @@ function FornecedoresPage() {
                               )}
                               {!s.contact && !s.phone && !s.email && (
                                 <span className="text-muted-foreground italic">Sem contato</span>
+                              )}
+                            </TableCell>
+
+                            {/* Prazo de Vencimento */}
+                            <TableCell className="align-top text-xs">
+                              {s.default_due_days ? (
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge
+                                      variant="secondary"
+                                      className="bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 font-medium text-xs gap-1 py-0.5"
+                                    >
+                                      <CalendarClock className="h-3 w-3" />
+                                      <span>
+                                        +{s.default_due_days}{" "}
+                                        {s.default_due_days === 1 ? "dia" : "dias"}
+                                      </span>
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSupplierToEdit(s);
+                                        setOpenSupplierDialog(true);
+                                      }}
+                                      className="text-[11px] text-primary hover:underline"
+                                    >
+                                      Alterar
+                                    </button>
+                                    <span className="text-muted-foreground/40 text-[10px]">|</span>
+                                    {canWrite && (
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          try {
+                                            await updateSupplierDueDays(s.id, null);
+                                            invalidate();
+                                            toast.success(`Prazo de ${s.name} removido.`);
+                                          } catch {
+                                            toast.error("Erro ao remover prazo.");
+                                          }
+                                        }}
+                                        className="text-[11px] text-rose-600 hover:underline"
+                                      >
+                                        Remover
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-1">
+                                  <span className="text-muted-foreground italic text-xs">
+                                    Livre (sem prazo)
+                                  </span>
+                                  {canWrite && (
+                                    <div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSupplierToEdit(s);
+                                          setOpenSupplierDialog(true);
+                                        }}
+                                        className="text-[11px] text-primary hover:underline flex items-center gap-0.5"
+                                      >
+                                        <span>+ Definir prazo</span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </TableCell>
 
