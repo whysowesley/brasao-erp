@@ -1,11 +1,13 @@
 import { useCallback, useSyncExternalStore } from "react";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { db } from "@/integrations/firebase/config";
 
 /**
  * Plano de compra compartilhado entre todas as telas.
  *
  * O que o usuário digita em "Quero comprar" na tela de Estoque fica disponível
  * (já preenchido) em Sugestões, Pedidos, Contagens e no Dashboard — e também
- * sincroniza entre abas do navegador.
+ * sincroniza entre abas do navegador e no Firestore para nunca se perder.
  */
 
 const STORAGE_KEY = "brasao:purchase-plan";
@@ -14,7 +16,28 @@ type Plan = Record<string, number>;
 
 let plan: Plan = {};
 let loaded = false;
+let firestoreSubscribed = false;
 const listeners = new Set<() => void>();
+
+let firestoreSaveTimeout: ReturnType<typeof setTimeout> | null = null;
+function syncToFirestore() {
+  if (typeof window === "undefined") return;
+  if (firestoreSaveTimeout) clearTimeout(firestoreSaveTimeout);
+  firestoreSaveTimeout = setTimeout(async () => {
+    try {
+      await setDoc(
+        doc(db, "settings", "purchase_plan"),
+        {
+          plan,
+          updated_at: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+    } catch {
+      // Silencia erros de rede ou permissão offline
+    }
+  }, 400);
+}
 
 function load() {
   if (loaded || typeof window === "undefined") return;
@@ -34,6 +57,40 @@ function load() {
     }
     emit();
   });
+
+  if (!firestoreSubscribed) {
+    firestoreSubscribed = true;
+    try {
+      const planDocRef = doc(db, "settings", "purchase_plan");
+      onSnapshot(
+        planDocRef,
+        (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data && typeof data["plan"] === "object" && data["plan"] !== null) {
+              const remotePlan = data["plan"] as Plan;
+              // Mescla os dados mantendo ambos sincronizados
+              const merged: Plan = { ...remotePlan, ...plan };
+              if (JSON.stringify(merged) !== JSON.stringify(plan)) {
+                plan = merged;
+                try {
+                  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
+                } catch {
+                  // ignore
+                }
+                emit();
+              }
+            }
+          }
+        },
+        () => {
+          // ignore
+        },
+      );
+    } catch {
+      // ignore
+    }
+  }
 }
 
 function emit() {
@@ -47,6 +104,7 @@ function persist() {
     /* ignora quota/privacidade */
   }
   emit();
+  syncToFirestore();
 }
 
 function subscribe(cb: () => void) {

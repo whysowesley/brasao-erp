@@ -142,7 +142,7 @@ function SugestoesPage() {
             plannedVal !== undefined
               ? plannedVal
               : p.suggestedPurchase > 0
-                ? p.suggestedPurchase
+                ? Math.ceil(p.suggestedPurchase)
                 : 0;
 
           return {
@@ -156,7 +156,6 @@ function SugestoesPage() {
 
       await createOrdersFromSuggestions(groups);
 
-      clearPlan(chosen.map((p) => p.id));
       invalidate();
       toast.success(`${bySupplier.size} pedido(s) de compra criado(s).`);
       navigate({ to: "/pedidos" });
@@ -318,7 +317,7 @@ function SugestoesPage() {
                   plannedValue !== undefined
                     ? plannedValue
                     : p.suggestedPurchase > 0
-                      ? p.suggestedPurchase
+                      ? Math.ceil(p.suggestedPurchase)
                       : 0;
                 // Estoque Futuro = Saldo da 2ª Segunda + Valor a comprar para a próxima semana
                 const future =

@@ -287,8 +287,11 @@ export function computeProduct(
   // Demanda necessária (Consumo + Margem de Chegada) menos o disponível (Estoque Atual + Pedidos a caminho).
   // Equivale a: targetEndStock - projectedCycleEndStock - incoming.
   // Se o estoque atual já supre o ciclo e atinge a margem, a sugestão é 0.
+  // Conforme solicitado pelo usuário, sempre arredonda para cima (número inteiro):
+  // Ex: se o giro é 20kg e tem 10kg no estoque, sugere 10kg arredondado (nunca números quebrados como 9.8kg ou 9.57kg).
   const rawSuggestion = targetEndStock - projectedCycleEndStock - incoming;
-  const suggestedPurchase = round(Math.max(0, rawSuggestion));
+  const roundedRaw = round(Math.max(0, rawSuggestion));
+  const suggestedPurchase = roundedRaw > 0 ? Math.ceil(roundedRaw) : 0;
 
   // Projeções de estoque futuro:
   // - Sem compra: saldo que sobra na segunda (pode ser negativo/déficit caso não compre)

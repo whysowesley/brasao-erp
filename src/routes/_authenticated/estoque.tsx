@@ -196,11 +196,15 @@ function EstoquePage() {
     );
   }, [products, rules, effectiveRefDay, isPostOperation]);
 
-  // Se o usuário não digitou manualmente um valor em Quero Comprar, o padrão é a compra sugerida,
+  // Se o usuário não digitou manualmente um valor em Quero Comprar, o padrão é a compra sugerida arredondada para cima,
   // permitindo que o valor recaia automaticamente ao alternar para pós-operação.
   const buyQty = useCallback(
     (p: ComputedProduct) =>
-      plan[p.id] !== undefined ? plan[p.id] : p.suggestedPurchase > 0 ? p.suggestedPurchase : 0,
+      plan[p.id] !== undefined
+        ? plan[p.id]
+        : p.suggestedPurchase > 0
+          ? Math.ceil(p.suggestedPurchase)
+          : 0,
     [plan],
   );
 
@@ -222,8 +226,9 @@ function EstoquePage() {
     const batch: Record<string, number> = {};
     let count = 0;
     for (const p of recomputedProducts) {
-      if (p.suggestedPurchase > 0) {
-        batch[p.id] = p.suggestedPurchase;
+      const sug = p.suggestedPurchase > 0 ? Math.ceil(p.suggestedPurchase) : 0;
+      if (sug > 0) {
+        batch[p.id] = sug;
         count++;
       }
     }

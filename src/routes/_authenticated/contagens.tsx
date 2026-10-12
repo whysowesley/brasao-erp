@@ -364,7 +364,12 @@ function ContagensPage() {
                     </span>
                     <PlanInput
                       className="num h-7 w-20 text-right text-xs"
-                      value={plan[p.id] ?? computedItem.suggestedPurchase}
+                      value={
+                        plan[p.id] ??
+                        (computedItem.suggestedPurchase > 0
+                          ? Math.ceil(computedItem.suggestedPurchase)
+                          : 0)
+                      }
                       onChange={(val) => setPlanned(p.id, val)}
                     />
                   </div>
@@ -468,7 +473,12 @@ function ContagensPage() {
                         <TableCell className="text-right">
                           <PlanInput
                             className="num ml-auto h-7 sm:h-8 w-20 sm:w-24 text-right text-xs sm:text-sm"
-                            value={plan[p.id] ?? computedItem.suggestedPurchase}
+                            value={
+                              plan[p.id] ??
+                              (computedItem.suggestedPurchase > 0
+                                ? Math.ceil(computedItem.suggestedPurchase)
+                                : 0)
+                            }
                             onChange={(val) => setPlanned(p.id, val)}
                           />
                           <div

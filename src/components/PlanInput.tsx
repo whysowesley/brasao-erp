@@ -25,6 +25,16 @@ export function PlanInput({ value, onChange, className, placeholder }: PlanInput
     }
   }, [value, text]);
 
+  useEffect(() => {
+    return () => {
+      // Se desmontar enquanto o usuário estava digitando, persiste antes de sair
+      const parsed = Number(text.replace(",", "."));
+      if (Number.isFinite(parsed) && parsed !== value) {
+        onChange(parsed);
+      }
+    };
+  }, [text, value, onChange]);
+
   return (
     <Input
       type="text"

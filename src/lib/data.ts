@@ -25,6 +25,7 @@ import {
   type ProductRow,
   type PurchaseRules,
 } from "@/lib/inventory";
+import { clearPlan } from "@/lib/purchase-plan";
 
 export const CURRENT_USER = "Administrador";
 
@@ -976,6 +977,9 @@ export async function recordStockCount(
       audit_logs: [],
     });
   });
+
+  // Atualizou o estoque dos itens contados: limpa o plano manual para que a nova sugestão tome o lugar
+  clearPlan(items.map((i) => i.productId));
 }
 
 export async function adjustStockCount(
@@ -1124,6 +1128,9 @@ export async function adjustStockCount(
       updated_at: serverTimestamp(),
     });
   });
+
+  // Atualizou o estoque dos itens corrigidos: limpa o plano manual para que a nova sugestão tome o lugar
+  clearPlan(updatedItems.map((i) => i.productId));
 }
 
 export async function createOrdersFromSuggestions(
@@ -1260,6 +1267,9 @@ export async function applyMovement(input: MovementInput) {
       created_at: serverTimestamp(),
     });
   });
+
+  // Atualizou o estoque deste produto: limpa o plano manual para que a nova sugestão tome o lugar
+  clearPlan([input.productId]);
 }
 
 /* --------------------------------- delete --------------------------------- */

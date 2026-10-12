@@ -953,7 +953,7 @@ function SupplierFocus({ products }: { products: Products | undefined }) {
 
   const totals = items.reduce(
     (acc, p) => {
-      const qty = plan[p.id] ?? p.suggestedPurchase ?? 0;
+      const qty = plan[p.id] ?? (p.suggestedPurchase > 0 ? Math.ceil(p.suggestedPurchase) : 0);
       acc.stock += Number(p.current_stock) || 0;
       acc.consumption += Number(p.avg_weekly_consumption) || 0;
       acc.suggested += Number(p.suggestedPurchase) || 0;
@@ -1006,7 +1006,8 @@ function SupplierFocus({ products }: { products: Products | undefined }) {
           </TableHeader>
           <TableBody>
             {items.map((p) => {
-              const qty = plan[p.id] ?? p.suggestedPurchase ?? 0;
+              const qty =
+                plan[p.id] ?? (p.suggestedPurchase > 0 ? Math.ceil(p.suggestedPurchase) : 0);
               const future =
                 (Number(p.current_stock) || 0) - (Number(p.avg_weekly_consumption) || 0) + qty;
               return (
