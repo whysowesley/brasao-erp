@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   ChevronDown,
@@ -10,6 +10,14 @@ import {
   Search,
   Table as TableIcon,
   UserCheck,
+  CheckCircle2,
+  RotateCcw,
+  Plus,
+  Minus,
+  AlertCircle,
+  Trash2,
+  Sparkles,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -70,6 +78,9 @@ export const Route = createFileRoute("/_authenticated/contagens")({
   component: ContagensPage,
 });
 
+const DRAFT_KEY = "brasao:contagem-draft-v2";
+const VIEW_PREF_KEY = "brasao:contagem-viewmode";
+
 function ContagensPage() {
   const { data: me } = useMe();
   const { isCounter } = useAuth();
@@ -78,16 +89,107 @@ function ContagensPage() {
   const { data: rules } = useRules();
   const invalidate = useInvalidateAll();
   const [isPostOperation, setIsPostOperation] = usePostOperationMode();
+
+  // Estados de Filtros e Busca
   const [search, setSearch] = useState("");
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [notes, setNotes] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"todos" | "pendentes" | "contados">("todos");
+  const [categoryFilter, setCategoryFilter] = useState<string>("todas");
+
+  // Rascunho pré-salvo no dispositivo: inicia lendo do localStorage para nunca perder o progresso
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = window.localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.values === "object" && parsed.values !== null) {
+          return parsed.values;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return {};
+  });
+
+  const [notes, setNotes] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      const raw = window.localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.notes === "string") {
+          return parsed.notes;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return "";
+  });
+
+  const [draftRecoveredCount, setDraftRecoveredCount] = useState<number>(() => {
+    return Object.values(values).filter((v) => v && v.trim() !== "").length;
+  });
+
   const [saving, setSaving] = useState(false);
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+
+  // Modo de visualização: no celular (largura < 768px), o padrão intuitivo é 'cards' para deslizar facilmente
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
+    if (typeof window === "undefined") return "table";
+    const saved = window.localStorage.getItem(VIEW_PREF_KEY);
+    if (saved === "table" || saved === "cards") return saved;
+    return window.innerWidth < 768 ? "cards" : "table";
+  });
+
+  const handleSetViewMode = (mode: "table" | "cards") => {
+    setViewMode(mode);
+    try {
+      window.localStorage.setItem(VIEW_PREF_KEY, mode);
+    } catch {
+      // ignore
+    }
+  };
+
   const { plan, setPlanned } = usePurchasePlan();
 
   // Estados para alteração/ajuste e expansão de detalhes
   const [adjustingCount, setAdjustingCount] = useState<StockCountRow | null>(null);
   const [expandedCountIds, setExpandedCountIds] = useState<Set<string>>(new Set());
+
+  // Auto-salva qualquer valor digitado imediatamente no localStorage do dispositivo
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const filledEntries = Object.entries(values).filter(([, v]) => v && v.trim() !== "");
+    try {
+      if (filledEntries.length > 0 || notes.trim()) {
+        window.localStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({
+            values,
+            notes,
+            updatedAt: Date.now(),
+          }),
+        );
+      } else {
+        window.localStorage.removeItem(DRAFT_KEY);
+      }
+    } catch {
+      // ignore quota
+    }
+  }, [values, notes]);
+
+  const clearDraft = () => {
+    setValues({});
+    setNotes("");
+    setDraftRecoveredCount(0);
+    try {
+      window.localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // ignore
+    }
+    toast.info("Rascunho de contagem descartado.");
+  };
 
   // Mapeia a contagem anterior de cada produto para mostrar um número discreto de referência
   const previousCountMap = useMemo(() => {
@@ -107,6 +209,17 @@ function ContagensPage() {
     return map;
   }, [counts]);
 
+  // Lista de categorias disponíveis
+  const categoriesList = useMemo(() => {
+    const set = new Map<string, string>();
+    (products ?? []).forEach((p) => {
+      if (p.categories?.name && p.category_id) {
+        set.set(p.category_id, p.categories.name);
+      }
+    });
+    return Array.from(set.entries()).map(([id, name]) => ({ id, name }));
+  }, [products]);
+
   const toggleExpand = (id: string) => {
     setExpandedCountIds((prev) => {
       const next = new Set(prev);
@@ -116,13 +229,59 @@ function ContagensPage() {
     });
   };
 
+  const filledCount = useMemo(() => {
+    return Object.entries(values).filter(([, v]) => v && v.trim() !== "").length;
+  }, [values]);
+
   const rows = useMemo(() => {
-    const list = products ?? [];
-    if (!search.trim()) return list;
-    return list.filter((p) => p.description.toLowerCase().includes(search.trim().toLowerCase()));
-  }, [products, search]);
+    let list = products ?? [];
+
+    if (search.trim()) {
+      const term = search.trim().toLowerCase();
+      list = list.filter(
+        (p) =>
+          p.description.toLowerCase().includes(term) ||
+          (p.categories?.name && p.categories.name.toLowerCase().includes(term)),
+      );
+    }
+
+    if (categoryFilter !== "todas") {
+      list = list.filter((p) => p.category_id === categoryFilter);
+    }
+
+    if (filterStatus === "pendentes") {
+      list = list.filter((p) => {
+        const val = values[p.id];
+        return !val || val.trim() === "";
+      });
+    } else if (filterStatus === "contados") {
+      list = list.filter((p) => {
+        const val = values[p.id];
+        return val && val.trim() !== "";
+      });
+    }
+
+    return list;
+  }, [products, search, categoryFilter, filterStatus, values]);
 
   const filled = Object.entries(values).filter(([, v]) => v.trim() !== "");
+
+  // Manipuladores de ajuste rápido para o usuário no celular (+1, -1, copiar sistema)
+  const adjustQuickValue = (productId: string, currentSysStock: number, delta: number) => {
+    setValues((prev) => {
+      const currentValStr = prev[productId] ?? "";
+      let baseNum =
+        currentValStr.trim() !== "" ? Number(currentValStr.replace(",", ".")) : currentSysStock;
+      if (Number.isNaN(baseNum)) baseNum = 0;
+      const nextNum = Math.max(0, Math.round((baseNum + delta) * 100) / 100);
+      return { ...prev, [productId]: String(nextNum) };
+    });
+  };
+
+  const setExactValue = (productId: string, num: number) => {
+    const safe = Math.max(0, num);
+    setValues((prev) => ({ ...prev, [productId]: String(safe) }));
+  };
 
   async function confirm() {
     if (filled.length === 0) {
@@ -150,19 +309,30 @@ function ContagensPage() {
         userId: me?.userId,
       });
 
+      // Limpa dados e rascunho com sucesso
       setValues({});
       setNotes("");
+      setDraftRecoveredCount(0);
+      try {
+        window.localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        // ignore
+      }
+
       invalidate();
       toast.success("Contagem registrada com sucesso e estoque atualizado!");
     } catch (e) {
-      toast.error((e as Error).message);
+      // SE DER ERRO OU QUEDA DE REDE: O RASCUNHO CONTINUA SALVO NO LOCALSTORAGE!
+      toast.error(
+        `Erro ao salvar contagem: ${(e as Error).message}. Seus dados digitados permanecem salvos no dispositivo!`,
+      );
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
+    <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6 pb-20 sm:pb-6">
       <PageHeader
         title="Nova Contagem"
         description="Informe a quantidade encontrada. A contagem anterior é exibida como referência discreta."
@@ -206,59 +376,142 @@ function ContagensPage() {
         }
       />
 
-      <div className="grid gap-2.5 sm:gap-3 grid-cols-1 md:grid-cols-2">
-        <div className="relative">
-          <Search className="absolute left-2.5 sm:left-3 top-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-8 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm"
-            placeholder="Pesquisar produto..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Input
-            className="h-8 sm:h-9 text-xs sm:text-sm flex-1"
-            placeholder="Observação da contagem (opcional)..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-          <div className="flex items-center rounded-md border bg-muted/30 p-0.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => setViewMode("table")}
-              className={cn(
-                "flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors cursor-pointer",
-                viewMode === "table"
-                  ? "bg-card text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              title="Modo Tabela Compacta"
-            >
-              <TableIcon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Tabela</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("cards")}
-              className={cn(
-                "flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors cursor-pointer",
-                viewMode === "cards"
-                  ? "bg-card text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              title="Modo Cartões para Celular"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Cartões</span>
-            </button>
+      {/* Banner de Rascunho Pré-Salvo / Proteção contra queda de net */}
+      {draftRecoveredCount > 0 && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 rounded-lg border border-primary/40 bg-primary/10 p-3 text-xs shadow-xs">
+          <div className="flex items-center gap-2">
+            <div className="p-1 rounded-full bg-primary/20 text-primary shrink-0">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">
+                Rascunho ativo: {draftRecoveredCount} produto(s) pré-salvos no seu aparelho
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Cada quantidade digitada é salva instantaneamente. Se a conexão cair ou houver erro,
+                nada é perdido.
+              </p>
+            </div>
           </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearDraft}
+              className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="h-3 w-3 mr-1" /> Descartar rascunho
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Barra de Filtros, Busca e Alternância de Visualização */}
+      <div className="space-y-2.5 rounded-lg border bg-card p-3 shadow-xs">
+        <div className="grid gap-2 sm:gap-3 grid-cols-1 md:grid-cols-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 sm:left-3 top-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-8 sm:pl-9 h-8 sm:h-9 text-xs sm:text-sm"
+              placeholder="Pesquisar produto ou categoria..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              className="h-8 sm:h-9 text-xs sm:text-sm flex-1"
+              placeholder="Observação da contagem (opcional)..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+            {/* Alternador de Modo: Tabela vs Cartões */}
+            <div className="flex items-center rounded-md border bg-muted/40 p-0.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleSetViewMode("cards")}
+                className={cn(
+                  "flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                  viewMode === "cards"
+                    ? "bg-card text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                title="Modo Cartões Otimizado para Celular"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span>Cartões</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetViewMode("table")}
+                className={cn(
+                  "flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                  viewMode === "table"
+                    ? "bg-card text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                title="Modo Tabela Compacta"
+              >
+                <TableIcon className="h-3.5 w-3.5" />
+                <span>Tabela</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Chips de Filtro para Navegação Rápida no Celular */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t text-xs">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            <Button
+              size="sm"
+              variant={filterStatus === "todos" ? "default" : "outline"}
+              onClick={() => setFilterStatus("todos")}
+              className="h-7 px-2.5 text-[11px] rounded-full"
+            >
+              Todos ({products?.length ?? 0})
+            </Button>
+            <Button
+              size="sm"
+              variant={filterStatus === "pendentes" ? "default" : "outline"}
+              onClick={() => setFilterStatus("pendentes")}
+              className="h-7 px-2.5 text-[11px] rounded-full"
+            >
+              Pendentes ({Math.max(0, (products?.length ?? 0) - filledCount)})
+            </Button>
+            <Button
+              size="sm"
+              variant={filterStatus === "contados" ? "default" : "outline"}
+              onClick={() => setFilterStatus("contados")}
+              className="h-7 px-2.5 text-[11px] rounded-full"
+            >
+              <Check className="h-3 w-3 mr-1" />
+              Contados ({filledCount})
+            </Button>
+          </div>
+
+          {categoriesList.length > 0 && (
+            <div className="flex items-center gap-1.5 ml-auto">
+              <span className="text-[11px] text-muted-foreground hidden sm:inline">Categoria:</span>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="h-7 text-xs rounded-md border border-input bg-background px-2 text-foreground focus:outline-hidden"
+              >
+                <option value="todas">Todas as categorias</option>
+                {categoriesList.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Visualização em Cartões Móveis */}
+      {/* Visualização em Cartões Móveis (Deslizar Fácil e Intuitivo no Celular) */}
       {viewMode === "cards" ? (
-        <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {rows.map((p) => {
             const raw = values[p.id] ?? "";
             const hasCount = raw.trim() !== "";
@@ -279,13 +532,29 @@ function ContagensPage() {
             return (
               <div
                 key={p.id}
-                className="rounded-lg border bg-card p-3 shadow-xs space-y-2.5 transition-colors hover:border-primary/40"
+                className={cn(
+                  "rounded-lg border bg-card p-3.5 shadow-xs space-y-3 transition-all",
+                  hasCount
+                    ? "border-emerald-500/50 bg-emerald-500/[0.03] ring-1 ring-emerald-500/20"
+                    : "hover:border-primary/40",
+                )}
               >
+                {/* Cabeçalho do Card com Nome e Tag de Status */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-xs sm:text-sm text-foreground leading-tight">
-                      {p.description}
-                    </h3>
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="font-semibold text-sm text-foreground leading-snug">
+                        {p.description}
+                      </h3>
+                      {hasCount && (
+                        <Badge
+                          variant="outline"
+                          className="h-5 px-1.5 text-[9px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/40 shrink-0 font-medium"
+                        >
+                          <Check className="h-2.5 w-2.5 mr-0.5" /> Contado
+                        </Badge>
+                      )}
+                    </div>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
                         {p.unit}
@@ -297,20 +566,21 @@ function ContagensPage() {
                       )}
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground block">
+                  <div className="text-right shrink-0 bg-muted/30 px-2 py-1 rounded-md border">
+                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground block font-medium">
                       Sistema
                     </span>
-                    <span className="num font-mono text-xs font-semibold text-foreground">
+                    <span className="num font-mono text-xs font-bold text-foreground">
                       {formatQty(p.current_stock, p.unit)}
                     </span>
                   </div>
                 </div>
 
+                {/* Linha Central: Referência Anterior e Campo de Digitação Grande */}
                 <div className="flex items-center justify-between gap-2 pt-2 border-t">
                   {/* Número discreto da contagem anterior */}
                   <div
-                    className="flex items-center gap-1.5 rounded bg-muted/60 border px-2 py-0.5 text-[11px]"
+                    className="flex flex-col text-[11px]"
                     title={
                       prev
                         ? `Última contagem em ${formatDateTime(prev.date)}: ${formatQty(prev.counted, p.unit)}`
@@ -325,50 +595,93 @@ function ContagensPage() {
                     </span>
                   </div>
 
-                  {/* Input da nova contagem */}
+                  {/* Input touch com botões rápidos de incremento para celular */}
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-medium text-muted-foreground">Nova:</span>
+                    <button
+                      type="button"
+                      onClick={() => adjustQuickValue(p.id, Number(p.current_stock), -1)}
+                      className="h-8 w-7 flex items-center justify-center rounded-md border bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer text-xs font-bold shrink-0 transition-colors"
+                      title="Diminuir 1"
+                    >
+                      <Minus className="h-3 w-3" />
+                    </button>
                     <Input
-                      className="num h-7 w-20 text-right text-xs font-semibold"
+                      className="num h-8 w-20 text-center text-sm font-bold bg-background shadow-xs"
                       inputMode="decimal"
                       placeholder="0"
                       value={raw}
                       onChange={(e) => setValues((v) => ({ ...v, [p.id]: e.target.value }))}
                     />
+                    <button
+                      type="button"
+                      onClick={() => adjustQuickValue(p.id, Number(p.current_stock), 1)}
+                      className="h-8 w-7 flex items-center justify-center rounded-md border bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer text-xs font-bold shrink-0 transition-colors"
+                      title="Aumentar 1"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </button>
                   </div>
                 </div>
 
-                {/* Diferença apurada */}
-                {diff !== null && (
-                  <div className="flex items-center justify-between text-xs pt-1.5 border-t border-dashed">
-                    <span className="text-[11px] text-muted-foreground">Diferença:</span>
-                    <span
-                      className={`font-mono font-bold text-xs ${
-                        diff < 0
-                          ? "text-critical"
-                          : diff > 0
-                            ? "text-success"
-                            : "text-muted-foreground"
-                      }`}
+                {/* Ações rápidas de 1 toque no celular */}
+                <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-dashed text-xs">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setExactValue(p.id, Number(p.current_stock))}
+                      className="text-[10px] text-muted-foreground hover:text-primary bg-muted/40 hover:bg-muted px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                      title="Repete a quantidade que já está no sistema"
                     >
-                      {diff > 0 ? "+" : ""}
-                      {formatQty(diff, p.unit)}
-                    </span>
+                      Copiar Sist. ({p.current_stock})
+                    </button>
+                    {prev && (
+                      <button
+                        type="button"
+                        onClick={() => setExactValue(p.id, prev.counted)}
+                        className="text-[10px] text-muted-foreground hover:text-primary bg-muted/40 hover:bg-muted px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                        title="Repete a contagem anterior"
+                      >
+                        Repetir Ant. ({prev.counted})
+                      </button>
+                    )}
                   </div>
-                )}
+
+                  {/* Diferença em destaque */}
+                  {diff !== null && (
+                    <div className="flex items-center gap-1 font-mono text-xs">
+                      <span className="text-[10px] text-muted-foreground font-sans">Dif:</span>
+                      <span
+                        className={`font-bold ${
+                          diff < 0
+                            ? "text-critical"
+                            : diff > 0
+                              ? "text-success"
+                              : "text-muted-foreground"
+                        }`}
+                      >
+                        {diff > 0 ? "+" : ""}
+                        {formatQty(diff, p.unit)}
+                      </span>
+                    </div>
+                  )}
+                </div>
 
                 {!isCounter && (
                   <div className="flex items-center justify-between gap-2 pt-1.5 border-t text-xs">
                     <span className="text-[10px] text-muted-foreground">
-                      Comprar (sug: {formatQty(computedItem.suggestedPurchase, p.unit)}):
+                      Comprar (sug: {formatQty(Math.ceil(computedItem.suggestedPurchase), p.unit)}):
                     </span>
                     <PlanInput
                       className="num h-7 w-20 text-right text-xs"
+                      roundUp={true}
                       value={
-                        plan[p.id] ??
-                        (computedItem.suggestedPurchase > 0
-                          ? Math.ceil(computedItem.suggestedPurchase)
-                          : 0)
+                        plan[p.id] !== undefined
+                          ? plan[p.id] > 0
+                            ? Math.ceil(plan[p.id])
+                            : 0
+                          : computedItem.suggestedPurchase > 0
+                            ? Math.ceil(computedItem.suggestedPurchase)
+                            : 0
                       }
                       onChange={(val) => setPlanned(p.id, val)}
                     />
@@ -379,13 +692,15 @@ function ContagensPage() {
           })}
         </div>
       ) : (
-        /* Visualização em Tabela Compacta Proporcional */
+        /* Visualização em Tabela Compacta com Coluna Fixa */
         <div className="rounded-lg border bg-card shadow-card overflow-hidden">
-          <div className="max-h-[520px] overflow-auto">
+          <div className="max-h-[560px] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[34%] sm:w-auto">Produto</TableHead>
+                  <TableHead className="w-[34%] sm:w-auto sticky left-0 bg-card z-10 shadow-xs">
+                    Produto
+                  </TableHead>
                   <TableHead className="text-right whitespace-nowrap">
                     <span className="hidden sm:inline">Estoque registrado</span>
                     <span className="sm:hidden">Sistema</span>
@@ -424,10 +739,17 @@ function ContagensPage() {
                     hasCount,
                   );
                   return (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-medium">
-                        <div className="truncate max-w-[140px] sm:max-w-none text-xs sm:text-sm">
-                          {p.description}
+                    <TableRow key={p.id} className={hasCount ? "bg-emerald-500/[0.03]" : undefined}>
+                      <TableCell className="font-medium sticky left-0 bg-card z-10 shadow-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate max-w-[140px] sm:max-w-none text-xs sm:text-sm font-semibold">
+                            {p.description}
+                          </span>
+                          {hasCount && (
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold shrink-0">
+                              ✓
+                            </span>
+                          )}
                         </div>
                         <span className="text-[10px] text-muted-foreground sm:hidden">
                           {p.unit}
@@ -473,11 +795,15 @@ function ContagensPage() {
                         <TableCell className="text-right">
                           <PlanInput
                             className="num ml-auto h-7 sm:h-8 w-20 sm:w-24 text-right text-xs sm:text-sm"
+                            roundUp={true}
                             value={
-                              plan[p.id] ??
-                              (computedItem.suggestedPurchase > 0
-                                ? Math.ceil(computedItem.suggestedPurchase)
-                                : 0)
+                              plan[p.id] !== undefined
+                                ? plan[p.id] > 0
+                                  ? Math.ceil(plan[p.id])
+                                  : 0
+                                : computedItem.suggestedPurchase > 0
+                                  ? Math.ceil(computedItem.suggestedPurchase)
+                                  : 0
                             }
                             onChange={(val) => setPlanned(p.id, val)}
                           />
@@ -485,7 +811,7 @@ function ContagensPage() {
                             className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5"
                             title={`Saldo 2ª: ${formatQty(computedItem.projectedCycleEndStock, p.unit)} (${computedItem.remainingDaysLabel})`}
                           >
-                            sug: {formatQty(computedItem.suggestedPurchase, p.unit)}
+                            sug: {formatQty(Math.ceil(computedItem.suggestedPurchase), p.unit)}
                           </div>
                         </TableCell>
                       )}
@@ -497,6 +823,28 @@ function ContagensPage() {
           </div>
         </div>
       )}
+
+      {/* Barra Flutuante de Ação no Rodapé para Celular (Fácil acesso ao polegar) */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 p-2.5 sm:hidden bg-card/95 backdrop-blur-md border-t shadow-lg flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+            <span>
+              {filledCount} de {products?.length ?? 0} contados
+            </span>
+          </div>
+          <span className="text-[10px] text-muted-foreground block truncate">Salvo localmente</span>
+        </div>
+        <Button
+          onClick={confirm}
+          disabled={saving || filled.length === 0}
+          size="sm"
+          className="gap-1.5 h-8 text-xs shrink-0 shadow-md"
+        >
+          <Save className="h-3.5 w-3.5" />
+          Finalizar Contagem ({filled.length})
+        </Button>
+      </div>
 
       <div className="mt-6 mb-2 flex items-center justify-between">
         <div>

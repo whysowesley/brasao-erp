@@ -140,7 +140,9 @@ function SugestoesPage() {
           const plannedVal = plan[p.id];
           const qty =
             plannedVal !== undefined
-              ? plannedVal
+              ? plannedVal > 0
+                ? Math.ceil(plannedVal)
+                : 0
               : p.suggestedPurchase > 0
                 ? Math.ceil(p.suggestedPurchase)
                 : 0;
@@ -315,7 +317,9 @@ function SugestoesPage() {
                 const plannedValue = plan[p.id];
                 const wanted =
                   plannedValue !== undefined
-                    ? plannedValue
+                    ? plannedValue > 0
+                      ? Math.ceil(plannedValue)
+                      : 0
                     : p.suggestedPurchase > 0
                       ? Math.ceil(p.suggestedPurchase)
                       : 0;

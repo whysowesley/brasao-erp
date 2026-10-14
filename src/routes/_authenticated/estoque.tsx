@@ -9,6 +9,9 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  LayoutGrid,
+  Table as TableIcon,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -185,6 +188,28 @@ function EstoquePage() {
   /** Quantidade que o usuário pretende comprar — compartilhada com as outras telas. */
   const { plan, setPlanned, setPlannedBatch, clearPlan } = usePurchasePlan();
 
+  // Modo de visualização: no celular (< 768px), o padrão é cartões verticais intuitivos
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
+    if (typeof window === "undefined") return "table";
+    const saved = window.localStorage.getItem("brasao:estoque-viewmode");
+    if (saved === "table" || saved === "cards") return saved;
+    return window.innerWidth < 768 ? "cards" : "table";
+  });
+
+  const handleSetViewMode = (mode: "table" | "cards") => {
+    setViewMode(mode);
+    try {
+      window.localStorage.setItem("brasao:estoque-viewmode", mode);
+    } catch {
+      // ignore
+    }
+  };
+
+  // Filtro rápido de 1 toque no celular
+  const [quickFilter, setQuickFilter] = useState<"todos" | "sugestoes" | "criticos" | "planejados">(
+    "todos",
+  );
+
   // Flag de momento da contagem: pós-operação (fechamento, dia de hoje já usado) vs pré-operação
   const [isPostOperation, setIsPostOperation] = usePostOperationMode();
 
@@ -196,15 +221,16 @@ function EstoquePage() {
     );
   }, [products, rules, effectiveRefDay, isPostOperation]);
 
-  // Se o usuário não digitou manualmente um valor em Quero Comprar, o padrão é a compra sugerida arredondada para cima,
-  // permitindo que o valor recaia automaticamente ao alternar para pós-operação.
+  // Se o usuário não digitou manualmente um valor em Quero Comprar, o padrão é a compra sugerida arredondada para cima.
+  // Sempre arredonda para cima valores inteiros (ex: 9.8 vira 10).
   const buyQty = useCallback(
-    (p: ComputedProduct) =>
-      plan[p.id] !== undefined
-        ? plan[p.id]
-        : p.suggestedPurchase > 0
-          ? Math.ceil(p.suggestedPurchase)
-          : 0,
+    (p: ComputedProduct) => {
+      if (plan[p.id] !== undefined) {
+        const val = plan[p.id];
+        return val > 0 ? Math.ceil(val) : 0;
+      }
+      return p.suggestedPurchase > 0 ? Math.ceil(p.suggestedPurchase) : 0;
+    },
     [plan],
   );
 
@@ -254,6 +280,14 @@ function EstoquePage() {
     if (category !== "todas") list = list.filter((p) => p.category_id === category);
     if (status !== "todos") list = list.filter((p) => stockStatus(p) === status);
 
+    if (quickFilter === "sugestoes") {
+      list = list.filter((p) => p.suggestedPurchase > 0);
+    } else if (quickFilter === "criticos") {
+      list = list.filter((p) => stockStatus(p) !== "normal");
+    } else if (quickFilter === "planejados") {
+      list = list.filter((p) => plan[p.id] !== undefined && plan[p.id] > 0);
+    }
+
     const sorted = [...list].sort((a, b) => {
       const dir = sort.dir === "asc" ? 1 : -1;
       if (sort.key === "status")
@@ -277,6 +311,8 @@ function EstoquePage() {
     supplier,
     category,
     status,
+    quickFilter,
+    plan,
     sort,
     groupBySupplier,
     futureWithBuy,
@@ -478,284 +514,586 @@ function EstoquePage() {
         </div>
       </div>
 
-      <div className={`mb-4 grid gap-3 ${isCounter ? "md:grid-cols-3" : "md:grid-cols-4"}`}>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Pesquisar produto..."
-            className="pl-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      {/* Barra de Filtros e Busca */}
+      <div className="mb-4 space-y-3 rounded-lg border bg-card p-3 shadow-xs">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Pesquisar produto ou código..."
+              className="pl-9 h-9 text-xs sm:text-sm"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            {!isCounter && (
+              <Select value={supplier} onValueChange={setSupplier}>
+                <SelectTrigger className="h-9 text-xs w-full sm:w-44">
+                  <SelectValue placeholder="Fornecedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os fornecedores</SelectItem>
+                  {suppliers?.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger className="h-9 text-xs w-full sm:w-40">
+                <SelectValue placeholder="Categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas as categorias</SelectItem>
+                {categories?.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="h-9 text-xs w-full sm:w-36">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os status</SelectItem>
+                <SelectItem value="critico">Crítico</SelectItem>
+                <SelectItem value="atencao">Atenção</SelectItem>
+                <SelectItem value="normal">Normal</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Alternador de Modo: Tabela vs Cartões */}
+            <div className="flex items-center rounded-md border bg-muted/40 p-0.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleSetViewMode("cards")}
+                className={cn(
+                  "flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                  viewMode === "cards"
+                    ? "bg-card text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                title="Modo Cartões para Celular"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Cartões</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetViewMode("table")}
+                className={cn(
+                  "flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                  viewMode === "table"
+                    ? "bg-card text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                title="Modo Tabela Completa"
+              >
+                <TableIcon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Tabela</span>
+              </button>
+            </div>
+          </div>
         </div>
-        {!isCounter && (
-          <Select value={supplier} onValueChange={setSupplier}>
-            <SelectTrigger>
-              <SelectValue placeholder="Fornecedor" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os fornecedores</SelectItem>
-              {suppliers?.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        <Select value={category} onValueChange={setCategory}>
-          <SelectTrigger>
-            <SelectValue placeholder="Categoria" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Todas as categorias</SelectItem>
-            {categories?.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger>
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos os status</SelectItem>
-            <SelectItem value="critico">Crítico</SelectItem>
-            <SelectItem value="atencao">Atenção</SelectItem>
-            <SelectItem value="normal">Normal</SelectItem>
-          </SelectContent>
-        </Select>
+
+        {/* Chips de Filtro Rápido no Celular */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t text-xs">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            <Button
+              size="sm"
+              variant={quickFilter === "todos" ? "default" : "outline"}
+              onClick={() => setQuickFilter("todos")}
+              className="h-7 px-2.5 text-[11px] rounded-full"
+            >
+              Todos ({recomputedProducts.length})
+            </Button>
+            <Button
+              size="sm"
+              variant={quickFilter === "sugestoes" ? "default" : "outline"}
+              onClick={() => setQuickFilter("sugestoes")}
+              className="h-7 px-2.5 text-[11px] rounded-full"
+            >
+              <Sparkles className="h-3 w-3 mr-1 text-primary" />
+              Precisam Comprar ({recomputedProducts.filter((p) => p.suggestedPurchase > 0).length})
+            </Button>
+            <Button
+              size="sm"
+              variant={quickFilter === "criticos" ? "default" : "outline"}
+              onClick={() => setQuickFilter("criticos")}
+              className="h-7 px-2.5 text-[11px] rounded-full"
+            >
+              Críticos / Atenção (
+              {recomputedProducts.filter((p) => stockStatus(p) !== "normal").length})
+            </Button>
+            {Object.keys(plan).length > 0 && (
+              <Button
+                size="sm"
+                variant={quickFilter === "planejados" ? "default" : "outline"}
+                onClick={() => setQuickFilter("planejados")}
+                className="h-7 px-2.5 text-[11px] rounded-full"
+              >
+                <Check className="h-3 w-3 mr-1 text-emerald-600" />
+                Quero Comprar ({Object.keys(plan).length})
+              </Button>
+            )}
+          </div>
+
+          {!isCounter && (
+            <div className="flex items-center gap-2">
+              <Switch
+                id="group-supplier"
+                checked={groupBySupplier}
+                onCheckedChange={setGroupBySupplier}
+              />
+              <Label
+                htmlFor="group-supplier"
+                className="text-xs text-muted-foreground cursor-pointer"
+              >
+                Agrupar por fornecedor
+              </Label>
+            </div>
+          )}
+        </div>
       </div>
 
-      {!isCounter && (
-        <div className="mb-3 flex items-center gap-2">
-          <Switch
-            id="group-supplier"
-            checked={groupBySupplier}
-            onCheckedChange={setGroupBySupplier}
-          />
-          <Label htmlFor="group-supplier" className="text-sm text-muted-foreground">
-            Ver estoque agrupado por fornecedor
-          </Label>
-        </div>
-      )}
+      {/* Visualização de Cartões Móveis (Deslizar Fácil e Intuitivo no Celular) */}
+      {viewMode === "cards" ? (
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {rows.map((p) => {
+            const plannedQty = buyQty(p);
+            const future = futureWithBuy(p);
+            const statusVal = stockStatus(p);
+            const sugRounded = p.suggestedPurchase > 0 ? Math.ceil(p.suggestedPurchase) : 0;
 
-      <div className="rounded-lg border bg-card shadow-card">
-        <div className="sm:hidden flex items-center justify-between px-3 py-2 text-[11px] text-muted-foreground bg-muted/40 border-b">
-          <span>Arraste para o lado para ver todas as métricas</span>
-          <span className="font-mono text-[10px] text-primary">↔ deslize</span>
-        </div>
-        <div className="overflow-x-auto">
-          <Table className={isCounter ? "min-w-[640px]" : "min-w-[880px]"}>
-            <TableHeader>
-              <TableRow>
-                <Th k="description">Produto</Th>
-                <Th k="current_stock" align="right">
-                  Estoque Atual
-                </Th>
-                <Th k="unit">Embalagem</Th>
-                {!isCounter && <Th k="supplierName">Fornecedor</Th>}
-                <Th k="avg_weekly_consumption" align="right">
-                  Consumo Semanal
-                </Th>
-                <TableHead className="text-right">
-                  <div className="flex flex-col items-end">
-                    <span>Consumo Restante Dias</span>
-                    <span className="text-[10px] font-normal text-muted-foreground">
-                      ({getRemainingDaysLabel(effectiveRefDay, isPostOperation)})
-                    </span>
+            return (
+              <div
+                key={p.id}
+                className="rounded-lg border bg-card p-3.5 shadow-xs space-y-3 transition-colors hover:border-primary/40"
+              >
+                {/* Cabeçalho do Card */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      to="/produtos/$id"
+                      params={{ id: p.id }}
+                      className="font-semibold text-sm text-foreground hover:underline line-clamp-1"
+                    >
+                      {p.description}
+                    </Link>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px] text-muted-foreground">
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
+                        {p.unit}
+                      </Badge>
+                      {p.categoryName && <span>{p.categoryName}</span>}
+                      {!isCounter && p.supplierName && (
+                        <>
+                          <span>•</span>
+                          <span className="truncate max-w-[120px]">{p.supplierName}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </TableHead>
-                <Th k="suggestedPurchase" align="right">
-                  Compra Sugerida
-                </Th>
-                <TableHead className="text-right">Quero Comprar</TableHead>
-                <Th k="futureStock" align="right">
-                  <div className="flex flex-col items-end">
-                    <span>Estoque Futuro</span>
-                    <span className="text-[10px] font-normal text-muted-foreground">
-                      (Saldo 2ª + Comprar)
+                  <StatusBadge status={statusVal} />
+                </div>
+
+                {/* Métricas Principais em Grade de 3 Colunas */}
+                <div className="grid grid-cols-3 gap-2 p-2 rounded-md bg-muted/30 border text-center text-xs">
+                  <div>
+                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground block font-medium">
+                      Estoque Atual
                     </span>
-                  </div>
-                </Th>
-                <Th k="status">Status do Estoque</Th>
-                <TableHead>Observação</TableHead>
-                {!isCounter && canWrite && <TableHead className="w-20" />}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading &&
-                Array.from({ length: 8 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell colSpan={isCounter ? 10 : 12}>
-                      <Skeleton className="h-6 w-full" />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              {rows.map((p, i) => (
-                <Fragment key={p.id}>
-                  {!isCounter &&
-                    groupBySupplier &&
-                    rows[i - 1]?.supplierName !== p.supplierName && (
-                      <TableRow className="bg-muted/50 hover:bg-muted/50">
-                        <TableCell colSpan={12} className="py-2 text-xs font-semibold uppercase">
-                          {p.supplierName}
-                          <span className="ml-2 font-normal text-muted-foreground">
-                            {rows.filter((r) => r.supplierName === p.supplierName).length}{" "}
-                            produto(s)
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  <TableRow>
-                    <TableCell className="font-medium">
-                      <Link to="/produtos/$id" params={{ id: p.id }} className="hover:underline">
-                        {p.description}
-                      </Link>
-                      <span className="ml-2 text-xs text-muted-foreground">{p.categoryName}</span>
-                    </TableCell>
-                    <TableCell className="text-right">
+                    <div className="mt-0.5">
                       {isCounter ? (
-                        <span className="num font-semibold text-foreground">
+                        <span className="num font-bold text-foreground">
                           {formatQty(p.current_stock, p.unit)}
                         </span>
                       ) : (
                         <QuickNumericInput
                           value={p.current_stock}
                           onSave={(val) => quickSaveStock(p, val)}
-                          className="num ml-auto h-8 w-24 text-right"
+                          className="num h-7 w-full text-center font-bold text-xs bg-background"
                           ariaLabel={`Estoque atual de ${p.description}`}
                         />
                       )}
-                      {isPostOperation && (p.todayConsumption ?? 0) > 0 && (
-                        <div
-                          className="text-[10px] text-muted-foreground mt-0.5"
-                          title={`Estoque disponível no fechamento de hoje após consumo de ${formatQty(p.todayConsumption ?? 0, p.unit)}`}
-                        >
-                          Pós-op: {formatQty(p.effectiveCurrentStock ?? p.current_stock, p.unit)}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{p.unit}</TableCell>
-                    {!isCounter && (
-                      <TableCell className="text-muted-foreground">{p.supplierName}</TableCell>
-                    )}
-                    <TableCell className="text-right">
-                      {isCounter ? (
-                        <span className="num font-medium text-muted-foreground">
-                          {formatQty(p.avg_weekly_consumption, p.unit)}
-                        </span>
-                      ) : (
-                        <QuickNumericInput
-                          value={p.avg_weekly_consumption}
-                          onSave={(val) => quickSaveConsumption(p, val)}
-                          className="num ml-auto h-8 w-20 text-right font-medium"
-                          ariaLabel={`Consumo semanal de ${p.description}`}
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="text-xs font-semibold text-foreground">
-                        Consumo: {formatQty(p.remainingConsumption, p.unit)}
-                      </div>
-                      <div
-                        className={`text-[11px] font-semibold ${
-                          (p.projectedCycleEndStock ?? 0) <= 0
-                            ? "text-rose-600 dark:text-rose-400 font-bold"
-                            : "text-emerald-700 dark:text-emerald-400"
-                        }`}
-                        title="Saldo previsto na 2ª feira (Estoque Efetivo - Consumo Restante)"
-                      >
-                        Saldo 2ª: {formatQty(p.projectedCycleEndStock, p.unit)}
-                      </div>
-                    </TableCell>
-                    <TableCell className="num text-right font-semibold">
-                      {p.suggestedPurchase > 0 ? formatQty(p.suggestedPurchase, p.unit) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <PlanInput
-                        value={buyQty(p)}
-                        placeholder={p.suggestedPurchase > 0 ? String(p.suggestedPurchase) : "0"}
-                        onChange={(val) => setPlanned(p.id, val)}
-                        className="num ml-auto h-8 w-24 text-right"
-                      />
-                    </TableCell>
-                    <TableCell className="num text-right font-semibold">
-                      <span
-                        className={
-                          futureWithBuy(p) <= 0
-                            ? "text-rose-600 dark:text-rose-400 font-bold"
-                            : futureWithBuy(p) < Number(p.min_stock)
-                              ? "text-amber-600 dark:text-amber-400 font-semibold"
-                              : "text-foreground"
-                        }
-                      >
-                        {formatQty(futureWithBuy(p), p.unit)}
+                    </div>
+                    {isPostOperation && (p.todayConsumption ?? 0) > 0 && (
+                      <span className="text-[9px] text-muted-foreground block mt-0.5">
+                        Pós: {formatQty(p.effectiveCurrentStock ?? p.current_stock, p.unit)}
                       </span>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={stockStatus(p)} />
-                    </TableCell>
-                    <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">
-                      {p.notes ?? ""}
-                    </TableCell>
-                    {!isCounter && canWrite && (
-                      <TableCell>
-                        <div className="flex items-center">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditing(p);
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="icon" variant="ghost">
-                                <Trash2 className="h-4 w-4 text-critical" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Apagar {p.description}?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  O produto será removido junto com seu histórico de movimentações,
-                                  itens de pedidos e de contagens. Essa ação não pode ser desfeita.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => removeProduct(p)}>
-                                  Apagar produto
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </TableCell>
                     )}
-                  </TableRow>
-                </Fragment>
-              ))}
-              {!isLoading && rows.length === 0 && (
-                <TableRow>
-                  <TableCell
-                    colSpan={isCounter ? 10 : 12}
-                    className="py-10 text-center text-muted-foreground"
-                  >
-                    Nenhum produto encontrado com os filtros aplicados.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                  </div>
+
+                  <div>
+                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground block font-medium">
+                      Consumo Giro
+                    </span>
+                    <div className="num font-semibold text-foreground mt-1">
+                      {formatQty(p.avg_weekly_consumption, p.unit)}
+                    </div>
+                    <span
+                      className={`text-[9px] block mt-0.5 font-medium ${
+                        (p.projectedCycleEndStock ?? 0) <= 0
+                          ? "text-rose-600 dark:text-rose-400 font-bold"
+                          : "text-emerald-700 dark:text-emerald-400"
+                      }`}
+                      title="Saldo previsto na 2ª feira"
+                    >
+                      Saldo 2ª: {formatQty(p.projectedCycleEndStock, p.unit)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground block font-medium">
+                      Compra Sugerida
+                    </span>
+                    <div className="mt-1">
+                      {sugRounded > 0 ? (
+                        <Badge
+                          variant="outline"
+                          className="border-primary/50 bg-primary/10 text-primary font-bold text-xs px-1.5 py-0"
+                        >
+                          {formatQty(sugRounded, p.unit)}
+                        </Badge>
+                      ) : (
+                        <span className="num text-muted-foreground font-medium">0</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Linha de Quero Comprar e Projeção Futura */}
+                <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-foreground whitespace-nowrap">
+                      Quero Comprar:
+                    </span>
+                    <PlanInput
+                      value={plannedQty}
+                      placeholder={sugRounded > 0 ? String(sugRounded) : "0"}
+                      onChange={(val) => setPlanned(p.id, val)}
+                      roundUp={true}
+                      className="num h-8 w-24 text-center font-bold text-xs"
+                    />
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground block font-medium">
+                      Estoque Futuro
+                    </span>
+                    <span
+                      className={`num font-bold text-xs ${
+                        future <= 0
+                          ? "text-rose-600 dark:text-rose-400 font-bold"
+                          : future < Number(p.min_stock)
+                            ? "text-amber-600 dark:text-amber-400 font-semibold"
+                            : "text-foreground"
+                      }`}
+                    >
+                      {formatQty(future, p.unit)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Ações do Card */}
+                {!isCounter && canWrite && (
+                  <div className="flex items-center justify-end gap-1 pt-1.5 border-t border-dashed">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditing(p);
+                        setDialogOpen(true);
+                      }}
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs text-critical hover:bg-critical/10"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Apagar
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Apagar {p.description}?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            O produto será removido junto com seu histórico de movimentações, itens
+                            de pedidos e de contagens. Essa ação não pode ser desfeita.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => removeProduct(p)}>
+                            Apagar produto
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {!isLoading && rows.length === 0 && (
+            <div className="col-span-full py-12 text-center text-muted-foreground rounded-lg border bg-card">
+              Nenhum produto encontrado com os filtros aplicados.
+            </div>
+          )}
         </div>
-      </div>
+      ) : (
+        /* Visualização em Tabela com Coluna Fixa (Sticky) */
+        <div className="rounded-lg border bg-card shadow-card">
+          <div className="sm:hidden flex items-center justify-between px-3 py-2 text-[11px] text-muted-foreground bg-muted/40 border-b">
+            <span>Arraste para o lado para ver todas as métricas</span>
+            <span className="font-mono text-[10px] text-primary">↔ deslize</span>
+          </div>
+          <div className="overflow-x-auto">
+            <Table className={isCounter ? "min-w-[640px]" : "min-w-[880px]"}>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="sticky left-0 bg-card z-10 shadow-xs">
+                    <button
+                      onClick={() => toggleSort("description")}
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                    >
+                      Produto
+                      <ArrowUpDown className="h-3 w-3 opacity-50" />
+                    </button>
+                  </TableHead>
+                  <Th k="current_stock" align="right">
+                    Estoque Atual
+                  </Th>
+                  <Th k="unit">Embalagem</Th>
+                  {!isCounter && <Th k="supplierName">Fornecedor</Th>}
+                  <Th k="avg_weekly_consumption" align="right">
+                    Consumo Semanal
+                  </Th>
+                  <TableHead className="text-right">
+                    <div className="flex flex-col items-end">
+                      <span>Consumo Restante Dias</span>
+                      <span className="text-[10px] font-normal text-muted-foreground">
+                        ({getRemainingDaysLabel(effectiveRefDay, isPostOperation)})
+                      </span>
+                    </div>
+                  </TableHead>
+                  <Th k="suggestedPurchase" align="right">
+                    Compra Sugerida
+                  </Th>
+                  <TableHead className="text-right">Quero Comprar</TableHead>
+                  <Th k="futureStock" align="right">
+                    <div className="flex flex-col items-end">
+                      <span>Estoque Futuro</span>
+                      <span className="text-[10px] font-normal text-muted-foreground">
+                        (Saldo 2ª + Comprar)
+                      </span>
+                    </div>
+                  </Th>
+                  <Th k="status">Status do Estoque</Th>
+                  <TableHead>Observação</TableHead>
+                  {!isCounter && canWrite && <TableHead className="w-20" />}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading &&
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={isCounter ? 10 : 12}>
+                        <Skeleton className="h-6 w-full" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                {rows.map((p, i) => {
+                  const sugRounded = p.suggestedPurchase > 0 ? Math.ceil(p.suggestedPurchase) : 0;
+                  return (
+                    <Fragment key={p.id}>
+                      {!isCounter &&
+                        groupBySupplier &&
+                        rows[i - 1]?.supplierName !== p.supplierName && (
+                          <TableRow className="bg-muted/50 hover:bg-muted/50">
+                            <TableCell
+                              colSpan={12}
+                              className="py-2 text-xs font-semibold uppercase"
+                            >
+                              {p.supplierName}
+                              <span className="ml-2 font-normal text-muted-foreground">
+                                {rows.filter((r) => r.supplierName === p.supplierName).length}{" "}
+                                produto(s)
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      <TableRow>
+                        <TableCell className="font-medium sticky left-0 bg-card z-10 shadow-xs">
+                          <Link
+                            to="/produtos/$id"
+                            params={{ id: p.id }}
+                            className="hover:underline font-semibold"
+                          >
+                            {p.description}
+                          </Link>
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {p.categoryName}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {isCounter ? (
+                            <span className="num font-semibold text-foreground">
+                              {formatQty(p.current_stock, p.unit)}
+                            </span>
+                          ) : (
+                            <QuickNumericInput
+                              value={p.current_stock}
+                              onSave={(val) => quickSaveStock(p, val)}
+                              className="num ml-auto h-8 w-24 text-right"
+                              ariaLabel={`Estoque atual de ${p.description}`}
+                            />
+                          )}
+                          {isPostOperation && (p.todayConsumption ?? 0) > 0 && (
+                            <div
+                              className="text-[10px] text-muted-foreground mt-0.5"
+                              title={`Estoque disponível no fechamento de hoje após consumo de ${formatQty(p.todayConsumption ?? 0, p.unit)}`}
+                            >
+                              Pós-op:{" "}
+                              {formatQty(p.effectiveCurrentStock ?? p.current_stock, p.unit)}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{p.unit}</TableCell>
+                        {!isCounter && (
+                          <TableCell className="text-muted-foreground">{p.supplierName}</TableCell>
+                        )}
+                        <TableCell className="text-right">
+                          {isCounter ? (
+                            <span className="num font-medium text-muted-foreground">
+                              {formatQty(p.avg_weekly_consumption, p.unit)}
+                            </span>
+                          ) : (
+                            <QuickNumericInput
+                              value={p.avg_weekly_consumption}
+                              onSave={(val) => quickSaveConsumption(p, val)}
+                              className="num ml-auto h-8 w-20 text-right font-medium"
+                              ariaLabel={`Consumo semanal de ${p.description}`}
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="text-xs font-semibold text-foreground">
+                            Consumo: {formatQty(p.remainingConsumption, p.unit)}
+                          </div>
+                          <div
+                            className={`text-[11px] font-semibold ${
+                              (p.projectedCycleEndStock ?? 0) <= 0
+                                ? "text-rose-600 dark:text-rose-400 font-bold"
+                                : "text-emerald-700 dark:text-emerald-400"
+                            }`}
+                            title="Saldo previsto na 2ª feira (Estoque Efetivo - Consumo Restante)"
+                          >
+                            Saldo 2ª: {formatQty(p.projectedCycleEndStock, p.unit)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="num text-right font-semibold">
+                          {sugRounded > 0 ? formatQty(sugRounded, p.unit) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <PlanInput
+                            value={buyQty(p)}
+                            placeholder={sugRounded > 0 ? String(sugRounded) : "0"}
+                            onChange={(val) => setPlanned(p.id, val)}
+                            roundUp={true}
+                            className="num ml-auto h-8 w-24 text-right"
+                          />
+                        </TableCell>
+                        <TableCell className="num text-right font-semibold">
+                          <span
+                            className={
+                              futureWithBuy(p) <= 0
+                                ? "text-rose-600 dark:text-rose-400 font-bold"
+                                : futureWithBuy(p) < Number(p.min_stock)
+                                  ? "text-amber-600 dark:text-amber-400 font-semibold"
+                                  : "text-foreground"
+                            }
+                          >
+                            {formatQty(futureWithBuy(p), p.unit)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={stockStatus(p)} />
+                        </TableCell>
+                        <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">
+                          {p.notes ?? ""}
+                        </TableCell>
+                        {!isCounter && canWrite && (
+                          <TableCell>
+                            <div className="flex items-center">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditing(p);
+                                  setDialogOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button size="icon" variant="ghost">
+                                    <Trash2 className="h-4 w-4 text-critical" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Apagar {p.description}?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      O produto será removido junto com seu histórico de
+                                      movimentações, itens de pedidos e de contagens. Essa ação não
+                                      pode ser desfeita.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => removeProduct(p)}>
+                                      Apagar produto
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    </Fragment>
+                  );
+                })}
+                {!isLoading && rows.length === 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={isCounter ? 10 : 12}
+                      className="py-10 text-center text-muted-foreground"
+                    >
+                      Nenhum produto encontrado com os filtros aplicados.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
       <p className="mt-3 text-xs text-muted-foreground">
         {rows.length} produto(s) exibido(s). Edições de estoque geram movimentação automática no
         histórico. A coluna "Quero comprar" fica salva e aparece igual nas telas de Sugestões,

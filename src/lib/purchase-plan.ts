@@ -3,23 +3,35 @@ import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "@/integrations/firebase/config";
 
 /**
- * Plano de compra compartilhado entre todas as telas.
+ * Plano de compra compartilhado entre todas as telas ("Quero Comprar").
  *
- * O que o usuário digita em "Quero comprar" na tela de Estoque fica disponível
- * (já preenchido) em Sugestões, Pedidos, Contagens e no Dashboard — e também
- * sincroniza entre abas do navegador e no Firestore para nunca se perder.
+ * O que o usuário digita em "Quero comprar" na tela de Produtos/Estoque fica disponível
+ * (já preenchido) em Sugestões de Compra, Pedidos, Contagens e no Dashboard.
+ * Permanece salvo de forma persistente e só se altera quando o estoque for atualizado
+ * ou quando o usuário mexer manualmente.
+ *
+ * Todas as quantidades planejadas e sugeridas são sempre arredondadas para cima (Math.ceil).
  */
 
-const STORAGE_KEY = "brasao:purchase-plan";
+const STORAGE_KEY = "brasao:purchase-plan-v2";
+// Compatibilidade retroativa com a chave antiga
+const LEGACY_STORAGE_KEY = "brasao:purchase-plan";
 
-type Plan = Record<string, number>;
+export type Plan = Record<string, number>;
+
+interface StoredPayload {
+  plan: Plan;
+  updatedAt: number;
+}
 
 let plan: Plan = {};
+let lastLocalUpdate = 0;
 let loaded = false;
 let firestoreSubscribed = false;
 const listeners = new Set<() => void>();
 
 let firestoreSaveTimeout: ReturnType<typeof setTimeout> | null = null;
+
 function syncToFirestore() {
   if (typeof window === "undefined") return;
   if (firestoreSaveTimeout) clearTimeout(firestoreSaveTimeout);
@@ -29,29 +41,58 @@ function syncToFirestore() {
         doc(db, "settings", "purchase_plan"),
         {
           plan,
+          updatedAt: lastLocalUpdate,
           updated_at: new Date().toISOString(),
         },
-        { merge: true },
+        // Não usa merge: true cego para que produtos removidos/zerados não reapareçam do Firestore
       );
     } catch {
       // Silencia erros de rede ou permissão offline
     }
-  }, 400);
+  }, 300);
 }
 
 function load() {
   if (loaded || typeof window === "undefined") return;
   loaded = true;
+
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) plan = JSON.parse(raw) as Plan;
+    if (raw) {
+      const parsed = JSON.parse(raw) as StoredPayload;
+      if (parsed && typeof parsed.plan === "object") {
+        plan = parsed.plan;
+        lastLocalUpdate = Number(parsed.updatedAt) || 0;
+      }
+    } else {
+      // Tenta recuperar do formato legado se existir
+      const legacyRaw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacyRaw) {
+        const legacyPlan = JSON.parse(legacyRaw) as Plan;
+        if (legacyPlan && typeof legacyPlan === "object") {
+          plan = legacyPlan;
+          lastLocalUpdate = Date.now();
+        }
+      }
+    }
   } catch {
     plan = {};
   }
+
   window.addEventListener("storage", (e) => {
-    if (e.key !== STORAGE_KEY) return;
+    if (e.key !== STORAGE_KEY && e.key !== LEGACY_STORAGE_KEY) return;
     try {
-      plan = e.newValue ? (JSON.parse(e.newValue) as Plan) : {};
+      if (e.newValue) {
+        const parsed = JSON.parse(e.newValue);
+        if (parsed.plan) {
+          plan = parsed.plan;
+          lastLocalUpdate = Math.max(lastLocalUpdate, Number(parsed.updatedAt) || 0);
+        } else {
+          plan = parsed;
+        }
+      } else {
+        plan = {};
+      }
     } catch {
       plan = {};
     }
@@ -69,12 +110,22 @@ function load() {
             const data = snap.data();
             if (data && typeof data["plan"] === "object" && data["plan"] !== null) {
               const remotePlan = data["plan"] as Plan;
-              // Mescla os dados mantendo ambos sincronizados
-              const merged: Plan = { ...remotePlan, ...plan };
-              if (JSON.stringify(merged) !== JSON.stringify(plan)) {
-                plan = merged;
+              const remoteUpdatedAt = Number(data["updatedAt"]) || 0;
+
+              // Só aceita o estado remoto se ele for mais recente ou se o local for virgem (0)
+              if (remoteUpdatedAt >= lastLocalUpdate || lastLocalUpdate === 0) {
+                // Arredonda todos os valores remotos para cima
+                const normalized: Plan = {};
+                for (const [k, v] of Object.entries(remotePlan)) {
+                  if (typeof v === "number" && v > 0) {
+                    normalized[k] = Math.ceil(v);
+                  }
+                }
+                plan = normalized;
+                lastLocalUpdate = Math.max(lastLocalUpdate, remoteUpdatedAt);
                 try {
-                  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
+                  const payload: StoredPayload = { plan, updatedAt: lastLocalUpdate };
+                  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
                 } catch {
                   // ignore
                 }
@@ -84,7 +135,7 @@ function load() {
           }
         },
         () => {
-          // ignore
+          // ignore offline
         },
       );
     } catch {
@@ -98,8 +149,10 @@ function emit() {
 }
 
 function persist() {
+  lastLocalUpdate = Date.now();
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
+    const payload: StoredPayload = { plan, updatedAt: lastLocalUpdate };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch {
     /* ignora quota/privacidade */
   }
@@ -120,29 +173,45 @@ const getSnapshot = () => {
 };
 const getServerSnapshot = () => EMPTY;
 
+/** Define a quantidade pretendida para um produto (arredondada sempre para cima se > 0) */
 export function setPlanned(productId: string, quantity: number | null) {
   load();
   if (quantity === null || Number.isNaN(quantity)) {
     const { [productId]: _drop, ...rest } = plan;
     plan = rest;
   } else {
-    plan = { ...plan, [productId]: quantity };
+    const rounded = quantity > 0 ? Math.ceil(quantity) : 0;
+    plan = { ...plan, [productId]: rounded };
   }
   persist();
 }
 
+/** Define múltiplas quantidades de uma vez (ex: aplicar todas as sugestões) */
 export function setPlannedBatch(batch: Record<string, number>) {
   load();
-  plan = { ...plan, ...batch };
+  const roundedBatch: Record<string, number> = {};
+  for (const [id, q] of Object.entries(batch)) {
+    if (typeof q === "number") {
+      roundedBatch[id] = q > 0 ? Math.ceil(q) : 0;
+    }
+  }
+  plan = { ...plan, ...roundedBatch };
   persist();
 }
 
+/**
+ * Limpa o plano de compra manual de produtos específicos (chamado quando o estoque é atualizado)
+ * ou de todos os produtos quando solicitado.
+ */
 export function clearPlan(productIds?: string[]) {
   load();
-  if (!productIds) plan = {};
-  else {
+  if (!productIds || productIds.length === 0) {
+    plan = {};
+  } else {
     const next = { ...plan };
-    for (const id of productIds) delete next[id];
+    for (const id of productIds) {
+      delete next[id];
+    }
     plan = next;
   }
   persist();
@@ -156,10 +225,15 @@ export function usePurchasePlan() {
     [],
   );
   const setBatch = useCallback((batch: Record<string, number>) => setPlannedBatch(batch), []);
-  return { plan: value, setPlanned: set, setPlannedBatch: setBatch, clearPlan };
+  const clear = useCallback((ids?: string[]) => clearPlan(ids), []);
+  return { plan: value, setPlanned: set, setPlannedBatch: setBatch, clearPlan: clear };
 }
 
-/** Quantidade planejada para um produto, com fallback na sugestão do sistema. */
+/** Quantidade planejada para um produto, com fallback na sugestão arredondada para cima. */
 export function plannedQty(plan: Plan, productId: string, fallback: number) {
-  return plan[productId] ?? fallback;
+  const v = plan[productId];
+  if (v !== undefined) {
+    return v > 0 ? Math.ceil(v) : 0;
+  }
+  return fallback > 0 ? Math.ceil(fallback) : 0;
 }
