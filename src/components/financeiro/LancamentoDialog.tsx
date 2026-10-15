@@ -876,7 +876,7 @@ export function LancamentoDialog({
                   className={cn(
                     "space-y-1.5 rounded-lg border p-3 transition-colors",
                     isBoleto
-                      ? "border-amber-500/35 bg-amber-50/40 dark:bg-amber-950/20"
+                      ? "border-orange-500/35 bg-orange-50/40 dark:bg-orange-950/20"
                       : "border-emerald-500/25 bg-emerald-50/30 dark:bg-emerald-950/20",
                   )}
                 >
@@ -886,14 +886,14 @@ export function LancamentoDialog({
                       className={cn(
                         "flex items-center gap-1.5 text-xs font-semibold",
                         isBoleto
-                          ? "text-amber-800 dark:text-amber-300"
+                          ? "text-orange-800 dark:text-orange-300"
                           : "text-emerald-800 dark:text-emerald-300",
                       )}
                     >
                       {isBoleto ? (
                         <>
-                          <Barcode className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                          Código de Barras do Boleto
+                          <Barcode className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                          Código de Barras do Boleto (BLQ)
                         </>
                       ) : (
                         <>

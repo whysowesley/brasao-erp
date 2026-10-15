@@ -203,8 +203,8 @@ export function MarcarPagoDialog({ open, onOpenChange, transaction }: MarcarPago
                     <p className="font-semibold text-foreground flex items-center gap-1">
                       {isBoleto ? (
                         <>
-                          <Barcode className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                          <span>Código de Barras do Boleto:</span>
+                          <Barcode className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+                          <span>Código de Barras do Boleto (BLQ):</span>
                         </>
                       ) : (
                         <>
@@ -221,14 +221,14 @@ export function MarcarPagoDialog({ open, onOpenChange, transaction }: MarcarPago
                         }
                         toast.success(
                           isBoleto
-                            ? "Código de barras do boleto copiado!"
+                            ? "Código de barras do boleto (BLQ) copiado!"
                             : "Chave PIX da conta copiada!",
                         );
                       }}
                       className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
                     >
                       <Copy className="h-3 w-3" />
-                      {isBoleto ? "Copiar código" : "Copiar PIX"}
+                      {isBoleto ? "Copiar BLQ" : "Copiar PIX"}
                     </button>
                   </div>
                   <p className="font-mono text-[11px] text-muted-foreground break-all select-all">

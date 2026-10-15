@@ -30,7 +30,7 @@ export function TransactionPixPopover({
   const [codeInputValue, setCodeInputValue] = useState("");
   const [syncSupplier, setSyncSupplier] = useState(true);
 
-  // Identifica de forma reativa se esta transação é do tipo "Boleto"
+  // Identifica de forma reativa se esta transação é do tipo "Boleto" (BLQ)
   const isBoleto = (() => {
     // 1. Pelo tipo explícito no payment_method
     if (transaction.payment_method?.type === "boleto") return true;
@@ -85,7 +85,7 @@ export function TransactionPixPopover({
 
       setCopied(true);
       if (isBoleto) {
-        toast.success(`Código de barras do boleto copiado: ${currentCode}`, {
+        toast.success(`Código de barras do boleto (BLQ) copiado: ${currentCode}`, {
           description: "Pronto para colar no aplicativo do seu banco!",
           duration: 3500,
         });
@@ -132,7 +132,9 @@ export function TransactionPixPopover({
 
       if (isBoleto) {
         toast.success(
-          clean ? "Código de barras do boleto salvo com sucesso!" : "Código de barras removido.",
+          clean
+            ? "Código de barras do boleto (BLQ) salvo com sucesso!"
+            : "Código de barras removido.",
         );
       } else {
         toast.success(clean ? "Chave PIX salva com sucesso!" : "Chave PIX removida.");
@@ -158,8 +160,8 @@ export function TransactionPixPopover({
           <div className="flex items-center gap-1.5">
             {isBoleto ? (
               <>
-                <Barcode className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <span className="font-bold text-xs">Código de Barras do Boleto</span>
+                <Barcode className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                <span className="font-bold text-xs">Código de Barras do Boleto (BLQ)</span>
               </>
             ) : (
               <>
@@ -239,12 +241,12 @@ export function TransactionPixPopover({
                 className={cn(
                   "h-7 text-xs text-white gap-1",
                   isBoleto
-                    ? "bg-amber-600 hover:bg-amber-700"
+                    ? "bg-orange-600 hover:bg-orange-700"
                     : "bg-emerald-600 hover:bg-emerald-700",
                 )}
               >
                 <Save className="h-3.5 w-3.5" />
-                {isBoleto ? "Salvar Cód. Barras" : "Salvar PIX"}
+                {isBoleto ? "Salvar BLQ" : "Salvar PIX"}
               </Button>
             </div>
           </div>
@@ -262,7 +264,7 @@ export function TransactionPixPopover({
                 className={cn(
                   "flex-1 h-8 text-xs font-bold gap-1.5 transition-colors text-white",
                   isBoleto
-                    ? "bg-amber-600 hover:bg-amber-700"
+                    ? "bg-orange-600 hover:bg-orange-700"
                     : "bg-emerald-600 hover:bg-emerald-700",
                 )}
               >
@@ -272,7 +274,7 @@ export function TransactionPixPopover({
                   </>
                 ) : isBoleto ? (
                   <>
-                    <Barcode className="h-3.5 w-3.5" /> Copiar Cód. Barras Boleto
+                    <Barcode className="h-3.5 w-3.5" /> Copiar BLQ (Boleto)
                   </>
                 ) : (
                   <>
@@ -300,10 +302,10 @@ export function TransactionPixPopover({
               "h-8 flex-1 text-xs gap-1.5 font-bold transition-all shadow-xs",
               copied
                 ? isBoleto
-                  ? "bg-amber-600 hover:bg-amber-700 text-white"
+                  ? "bg-orange-600 hover:bg-orange-700 text-white"
                   : "bg-emerald-600 hover:bg-emerald-700 text-white"
                 : isBoleto
-                  ? "bg-amber-600/15 hover:bg-amber-600/25 text-amber-800 dark:text-amber-300 border border-amber-500/30"
+                  ? "bg-orange-500/15 hover:bg-orange-500/25 text-orange-700 dark:text-orange-400 border border-orange-500/35"
                   : "bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30",
             )}
           >
@@ -314,13 +316,13 @@ export function TransactionPixPopover({
               </>
             ) : isBoleto ? (
               <>
-                <Barcode className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                <span>copiar cod barras boleto</span>
+                <Barcode className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+                <span>BLQ</span>
               </>
             ) : (
               <>
                 <QrCode className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Copiar PIX</span>
+                <span>PIX</span>
               </>
             )}
           </Button>
@@ -362,13 +364,13 @@ export function TransactionPixPopover({
           >
             {isBoleto ? (
               <>
-                <Barcode className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                <span>Colar Cód. Barras Boleto</span>
+                <Barcode className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+                <span>+ BLQ</span>
               </>
             ) : (
               <>
                 <QrCode className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Colar Chave PIX</span>
+                <span>+ PIX</span>
               </>
             )}
           </Button>
@@ -380,7 +382,8 @@ export function TransactionPixPopover({
     );
   }
 
-  // Renderização padrão de Quadrantes / Linha da Tabela
+  // Renderização padrão de Quadrantes / Linha da Tabela:
+  // Exatamente 3 letras compactas: "PIX" (verde) ou "BLQ" (laranja)
   if (currentCode) {
     return (
       <div className="inline-flex items-center gap-1">
@@ -390,18 +393,18 @@ export function TransactionPixPopover({
           variant="outline"
           onClick={handleCopyCode}
           className={cn(
-            "h-6 px-1.5 text-[10px] font-semibold gap-1 transition-all rounded",
+            "h-6 px-2 text-[10px] font-bold gap-1 transition-all rounded tracking-wide",
             copied
               ? isBoleto
-                ? "bg-amber-600 text-white border-amber-600"
-                : "bg-emerald-600 text-white border-emerald-600"
+                ? "bg-orange-600 text-white border-orange-600 shadow-2xs"
+                : "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
               : isBoleto
-                ? "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-500/30 hover:bg-amber-100"
+                ? "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border-orange-500/40 hover:bg-orange-100 hover:text-orange-800"
                 : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-500/30 hover:bg-emerald-100",
           )}
           title={
             isBoleto
-              ? `Clique para copiar código de barras do boleto: ${currentCode}`
+              ? `Clique para copiar código de barras do boleto (BLQ): ${currentCode}`
               : `Clique para copiar a chave PIX: ${currentCode}`
           }
         >
@@ -412,12 +415,12 @@ export function TransactionPixPopover({
             </>
           ) : isBoleto ? (
             <>
-              <Barcode className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-              <span>copiar cod barras boleto</span>
+              <Barcode className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400 shrink-0" />
+              <span>BLQ</span>
             </>
           ) : (
             <>
-              <Copy className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+              <Copy className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>PIX</span>
             </>
           )}
@@ -428,10 +431,10 @@ export function TransactionPixPopover({
             <button
               type="button"
               onClick={handleOpenPopover}
-              className="text-muted-foreground/60 hover:text-foreground text-[10px] p-0.5 rounded"
+              className="text-muted-foreground/60 hover:text-foreground text-[10px] p-0.5 rounded cursor-pointer"
               title={
                 isBoleto
-                  ? "Ver detalhes ou editar código de barras do boleto"
+                  ? "Ver detalhes ou editar código de barras do boleto (BLQ)"
                   : "Ver detalhes ou editar chave PIX"
               }
             >
@@ -446,7 +449,7 @@ export function TransactionPixPopover({
     );
   }
 
-  // Se não tem código/chave, mostra botão discreto para colar chave PIX ou código de barras de boleto
+  // Se não tem código/chave, mostra botão discreto de 3 letras: "+ PIX" ou "+ BLQ"
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -454,21 +457,21 @@ export function TransactionPixPopover({
           type="button"
           onClick={handleOpenPopover}
           className={cn(
-            "text-[10px] flex items-center gap-0.5 whitespace-nowrap hover:underline transition-colors",
+            "text-[10px] flex items-center gap-0.5 whitespace-nowrap hover:underline transition-colors font-medium cursor-pointer",
             isBoleto
-              ? "text-muted-foreground/70 hover:text-amber-600"
+              ? "text-orange-600/80 hover:text-orange-700 dark:text-orange-400/80 dark:hover:text-orange-300"
               : "text-muted-foreground/70 hover:text-emerald-600",
           )}
           title={
             isBoleto
-              ? "Clique para colar o código de barras deste boleto"
+              ? "Clique para colar o código de barras deste boleto (BLQ)"
               : "Clique para colar a chave PIX desta conta"
           }
         >
           {isBoleto ? (
             <>
-              <Barcode className="h-3 w-3 text-amber-600/80" />
-              <span>+ Cód. Barras Boleto</span>
+              <Barcode className="h-3 w-3 text-orange-600/90 dark:text-orange-400" />
+              <span>+ BLQ</span>
             </>
           ) : (
             <>
