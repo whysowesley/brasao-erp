@@ -9,6 +9,8 @@ import {
   Building2,
   DollarSign,
   AlertTriangle,
+  Barcode,
+  Copy,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -181,6 +183,60 @@ export function MarcarPagoDialog({ open, onOpenChange, transaction }: MarcarPago
                 <strong className="text-foreground text-sm">{formattedOriginalAmount}</strong>
               </span>
             </div>
+
+            {(() => {
+              const isBoleto =
+                transaction?.payment_method?.type === "boleto" ||
+                Boolean(transaction?.payment_method?.name?.toLowerCase().includes("boleto")) ||
+                Boolean(
+                  (transaction as unknown as { payment_method_name?: string })?.payment_method_name
+                    ?.toLowerCase()
+                    .includes("boleto"),
+                ) ||
+                Boolean(transaction?.description?.toLowerCase().startsWith("boleto"));
+
+              if (!transaction.pix_key) return null;
+
+              return (
+                <div className="pt-2 border-t border-border/60 text-xs space-y-1 bg-background/50 p-2 rounded">
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-foreground flex items-center gap-1">
+                      {isBoleto ? (
+                        <>
+                          <Barcode className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                          <span>Código de Barras do Boleto:</span>
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <span>Chave PIX da Conta:</span>
+                        </>
+                      )}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                          navigator.clipboard.writeText(transaction.pix_key!);
+                        }
+                        toast.success(
+                          isBoleto
+                            ? "Código de barras do boleto copiado!"
+                            : "Chave PIX da conta copiada!",
+                        );
+                      }}
+                      className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Copy className="h-3 w-3" />
+                      {isBoleto ? "Copiar código" : "Copiar PIX"}
+                    </button>
+                  </div>
+                  <p className="font-mono text-[11px] text-muted-foreground break-all select-all">
+                    {transaction.pix_key}
+                  </p>
+                </div>
+              );
+            })()}
 
             {supplierDetails && (supplierDetails.pix_key || supplierDetails.bank_name) && (
               <div className="pt-2 border-t border-border/60 text-xs space-y-1 bg-background/50 p-2 rounded">

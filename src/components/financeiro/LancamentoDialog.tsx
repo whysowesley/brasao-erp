@@ -15,9 +15,11 @@ import {
   Check,
   CalendarClock,
   Clock,
+  Barcode,
 } from "lucide-react";
 import { format, parseISO, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -861,45 +863,82 @@ export function LancamentoDialog({
               </div>
             </div>
 
-            {/* Chave PIX para Pagamento */}
-            <div className="space-y-1.5 rounded-lg border border-emerald-500/25 bg-emerald-50/30 dark:bg-emerald-950/20 p-3">
-              <div className="flex items-center justify-between">
-                <Label
-                  htmlFor="tx-pix-key"
-                  className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300"
+            {/* Chave PIX ou Código de Barras do Boleto para Pagamento */}
+            {(() => {
+              const selectedPm = paymentMethods.find((p) => p.id === paymentMethodId);
+              const isBoleto = Boolean(
+                selectedPm &&
+                (selectedPm.type === "boleto" || selectedPm.name.toLowerCase().includes("boleto")),
+              );
+
+              return (
+                <div
+                  className={cn(
+                    "space-y-1.5 rounded-lg border p-3 transition-colors",
+                    isBoleto
+                      ? "border-amber-500/35 bg-amber-50/40 dark:bg-amber-950/20"
+                      : "border-emerald-500/25 bg-emerald-50/30 dark:bg-emerald-950/20",
+                  )}
                 >
-                  <CreditCard className="h-4 w-4 text-emerald-600" />
-                  Chave PIX para Pagamento
-                </Label>
-                {supplierId !== "none" &&
-                  (() => {
-                    const sup = suppliers.find((s) => s.id === supplierId);
-                    if (sup?.pix_key && sup.pix_key !== pixKey) {
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => setPixKey(sup.pix_key || "")}
-                          className="text-[11px] text-emerald-700 dark:text-emerald-300 hover:underline font-semibold"
-                        >
-                          Usar PIX do fornecedor ({sup.pix_key.slice(0, 14)}...)
-                        </button>
-                      );
+                  <div className="flex items-center justify-between">
+                    <Label
+                      htmlFor="tx-pix-key"
+                      className={cn(
+                        "flex items-center gap-1.5 text-xs font-semibold",
+                        isBoleto
+                          ? "text-amber-800 dark:text-amber-300"
+                          : "text-emerald-800 dark:text-emerald-300",
+                      )}
+                    >
+                      {isBoleto ? (
+                        <>
+                          <Barcode className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                          Código de Barras do Boleto
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                          Chave PIX para Pagamento
+                        </>
+                      )}
+                    </Label>
+                    {supplierId !== "none" &&
+                      !isBoleto &&
+                      (() => {
+                        const sup = suppliers.find((s) => s.id === supplierId);
+                        if (sup?.pix_key && sup.pix_key !== pixKey) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setPixKey(sup.pix_key || "")}
+                              className="text-[11px] text-emerald-700 dark:text-emerald-300 hover:underline font-semibold"
+                            >
+                              Usar PIX do fornecedor ({sup.pix_key.slice(0, 14)}...)
+                            </button>
+                          );
+                        }
+                        return null;
+                      })()}
+                  </div>
+                  <Input
+                    id="tx-pix-key"
+                    value={pixKey}
+                    onChange={(e) => setPixKey(e.target.value)}
+                    placeholder={
+                      isBoleto
+                        ? "Cole a linha digitável ou código de barras do boleto (47 ou 48 dígitos)..."
+                        : "Cole a chave PIX (CNPJ, CPF, Celular, E-mail ou Aleatória)..."
                     }
-                    return null;
-                  })()}
-              </div>
-              <Input
-                id="tx-pix-key"
-                value={pixKey}
-                onChange={(e) => setPixKey(e.target.value)}
-                placeholder="Cole a chave PIX (CNPJ, CPF, Celular, E-mail ou Aleatória)..."
-                className="h-8.5 font-mono text-xs bg-background"
-              />
-              <p className="text-[10px] text-muted-foreground">
-                Permite copiar a chave PIX em 1 toque/clique no computador ou celular para pagar no
-                banco.
-              </p>
-            </div>
+                    className="h-8.5 font-mono text-xs bg-background"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    {isBoleto
+                      ? "Permite copiar o código de barras do boleto em 1 toque/clique no computador ou celular para pagar no banco."
+                      : "Permite copiar a chave PIX em 1 toque/clique no computador ou celular para pagar no banco."}
+                  </p>
+                </div>
+              );
+            })()}
 
             {/* Recorrência e Parcelamento (Apenas na Criação) */}
             {!isEditing && (

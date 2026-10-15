@@ -1601,7 +1601,12 @@ export function QuadrantesVencimentoView({
                           </th>
                           <th className="px-3 py-2 text-center">Nova Data Pgto</th>
                           <th className="px-3 py-2 text-center">Status</th>
-                          <th className="px-3 py-2 text-center">Chave PIX</th>
+                          <th
+                            className="px-3 py-2 text-center"
+                            title="Chave PIX ou Código de Barras do Boleto"
+                          >
+                            PIX / Boleto
+                          </th>
                           <th className="px-3 py-2 text-center">Obs.</th>
                           <th className="px-3 py-2 text-center">Comentários</th>
                           <th
