@@ -30,7 +30,7 @@ export function TransactionPixPopover({
   const [codeInputValue, setCodeInputValue] = useState("");
   const [syncSupplier, setSyncSupplier] = useState(true);
 
-  // Identifica de forma reativa se esta transação é do tipo "Boleto" (BLQ)
+  // Identifica de forma reativa se esta transação é do tipo "Boleto" (BLT)
   const isBoleto = (() => {
     // 1. Pelo tipo explícito no payment_method
     if (transaction.payment_method?.type === "boleto") return true;
@@ -85,7 +85,7 @@ export function TransactionPixPopover({
 
       setCopied(true);
       if (isBoleto) {
-        toast.success(`Código de barras do boleto (BLQ) copiado: ${currentCode}`, {
+        toast.success(`Código de barras do boleto (BLT) copiado: ${currentCode}`, {
           description: "Pronto para colar no aplicativo do seu banco!",
           duration: 3500,
         });
@@ -133,7 +133,7 @@ export function TransactionPixPopover({
       if (isBoleto) {
         toast.success(
           clean
-            ? "Código de barras do boleto (BLQ) salvo com sucesso!"
+            ? "Código de barras do boleto (BLT) salvo com sucesso!"
             : "Código de barras removido.",
         );
       } else {
@@ -161,7 +161,7 @@ export function TransactionPixPopover({
             {isBoleto ? (
               <>
                 <Barcode className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                <span className="font-bold text-xs">Código de Barras do Boleto (BLQ)</span>
+                <span className="font-bold text-xs">Código de Barras do Boleto (BLT)</span>
               </>
             ) : (
               <>
@@ -246,7 +246,7 @@ export function TransactionPixPopover({
                 )}
               >
                 <Save className="h-3.5 w-3.5" />
-                {isBoleto ? "Salvar BLQ" : "Salvar PIX"}
+                {isBoleto ? "Salvar BLT" : "Salvar PIX"}
               </Button>
             </div>
           </div>
@@ -274,7 +274,7 @@ export function TransactionPixPopover({
                   </>
                 ) : isBoleto ? (
                   <>
-                    <Barcode className="h-3.5 w-3.5" /> Copiar BLQ (Boleto)
+                    <Barcode className="h-3.5 w-3.5" /> Copiar BLT (Boleto)
                   </>
                 ) : (
                   <>
@@ -317,7 +317,7 @@ export function TransactionPixPopover({
             ) : isBoleto ? (
               <>
                 <Barcode className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
-                <span>BLQ</span>
+                <span>BLT</span>
               </>
             ) : (
               <>
@@ -365,7 +365,7 @@ export function TransactionPixPopover({
             {isBoleto ? (
               <>
                 <Barcode className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
-                <span>+ BLQ</span>
+                <span>+ BLT</span>
               </>
             ) : (
               <>
@@ -383,7 +383,7 @@ export function TransactionPixPopover({
   }
 
   // Renderização padrão de Quadrantes / Linha da Tabela:
-  // Exatamente 3 letras compactas: "PIX" (verde) ou "BLQ" (laranja)
+  // Exatamente 3 letras compactas: "PIX" (verde) ou "BLT" (laranja)
   if (currentCode) {
     return (
       <div className="inline-flex items-center gap-1">
@@ -404,7 +404,7 @@ export function TransactionPixPopover({
           )}
           title={
             isBoleto
-              ? `Clique para copiar código de barras do boleto (BLQ): ${currentCode}`
+              ? `Clique para copiar código de barras do boleto (BLT): ${currentCode}`
               : `Clique para copiar a chave PIX: ${currentCode}`
           }
         >
@@ -416,7 +416,7 @@ export function TransactionPixPopover({
           ) : isBoleto ? (
             <>
               <Barcode className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400 shrink-0" />
-              <span>BLQ</span>
+              <span>BLT</span>
             </>
           ) : (
             <>
@@ -434,7 +434,7 @@ export function TransactionPixPopover({
               className="text-muted-foreground/60 hover:text-foreground text-[10px] p-0.5 rounded cursor-pointer"
               title={
                 isBoleto
-                  ? "Ver detalhes ou editar código de barras do boleto (BLQ)"
+                  ? "Ver detalhes ou editar código de barras do boleto (BLT)"
                   : "Ver detalhes ou editar chave PIX"
               }
             >
@@ -449,7 +449,7 @@ export function TransactionPixPopover({
     );
   }
 
-  // Se não tem código/chave, mostra botão discreto de 3 letras: "+ PIX" ou "+ BLQ"
+  // Se não tem código/chave, mostra botão discreto de 3 letras: "+ PIX" ou "+ BLT"
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -464,14 +464,14 @@ export function TransactionPixPopover({
           )}
           title={
             isBoleto
-              ? "Clique para colar o código de barras deste boleto (BLQ)"
+              ? "Clique para colar o código de barras deste boleto (BLT)"
               : "Clique para colar a chave PIX desta conta"
           }
         >
           {isBoleto ? (
             <>
               <Barcode className="h-3 w-3 text-orange-600/90 dark:text-orange-400" />
-              <span>+ BLQ</span>
+              <span>+ BLT</span>
             </>
           ) : (
             <>

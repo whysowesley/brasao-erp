@@ -893,7 +893,7 @@ export function LancamentoDialog({
                       {isBoleto ? (
                         <>
                           <Barcode className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                          Código de Barras do Boleto (BLQ)
+                          Código de Barras do Boleto (BLT)
                         </>
                       ) : (
                         <>
