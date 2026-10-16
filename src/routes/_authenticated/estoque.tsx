@@ -77,6 +77,7 @@ import {
 } from "@/lib/inventory";
 import { usePostOperationMode } from "@/lib/post-operation";
 import { usePurchasePlan } from "@/lib/purchase-plan";
+import { cn } from "@/lib/utils";
 
 function EstoqueErrorFallback({ error, reset }: { error?: Error; reset: () => void }) {
   const handleClearCacheAndReload = () => {
