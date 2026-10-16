@@ -12,6 +12,7 @@ import {
   LayoutGrid,
   Table as TableIcon,
   Check,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -77,6 +78,28 @@ import {
 import { usePostOperationMode } from "@/lib/post-operation";
 import { usePurchasePlan } from "@/lib/purchase-plan";
 
+function EstoqueErrorFallback({ reset }: { reset: () => void }) {
+  return (
+    <div className="mx-auto max-w-lg py-16 text-center space-y-4">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/15 text-amber-600">
+        <Sparkles className="h-6 w-6" />
+      </div>
+      <h2 className="text-lg font-bold">Não foi possível carregar os produtos do estoque</h2>
+      <p className="text-sm text-muted-foreground">
+        Houve uma oscilação na conexão com a internet ou banco de dados.
+      </p>
+      <div className="flex justify-center gap-3 pt-2">
+        <Button onClick={() => reset()} variant="outline">
+          Tentar novamente
+        </Button>
+        <Button asChild>
+          <Link to="/">Ir para o Início</Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export const Route = createFileRoute("/_authenticated/estoque")({
   head: () => ({
     meta: [
@@ -94,6 +117,7 @@ export const Route = createFileRoute("/_authenticated/estoque")({
     ],
   }),
   component: EstoquePage,
+  errorComponent: EstoqueErrorFallback,
 });
 
 type SortKey =
@@ -163,7 +187,7 @@ function QuickNumericInput({
 
 function EstoquePage() {
   const { isCounter, canWrite } = useAuth();
-  const { data: products, isLoading } = useProducts();
+  const { data: products, isLoading, isError, refetch } = useProducts();
   const { data: suppliers } = useSuppliers();
   const { data: categories } = useCategories();
   const { data: rules } = useRules();
@@ -663,6 +687,19 @@ function EstoquePage() {
           )}
         </div>
       </div>
+
+      {/* Alerta amigável caso ocorra erro ou oscilação de conexão */}
+      {isError && (!products || products.length === 0) && (
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-center space-y-2">
+          <p className="text-sm font-semibold text-foreground">
+            A conexão com a internet oscilou ao buscar os produtos do estoque.
+          </p>
+          <Button size="sm" variant="outline" onClick={() => refetch()} className="gap-1.5">
+            <RefreshCw className="h-3.5 w-3.5" />
+            Tentar carregar novamente
+          </Button>
+        </div>
+      )}
 
       {/* Visualização de Cartões Móveis (Deslizar Fácil e Intuitivo no Celular) */}
       {viewMode === "cards" ? (

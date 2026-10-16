@@ -205,7 +205,7 @@ export function useQuadrantesTheme() {
     if (branding.customQuadrantColor && branding.customQuadrantColor !== customHex) {
       setCustomHex(branding.customQuadrantColor);
     }
-  }, [branding.quadrantesTheme, branding.customQuadrantColor]);
+  }, [branding.quadrantesTheme, branding.customQuadrantColor, themeId, customHex]);
 
   const saveTheme = async (newThemeId: string, newHex?: string) => {
     setThemeId(newThemeId);
@@ -455,7 +455,14 @@ export function useSidebarTheme() {
     if (branding.customSidebarTextColor && branding.customSidebarTextColor !== customTextColor) {
       setCustomTextColor(branding.customSidebarTextColor);
     }
-  }, [branding.sidebarTheme, branding.customSidebarColor, branding.customSidebarTextColor]);
+  }, [
+    branding.sidebarTheme,
+    branding.customSidebarColor,
+    branding.customSidebarTextColor,
+    themeId,
+    customHex,
+    customTextColor,
+  ]);
 
   const currentConfig =
     themeId === "custom"

@@ -51,21 +51,6 @@ export function PlanInput({
     }
   }, [value, roundUp]);
 
-  // Ao desmontar (ex: usuário mudou de aba ou tela enquanto digitava), salva o valor digitado
-  useEffect(() => {
-    return () => {
-      const raw = textRef.current.replace(",", ".");
-      if (raw === "" || raw === "." || raw === ",") return;
-      const parsed = Number(raw);
-      if (Number.isFinite(parsed)) {
-        const finalVal = roundUp && parsed > 0 ? Math.ceil(parsed) : Math.max(0, parsed);
-        if (finalVal !== valueRef.current) {
-          onChangeRef.current(finalVal);
-        }
-      }
-    };
-  }, [roundUp]);
-
   return (
     <Input
       type="text"

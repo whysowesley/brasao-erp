@@ -38,6 +38,28 @@ import {
 } from "@/lib/inventory";
 import { usePostOperationMode } from "@/lib/post-operation";
 
+function ProductErrorFallback({ reset }: { reset: () => void }) {
+  return (
+    <div className="mx-auto max-w-lg py-16 text-center space-y-4">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/15 text-amber-600">
+        <ArrowLeft className="h-6 w-6" />
+      </div>
+      <h2 className="text-lg font-bold">Não foi possível carregar o produto</h2>
+      <p className="text-sm text-muted-foreground">
+        Houve uma oscilação na conexão com o banco de dados. Tente atualizar ou volte ao estoque.
+      </p>
+      <div className="flex justify-center gap-3 pt-2">
+        <Button onClick={() => reset()} variant="outline">
+          Tentar novamente
+        </Button>
+        <Button asChild>
+          <Link to="/estoque">Voltar ao Estoque</Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export const Route = createFileRoute("/_authenticated/produtos/$id")({
   head: () => ({
     meta: [
@@ -55,11 +77,12 @@ export const Route = createFileRoute("/_authenticated/produtos/$id")({
     ],
   }),
   component: ProductDetail,
+  errorComponent: ProductErrorFallback,
 });
 
 function ProductDetail() {
   const { id } = Route.useParams();
-  const { data: rawProduct, isLoading } = useProduct(id);
+  const { data: rawProduct, isLoading, isError, refetch } = useProduct(id);
   const { data: rules } = useRules();
   const [isPostOperation] = usePostOperationMode();
   const { data: movements } = useMovements(id, 200);
@@ -76,17 +99,59 @@ function ProductDetail() {
     );
   }, [rawProduct, rules, isPostOperation]);
 
-  if (isLoading || !product) {
-    return <Skeleton className="h-64 w-full rounded-lg" />;
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-4 py-6">
+        <Skeleton className="h-10 w-48 rounded-md" />
+        <Skeleton className="h-20 w-full rounded-lg" />
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Skeleton className="h-64 rounded-lg lg:col-span-1" />
+          <Skeleton className="h-64 rounded-lg lg:col-span-2" />
+        </div>
+      </div>
+    );
   }
 
-  const chartData = [...(movements ?? [])].reverse().map((m) => ({
-    date: new Date(m.created_at).toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-    }),
-    estoque: Number(m.quantity_after),
-  }));
+  if (isError || !product) {
+    return (
+      <div className="mx-auto max-w-lg py-16 text-center space-y-4">
+        <h2 className="text-xl font-bold">Produto não encontrado</h2>
+        <p className="text-sm text-muted-foreground">
+          O produto solicitado pode ter sido excluído ou você não possui conexão no momento.
+        </p>
+        <div className="flex justify-center gap-3 pt-2">
+          <Button onClick={() => refetch()} variant="outline">
+            Tentar novamente
+          </Button>
+          <Button asChild>
+            <Link to="/estoque">Voltar ao Estoque</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const chartData = (movements ?? [])
+    .slice()
+    .reverse()
+    .map((m) => {
+      let dateLabel = "—";
+      try {
+        const d = new Date(m.created_at);
+        if (!isNaN(d.getTime())) {
+          dateLabel = d.toLocaleDateString("pt-BR", {
+            day: "2-digit",
+            month: "2-digit",
+          });
+        }
+      } catch {
+        dateLabel = "—";
+      }
+      return {
+        date: dateLabel,
+        estoque: Number(m.quantity_after) || 0,
+      };
+    });
 
   const daily = getDailyConsumptionFromProduct(product);
 
