@@ -148,55 +148,62 @@ export function useProducts() {
   const { data: rules } = useRules();
   const effectiveRules = rules ?? DEFAULT_RULES;
   return useQuery({
-    queryKey: ["products", effectiveRules],
+    queryKey: ["products"],
     queryFn: async () => {
-      const snap = await getDocs(collection(db, "products"));
-      const rawProducts: ProductRow[] = snap.docs.map((docSnap) => {
-        const d = docSnap.data();
-        return {
-          id: docSnap.id,
-          code: d["code"] ?? null,
-          description: d["description"] || "",
-          unit: d["unit"] || "UN",
-          current_stock: Number(d["current_stock"]) || 0,
-          avg_weekly_consumption: Number(d["avg_weekly_consumption"]) || 0,
-          daily_consumption_mode: d["daily_consumption_mode"] ?? "constant",
-          ...(d["daily_consumption"] !== undefined && d["daily_consumption"] !== null
-            ? { daily_consumption: d["daily_consumption"] as DailyConsumption }
-            : {}),
-          ...(d["constant_daily_consumption"] !== undefined &&
-          d["constant_daily_consumption"] !== null
-            ? { constant_daily_consumption: Number(d["constant_daily_consumption"]) }
-            : {}),
-          min_stock: Number(d["min_stock"]) || 0,
-          desired_stock: Number(d["desired_stock"]) || 0,
-          coverage_weeks:
-            d["coverage_weeks"] !== undefined && d["coverage_weeks"] !== null
-              ? Number(d["coverage_weeks"])
-              : null,
-          safety_stock: Number(d["safety_stock"]) || 0,
-          lead_time_days: Number(d["lead_time_days"]) || 0,
-          notes: d["notes"] || null,
-          active: d["active"] !== false,
-          category_id: d["category_id"] || null,
-          supplier_id: d["supplier_id"] || null,
-          categories: d["category_name"]
-            ? { name: d["category_name"] }
-            : d["categories"]
-              ? d["categories"]
-              : null,
-          suppliers: d["supplier_name"]
-            ? { name: d["supplier_name"] }
-            : d["suppliers"]
-              ? d["suppliers"]
-              : null,
-        };
-      });
+      try {
+        const snap = await getDocs(collection(db, "products"));
+        const rawProducts: ProductRow[] = snap.docs.map((docSnap) => {
+          const d = docSnap.data();
+          return {
+            id: docSnap.id,
+            code: d["code"] ?? null,
+            description: d["description"] || "",
+            unit: d["unit"] || "UN",
+            current_stock: Number(d["current_stock"]) || 0,
+            avg_weekly_consumption: Number(d["avg_weekly_consumption"]) || 0,
+            daily_consumption_mode: d["daily_consumption_mode"] ?? "constant",
+            ...(d["daily_consumption"] !== undefined && d["daily_consumption"] !== null
+              ? { daily_consumption: d["daily_consumption"] as DailyConsumption }
+              : {}),
+            ...(d["constant_daily_consumption"] !== undefined &&
+            d["constant_daily_consumption"] !== null
+              ? { constant_daily_consumption: Number(d["constant_daily_consumption"]) }
+              : {}),
+            min_stock: Number(d["min_stock"]) || 0,
+            desired_stock: Number(d["desired_stock"]) || 0,
+            coverage_weeks:
+              d["coverage_weeks"] !== undefined && d["coverage_weeks"] !== null
+                ? Number(d["coverage_weeks"])
+                : null,
+            safety_stock: Number(d["safety_stock"]) || 0,
+            lead_time_days: Number(d["lead_time_days"]) || 0,
+            notes: d["notes"] || null,
+            active: d["active"] !== false,
+            category_id: d["category_id"] || null,
+            supplier_id: d["supplier_id"] || null,
+            categories: d["category_name"]
+              ? { name: d["category_name"] }
+              : d["categories"]
+                ? d["categories"]
+                : null,
+            suppliers: d["supplier_name"]
+              ? { name: d["supplier_name"] }
+              : d["suppliers"]
+                ? d["suppliers"]
+                : null,
+          };
+        });
 
-      // Ordena por descrição
-      rawProducts.sort((a, b) => a.description.localeCompare(b.description));
+        // Ordena por descrição com segurança
+        rawProducts.sort((a, b) =>
+          String(a.description || "").localeCompare(String(b.description || ""), "pt-BR"),
+        );
 
-      return rawProducts.map((p) => computeProduct(p, effectiveRules));
+        return rawProducts.map((p) => computeProduct(p, effectiveRules));
+      } catch (err) {
+        console.error("Erro ao carregar products do Firestore:", err);
+        throw err;
+      }
     },
   });
 }
@@ -205,7 +212,7 @@ export function useProduct(id: string) {
   const { data: rules } = useRules();
   const effectiveRules = rules ?? DEFAULT_RULES;
   return useQuery({
-    queryKey: ["product", id, effectiveRules],
+    queryKey: ["product", id],
     queryFn: async () => {
       if (!id) return null;
       try {

@@ -347,8 +347,9 @@ export function computeProduct(
 export function futureStatusFor(
   futureStock: number,
   minStock: number,
-  rules: PurchaseRules = DEFAULT_RULES,
+  rules?: PurchaseRules | null,
 ): StockStatus {
+  const r = rules || DEFAULT_RULES;
   const future = Number(futureStock) || 0;
   const min = Number(minStock) || 0;
 
@@ -357,7 +358,7 @@ export function futureStatusFor(
     return "critico";
   }
 
-  const threshold = min * (1 + (rules.attention_threshold_percent || 0) / 100);
+  const threshold = min * (1 + (r.attention_threshold_percent || 0) / 100);
   if (future === 0 || future < min || (min > 0 && future <= threshold)) {
     return min > 0 || future === 0 ? "atencao" : "normal";
   }

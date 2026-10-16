@@ -7,10 +7,10 @@ export const getRouter = () => {
     defaultOptions: {
       queries: {
         refetchOnWindowFocus: false,
-        refetchOnMount: false,
-        staleTime: 1000 * 30, // 30s de cache estável para navegação rápida e fluida
-        gcTime: 1000 * 60 * 10, // 10 minutos de retenção
-        retry: 2,
+        refetchOnMount: true,
+        staleTime: 1000 * 15,
+        gcTime: 1000 * 60 * 10,
+        retry: 1,
       },
     },
   });

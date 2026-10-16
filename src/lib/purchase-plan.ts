@@ -60,7 +60,12 @@ function load() {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as StoredPayload;
-      if (parsed && typeof parsed.plan === "object") {
+      if (
+        parsed &&
+        typeof parsed.plan === "object" &&
+        parsed.plan !== null &&
+        !Array.isArray(parsed.plan)
+      ) {
         plan = parsed.plan;
         lastLocalUpdate = Number(parsed.updatedAt) || 0;
       }
@@ -69,7 +74,12 @@ function load() {
       const legacyRaw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
       if (legacyRaw) {
         const legacyPlan = JSON.parse(legacyRaw) as Plan;
-        if (legacyPlan && typeof legacyPlan === "object") {
+        if (
+          legacyPlan &&
+          typeof legacyPlan === "object" &&
+          legacyPlan !== null &&
+          !Array.isArray(legacyPlan)
+        ) {
           plan = legacyPlan;
           lastLocalUpdate = Date.now();
         }
@@ -84,11 +94,18 @@ function load() {
     try {
       if (e.newValue) {
         const parsed = JSON.parse(e.newValue);
-        if (parsed.plan) {
+        if (
+          parsed &&
+          parsed.plan &&
+          typeof parsed.plan === "object" &&
+          !Array.isArray(parsed.plan)
+        ) {
           plan = parsed.plan;
           lastLocalUpdate = Math.max(lastLocalUpdate, Number(parsed.updatedAt) || 0);
-        } else {
+        } else if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
           plan = parsed;
+        } else {
+          plan = {};
         }
       } else {
         plan = {};
@@ -169,19 +186,20 @@ function subscribe(cb: () => void) {
 const EMPTY: Plan = {};
 const getSnapshot = () => {
   load();
-  return plan;
+  return plan && typeof plan === "object" && !Array.isArray(plan) ? plan : EMPTY;
 };
 const getServerSnapshot = () => EMPTY;
 
 /** Define a quantidade pretendida para um produto (arredondada sempre para cima se > 0) */
 export function setPlanned(productId: string, quantity: number | null) {
   load();
+  const currentPlan = plan && typeof plan === "object" && !Array.isArray(plan) ? plan : {};
   if (quantity === null || Number.isNaN(quantity)) {
-    const { [productId]: _drop, ...rest } = plan;
+    const { [productId]: _drop, ...rest } = currentPlan;
     plan = rest;
   } else {
     const rounded = quantity > 0 ? Math.ceil(quantity) : 0;
-    plan = { ...plan, [productId]: rounded };
+    plan = { ...currentPlan, [productId]: rounded };
   }
   persist();
 }
@@ -189,13 +207,14 @@ export function setPlanned(productId: string, quantity: number | null) {
 /** Define múltiplas quantidades de uma vez (ex: aplicar todas as sugestões) */
 export function setPlannedBatch(batch: Record<string, number>) {
   load();
+  const currentPlan = plan && typeof plan === "object" && !Array.isArray(plan) ? plan : {};
   const roundedBatch: Record<string, number> = {};
   for (const [id, q] of Object.entries(batch)) {
     if (typeof q === "number") {
       roundedBatch[id] = q > 0 ? Math.ceil(q) : 0;
     }
   }
-  plan = { ...plan, ...roundedBatch };
+  plan = { ...currentPlan, ...roundedBatch };
   persist();
 }
 
@@ -205,10 +224,11 @@ export function setPlannedBatch(batch: Record<string, number>) {
  */
 export function clearPlan(productIds?: string[]) {
   load();
+  const currentPlan = plan && typeof plan === "object" && !Array.isArray(plan) ? plan : {};
   if (!productIds || productIds.length === 0) {
     plan = {};
   } else {
-    const next = { ...plan };
+    const next = { ...currentPlan };
     for (const id of productIds) {
       delete next[id];
     }
@@ -220,13 +240,14 @@ export function clearPlan(productIds?: string[]) {
 /** Plano completo (reativo). */
 export function usePurchasePlan() {
   const value = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const safeValue = value && typeof value === "object" && !Array.isArray(value) ? value : EMPTY;
   const set = useCallback(
     (productId: string, quantity: number | null) => setPlanned(productId, quantity),
     [],
   );
   const setBatch = useCallback((batch: Record<string, number>) => setPlannedBatch(batch), []);
   const clear = useCallback((ids?: string[]) => clearPlan(ids), []);
-  return { plan: value, setPlanned: set, setPlannedBatch: setBatch, clearPlan: clear };
+  return { plan: safeValue, setPlanned: set, setPlannedBatch: setBatch, clearPlan: clear };
 }
 
 /** Quantidade planejada para um produto, com fallback na sugestão arredondada para cima. */

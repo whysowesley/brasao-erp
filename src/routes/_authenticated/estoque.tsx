@@ -78,7 +78,18 @@ import {
 import { usePostOperationMode } from "@/lib/post-operation";
 import { usePurchasePlan } from "@/lib/purchase-plan";
 
-function EstoqueErrorFallback({ reset }: { reset: () => void }) {
+function EstoqueErrorFallback({ error, reset }: { error?: Error; reset: () => void }) {
+  const handleClearCacheAndReload = () => {
+    try {
+      localStorage.removeItem("brasao:purchase-plan-v2");
+      localStorage.removeItem("brasao:purchase-plan");
+      localStorage.removeItem("brasao:estoque-viewmode");
+    } catch {
+      // ignore
+    }
+    window.location.reload();
+  };
+
   return (
     <div className="mx-auto max-w-lg py-16 text-center space-y-4">
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/15 text-amber-600">
@@ -88,9 +99,17 @@ function EstoqueErrorFallback({ reset }: { reset: () => void }) {
       <p className="text-sm text-muted-foreground">
         Houve uma oscilação na conexão com a internet ou banco de dados.
       </p>
-      <div className="flex justify-center gap-3 pt-2">
+      {error?.message && (
+        <div className="text-xs font-mono text-muted-foreground bg-muted p-2 rounded max-w-md mx-auto break-words">
+          {error.message}
+        </div>
+      )}
+      <div className="flex flex-wrap justify-center gap-3 pt-2">
         <Button onClick={() => reset()} variant="outline">
           Tentar novamente
+        </Button>
+        <Button onClick={handleClearCacheAndReload} variant="secondary">
+          Recarregar dados
         </Button>
         <Button asChild>
           <Link to="/">Ir para o Início</Link>
@@ -210,14 +229,22 @@ function EstoquePage() {
   const [editing, setEditing] = useState<ComputedProduct | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   /** Quantidade que o usuário pretende comprar — compartilhada com as outras telas. */
-  const { plan, setPlanned, setPlannedBatch, clearPlan } = usePurchasePlan();
+  const { plan: rawPlan, setPlanned, setPlannedBatch, clearPlan } = usePurchasePlan();
+  const plan = useMemo(
+    () => (rawPlan && typeof rawPlan === "object" && !Array.isArray(rawPlan) ? rawPlan : {}),
+    [rawPlan],
+  );
 
   // Modo de visualização: no celular (< 768px), o padrão é cartões verticais intuitivos
   const [viewMode, setViewMode] = useState<"table" | "cards">(() => {
     if (typeof window === "undefined") return "table";
-    const saved = window.localStorage.getItem("brasao:estoque-viewmode");
-    if (saved === "table" || saved === "cards") return saved;
-    return window.innerWidth < 768 ? "cards" : "table";
+    try {
+      const saved = window.localStorage.getItem("brasao:estoque-viewmode");
+      if (saved === "table" || saved === "cards") return saved;
+      return window.innerWidth < 768 ? "cards" : "table";
+    } catch {
+      return "table";
+    }
   });
 
   const handleSetViewMode = (mode: "table" | "cards") => {
@@ -239,9 +266,10 @@ function EstoquePage() {
 
   // Recalcula o status e métricas dos produtos com base no dia referencial e momento da contagem
   const recomputedProducts = useMemo(() => {
-    if (!products) return [];
+    if (!products || !Array.isArray(products)) return [];
+    const effectiveRules = rules || DEFAULT_RULES;
     return products.map((p) =>
-      computeProduct(p, rules ?? DEFAULT_RULES, 0, effectiveRefDay, isPostOperation),
+      computeProduct(p, effectiveRules, 0, effectiveRefDay, isPostOperation),
     );
   }, [products, rules, effectiveRefDay, isPostOperation]);
 
@@ -249,9 +277,10 @@ function EstoquePage() {
   // Sempre arredonda para cima valores inteiros (ex: 9.8 vira 10).
   const buyQty = useCallback(
     (p: ComputedProduct) => {
-      if (plan[p.id] !== undefined) {
+      if (!p) return 0;
+      if (plan && plan[p.id] !== undefined) {
         const val = plan[p.id];
-        return val > 0 ? Math.ceil(val) : 0;
+        return typeof val === "number" && val > 0 ? Math.ceil(val) : 0;
       }
       return p.suggestedPurchase > 0 ? Math.ceil(p.suggestedPurchase) : 0;
     },
@@ -260,14 +289,16 @@ function EstoquePage() {
 
   // O estoque futuro é o saldo projetado (Estoque Atual deduzindo o consumo do ciclo) + pedidos a caminho + quero comprar
   const futureWithBuy = useCallback(
-    (p: ComputedProduct) =>
-      Math.round(
-        ((p.projectedCycleEndStock ?? Number(p.current_stock) - p.remainingConsumption) +
-          (p.incoming ?? 0) +
-          buyQty(p) +
-          Number.EPSILON) *
-          1000,
-      ) / 1000,
+    (p: ComputedProduct) => {
+      if (!p) return 0;
+      const projected =
+        typeof p.projectedCycleEndStock === "number" && !isNaN(p.projectedCycleEndStock)
+          ? p.projectedCycleEndStock
+          : (Number(p.current_stock) || 0) - (Number(p.remainingConsumption) || 0);
+      const incoming = Number(p.incoming) || 0;
+      const buy = buyQty(p);
+      return Math.round((projected + incoming + buy + Number.EPSILON) * 1000) / 1000;
+    },
     [buyQty],
   );
 
@@ -292,42 +323,58 @@ function EstoquePage() {
 
   /** Status do estoque em tempo real conforme o estoque futuro (só fica crítico se <= 0). */
   const stockStatus = useCallback(
-    (p: ComputedProduct) => futureStatusFor(futureWithBuy(p), Number(p.min_stock), rules),
+    (p: ComputedProduct) =>
+      p
+        ? futureStatusFor(futureWithBuy(p), Number(p.min_stock || 0), rules ?? DEFAULT_RULES)
+        : "normal",
     [futureWithBuy, rules],
   );
 
   const rows = useMemo(() => {
-    let list = recomputedProducts;
-    if (search.trim())
-      list = list.filter((p) => p.description.toLowerCase().includes(search.trim().toLowerCase()));
-    if (supplier !== "todos") list = list.filter((p) => p.supplier_id === supplier);
-    if (category !== "todas") list = list.filter((p) => p.category_id === category);
+    let list = recomputedProducts ?? [];
+    if (search.trim()) {
+      const term = search.trim().toLowerCase();
+      list = list.filter(
+        (p) =>
+          String(p?.description ?? "")
+            .toLowerCase()
+            .includes(term) ||
+          String(p?.code ?? "")
+            .toLowerCase()
+            .includes(term),
+      );
+    }
+    if (supplier !== "todos") list = list.filter((p) => p?.supplier_id === supplier);
+    if (category !== "todas") list = list.filter((p) => p?.category_id === category);
     if (status !== "todos") list = list.filter((p) => stockStatus(p) === status);
 
     if (quickFilter === "sugestoes") {
-      list = list.filter((p) => p.suggestedPurchase > 0);
+      list = list.filter((p) => (p?.suggestedPurchase ?? 0) > 0);
     } else if (quickFilter === "criticos") {
       list = list.filter((p) => stockStatus(p) !== "normal");
     } else if (quickFilter === "planejados") {
-      list = list.filter((p) => plan[p.id] !== undefined && plan[p.id] > 0);
+      list = list.filter((p) => plan && plan[p?.id] !== undefined && plan[p?.id] > 0);
     }
 
     const sorted = [...list].sort((a, b) => {
       const dir = sort.dir === "asc" ? 1 : -1;
-      if (sort.key === "status")
-        return (statusOrder[stockStatus(a)] - statusOrder[stockStatus(b)]) * dir;
+      if (sort.key === "status") {
+        const orderA = statusOrder[stockStatus(a)] ?? 2;
+        const orderB = statusOrder[stockStatus(b)] ?? 2;
+        return (orderA - orderB) * dir;
+      }
       if (sort.key === "futureStock") return (futureWithBuy(a) - futureWithBuy(b)) * dir;
-      const av = a[sort.key] as string | number;
-      const bv = b[sort.key] as string | number;
+      const av = a[sort.key] as string | number | undefined;
+      const bv = b[sort.key] as string | number | undefined;
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
-      return String(av).localeCompare(String(bv), "pt-BR") * dir;
+      return String(av ?? "").localeCompare(String(bv ?? ""), "pt-BR") * dir;
     });
 
     if (!groupBySupplier) return sorted;
     return [...sorted].sort(
       (a, b) =>
-        a.supplierName.localeCompare(b.supplierName, "pt-BR") ||
-        a.description.localeCompare(b.description, "pt-BR"),
+        String(a?.supplierName ?? "").localeCompare(String(b?.supplierName ?? ""), "pt-BR") ||
+        String(a?.description ?? "").localeCompare(String(b?.description ?? ""), "pt-BR"),
     );
   }, [
     recomputedProducts,
