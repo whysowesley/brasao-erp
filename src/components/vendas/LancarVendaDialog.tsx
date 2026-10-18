@@ -29,6 +29,7 @@ import {
   getTodayDateString,
   useSaveFullDaySales,
   fetchSalesForDate,
+  extractCanonicalOrdersCount,
 } from "@/lib/vendas";
 import type { DailySaleRecord, QuickDayEntryForm } from "@/lib/vendas-types";
 import { SALES_CHANNELS } from "@/lib/vendas-types";
@@ -53,6 +54,7 @@ export function LancarVendaDialog({
   const [date, setDate] = useState<string>(initialDate || getTodayDateString());
   const [currentDayRecords, setCurrentDayRecords] = useState<DailySaleRecord[]>([]);
   const [isCheckingDate, setIsCheckingDate] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [balcao, setBalcao] = useState<string>("");
   const [ifood, setIfood] = useState<string>("");
@@ -64,6 +66,7 @@ export function LancarVendaDialog({
 
   const loadExistingForDate = useCallback(
     async (selectedDate: string) => {
+      setLoadError(null);
       let forDay = existingRecords.filter((r) => r.date === selectedDate);
       if (forDay.length === 0) {
         setIsCheckingDate(true);
@@ -71,6 +74,11 @@ export function LancarVendaDialog({
           forDay = await fetchSalesForDate(selectedDate);
         } catch (err) {
           console.error("Erro ao verificar data:", err);
+          setLoadError(
+            "Não foi possível carregar as vendas desta data devido a uma oscilação na conexão.",
+          );
+          setIsCheckingDate(false);
+          return;
         } finally {
           setIsCheckingDate(false);
         }
@@ -92,7 +100,7 @@ export function LancarVendaDialog({
         setSwFast(s ? String(s) : "");
 
         const anyNotes = forDay.find((r) => r.notes)?.notes || "";
-        const anyOrders = forDay.reduce((acc, curr) => acc + (curr.orders_count || 0), 0);
+        const anyOrders = extractCanonicalOrdersCount(forDay);
         setNotes(anyNotes);
         setOrdersCount(anyOrders > 0 ? String(anyOrders) : "");
       } else {
@@ -132,6 +140,13 @@ export function LancarVendaDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (loadError) {
+      toast.error(
+        "Não é possível salvar enquanto a leitura das vendas da data estiver com falha. Clique em 'Tentar novamente'.",
+      );
+      return;
+    }
 
     if (!date) {
       toast.error("Por favor, selecione uma data para o lançamento.");
@@ -206,7 +221,20 @@ export function LancarVendaDialog({
                   required
                 />
                 <div className="min-h-[18px]">
-                  {isCheckingDate ? (
+                  {loadError ? (
+                    <div className="flex items-center justify-between gap-1 text-[11px] text-destructive font-medium">
+                      <span className="truncate">Falha ao verificar dia</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-1.5 text-[10px] text-primary underline"
+                        onClick={() => loadExistingForDate(date)}
+                      >
+                        Tentar novamente
+                      </Button>
+                    </div>
+                  ) : isCheckingDate ? (
                     <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                       <Loader2 className="h-3 w-3 animate-spin text-primary" /> Verificando dia...
                     </span>

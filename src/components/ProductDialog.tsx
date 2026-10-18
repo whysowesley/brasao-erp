@@ -172,6 +172,7 @@ export function ProductDialog({
       consumption,
       suggestedPurchase: c.suggestedPurchase,
       futureStock: c.futureStock,
+      futureStockWithSuggestion: c.futureStockWithSuggestion,
       projectedCycleEndStock: c.projectedCycleEndStock,
       remainingDaysLabel: c.remainingDaysLabel,
       status: c.status,

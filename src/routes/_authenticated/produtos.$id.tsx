@@ -37,6 +37,7 @@ import {
   movementLabel,
 } from "@/lib/inventory";
 import { usePostOperationMode } from "@/lib/post-operation";
+import { useAuth } from "@/lib/auth";
 
 function ProductErrorFallback({ reset }: { reset: () => void }) {
   return (
@@ -82,6 +83,7 @@ export const Route = createFileRoute("/_authenticated/produtos/$id")({
 
 function ProductDetail() {
   const { id } = Route.useParams();
+  const { isCounter, canWrite } = useAuth();
   const { data: rawProduct, isLoading, isError, refetch } = useProduct(id);
   const { data: rules } = useRules();
   const [isPostOperation] = usePostOperationMode();
@@ -196,9 +198,11 @@ function ProductDetail() {
               <span className="text-xs text-muted-foreground ml-2 mr-1">Status Futuro:</span>
               <StatusBadge status={product.futureStatus} className="h-8 px-2.5 text-xs" />
             </div>
-            <Button onClick={() => setOpen(true)} className="ml-2">
-              <Pencil className="h-4 w-4" /> Editar
-            </Button>
+            {!isCounter && canWrite && (
+              <Button onClick={() => setOpen(true)} className="ml-2">
+                <Pencil className="h-4 w-4" /> Editar
+              </Button>
+            )}
           </div>
         }
       />
@@ -314,7 +318,9 @@ function ProductDetail() {
         </div>
       </section>
 
-      <ProductDialog open={open} onOpenChange={setOpen} product={product} />
+      {!isCounter && canWrite && (
+        <ProductDialog open={open} onOpenChange={setOpen} product={product} />
+      )}
     </div>
   );
 }

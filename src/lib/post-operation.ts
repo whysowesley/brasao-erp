@@ -10,6 +10,17 @@ const STORAGE_KEY = "brasao_is_post_operation";
  * - isPostOperation = false: Pré-operação / Início do dia (o dia de hoje ainda será consumido).
  *   Ex: Sábado de manhã -> restam Sábado, Domingo e Segunda (3 dias de consumo).
  */
+export function getDefaultPostOperationMode(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const hour = new Date().getHours();
+    // A partir das 19h (noite / encerramento do expediente) padrão é pós-operação; antes disso é pré-operação
+    return hour >= 19;
+  } catch {
+    return false;
+  }
+}
+
 export function usePostOperationMode() {
   const [isPostOperation, setIsPostOperation] = useState<boolean>(() => {
     try {
@@ -18,8 +29,7 @@ export function usePostOperationMode() {
     } catch {
       // Ignora erro de acesso ao localStorage
     }
-    // Padrão do restaurante: contagens e compras são feitas após a operação
-    return true;
+    return getDefaultPostOperationMode();
   });
 
   const setMode = (val: boolean) => {
@@ -59,5 +69,5 @@ export function getPostOperationMode(): boolean {
   } catch {
     // Ignora erro
   }
-  return true;
+  return getDefaultPostOperationMode();
 }

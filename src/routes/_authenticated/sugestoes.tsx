@@ -247,12 +247,14 @@ function SugestoesPage() {
               />
               <div className="flex flex-col">
                 <span className="text-xs font-semibold leading-tight text-foreground select-none">
-                  {isPostOperation ? "Pós-operação (Fechamento)" : "Pré-operação (Abertura)"}
+                  {isPostOperation
+                    ? "Pós-operação (Deduz giro de hoje)"
+                    : "Pré-operação (Giro de hoje a consumir)"}
                 </span>
                 <span className="text-[10px] text-muted-foreground leading-none select-none">
                   {isPostOperation
-                    ? "Dia de hoje já consumido"
-                    : "Dia de hoje ainda será consumido"}
+                    ? "Consumo previsto de hoje deduzido"
+                    : "Consumo de hoje ainda será consumido"}
                 </span>
               </div>
             </div>

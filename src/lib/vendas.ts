@@ -48,33 +48,47 @@ export function getCurrentMonthKey(): string {
   return `${y}-${m}`;
 }
 
-export async function fetchSalesForDate(date: string): Promise<DailySaleRecord[]> {
-  try {
-    const q = query(collection(db, SALES_COLLECTION), where("date", "==", date));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        date: data["date"],
-        channel: data["channel"],
-        channel_category: data["channel_category"],
-        amount: Number(data["amount"]) || 0,
-        orders_count: data["orders_count"] ? Number(data["orders_count"]) : null,
-        notes: data["notes"] || null,
-        user_name: data["user_name"] || null,
-        created_at: (data["created_at"] as { toDate?: () => Date })?.toDate
-          ? (data["created_at"] as { toDate: () => Date }).toDate().toISOString()
-          : (data["created_at"] as string) || new Date().toISOString(),
-        updated_at: (data["updated_at"] as { toDate?: () => Date })?.toDate
-          ? (data["updated_at"] as { toDate: () => Date }).toDate().toISOString()
-          : (data["updated_at"] as string) || null,
-      };
-    });
-  } catch (err) {
-    console.error("Erro ao buscar vendas da data:", err);
-    return [];
+export function extractCanonicalOrdersCount(records: DailySaleRecord[]): number {
+  const nonNull = records
+    .map((r) => r.orders_count)
+    .filter((cnt): cnt is number => cnt != null && cnt > 0);
+
+  if (nonNull.length === 0) return 0;
+  if (nonNull.length === 1) return nonNull[0]!;
+
+  const first = nonNull[0]!;
+  const allSame = nonNull.every((v) => v === first);
+  if (allSame) {
+    // Registros legados onde todos os canais receberam a mesma quantidade de pedidos
+    return first;
   }
+
+  // Múltiplos canais com valores distintos
+  return nonNull.reduce((sum, v) => sum + v, 0);
+}
+
+export async function fetchSalesForDate(date: string): Promise<DailySaleRecord[]> {
+  const q = query(collection(db, SALES_COLLECTION), where("date", "==", date));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      date: data["date"],
+      channel: data["channel"],
+      channel_category: data["channel_category"],
+      amount: Number(data["amount"]) || 0,
+      orders_count: data["orders_count"] ? Number(data["orders_count"]) : null,
+      notes: data["notes"] || null,
+      user_name: data["user_name"] || null,
+      created_at: (data["created_at"] as { toDate?: () => Date })?.toDate
+        ? (data["created_at"] as { toDate: () => Date }).toDate().toISOString()
+        : (data["created_at"] as string) || new Date().toISOString(),
+      updated_at: (data["updated_at"] as { toDate?: () => Date })?.toDate
+        ? (data["updated_at"] as { toDate: () => Date }).toDate().toISOString()
+        : (data["updated_at"] as string) || null,
+    };
+  });
 }
 
 export function getTodayDateString(): string {
@@ -215,10 +229,24 @@ export function useSaveFullDaySales() {
         existingForDay = await fetchSalesForDate(date);
       }
 
+      // Canal canônico que armazenará a quantidade de pedidos do dia:
+      // Escolhe o primeiro canal ativo com valor > 0, ou balcao_salao como padrão
+      const activeKeys = (Object.keys(channelValues) as SalesChannelKey[]).filter(
+        (k) => (channelValues[k] || 0) > 0,
+      );
+      const canonicalChannelKey: SalesChannelKey = activeKeys[0] || "balcao_salao";
+      const totalOrdersNum =
+        form.orders_count != null && String(form.orders_count).trim() !== ""
+          ? Number(form.orders_count)
+          : null;
+
       for (const [chKey, val] of Object.entries(channelValues)) {
         const key = chKey as SalesChannelKey;
         const config = SALES_CHANNELS[key];
         const existing = existingForDay.find((r) => r.channel === key);
+
+        // Somente o registro canônico armazena orders_count, evitando multiplicação e duplicatas
+        const channelOrdersCount = key === canonicalChannelKey ? totalOrdersNum : null;
 
         if (val > 0) {
           if (existing) {
@@ -226,26 +254,31 @@ export function useSaveFullDaySales() {
             batch.update(docRef, {
               amount: val,
               notes: form.notes ? form.notes.trim() : null,
-              orders_count: form.orders_count ? Number(form.orders_count) : null,
+              orders_count: channelOrdersCount,
               user_name: userName,
               updated_at: serverTimestamp(),
             });
           } else {
-            const newDocRef = doc(salesCol);
-            batch.set(newDocRef, {
-              date,
-              channel: key,
-              channel_category: config.category,
-              amount: val,
-              notes: form.notes ? form.notes.trim() : null,
-              orders_count: form.orders_count ? Number(form.orders_count) : null,
-              user_name: userName,
-              created_at: serverTimestamp(),
-              updated_at: serverTimestamp(),
-            });
+            // ID determinístico por data e canal para impedir duplicatas por cliques repetidos ou rede
+            const docRef = doc(salesCol, `${date}_${key}`);
+            batch.set(
+              docRef,
+              {
+                date,
+                channel: key,
+                channel_category: config.category,
+                amount: val,
+                notes: form.notes ? form.notes.trim() : null,
+                orders_count: channelOrdersCount,
+                user_name: userName,
+                created_at: serverTimestamp(),
+                updated_at: serverTimestamp(),
+              },
+              { merge: true },
+            );
           }
         } else if (existing && val === 0) {
-          // Se o usuário zerou um lançamento que existia, podemos remover ou atualizar para 0
+          // Se o usuário zerou um lançamento que existia, remove o registro
           const docRef = doc(db, SALES_COLLECTION, existing.id);
           batch.delete(docRef);
         }
@@ -341,10 +374,9 @@ export function computeMonthSalesMetrics(
     let anotaAi = 0;
     let noventaENove = 0;
     let swFast = 0;
-    let dayOrders = 0;
+    const dayOrders = extractCanonicalOrdersCount(recs);
 
     for (const r of recs) {
-      if (r.orders_count) dayOrders += r.orders_count;
       if (r.channel === "balcao_salao") balcao += r.amount;
       else if (r.channel === "delivery_ifood") ifood += r.amount;
       else if (r.channel === "delivery_anota_ai") anotaAi += r.amount;
@@ -516,45 +548,40 @@ export function useSalesIncidents(dateFilter?: string) {
   return useQuery({
     queryKey: ["sales_incidents", dateFilter],
     queryFn: async (): Promise<SalesIncident[]> => {
-      try {
-        const col = collection(db, INCIDENTS_COLLECTION);
-        let q = query(col);
-        if (dateFilter) {
-          q = query(col, where("date", "==", dateFilter));
-        }
-        const snap = await getDocs(q);
-        const incidents: SalesIncident[] = snap.docs.map((docSnap) => {
-          const d = docSnap.data();
-          return {
-            id: docSnap.id,
-            date: String(d["date"] || ""),
-            category: String(d["category"] || "Outros"),
-            incident: String(d["incident"] || ""),
-            action_taken: String(d["action_taken"] || ""),
-            to_meeting: Boolean(d["to_meeting"]),
-            status: (d["status"] as IncidentStatus) || "pendente",
-            resolution_notes: d["resolution_notes"] || null,
-            resolved_at: d["resolved_at"] || null,
-            user_id: d["user_id"] || null,
-            user_name: String(d["user_name"] || "Operador"),
-            created_at: (d["created_at"] as { toDate?: () => Date })?.toDate
-              ? (d["created_at"] as { toDate: () => Date }).toDate().toISOString()
-              : (d["created_at"] as string) || new Date().toISOString(),
-            updated_at: (d["updated_at"] as { toDate?: () => Date })?.toDate
-              ? (d["updated_at"] as { toDate: () => Date }).toDate().toISOString()
-              : (d["updated_at"] as string) || null,
-          };
-        });
-
-        return incidents.sort((a, b) => {
-          const dateCmp = b.date.localeCompare(a.date);
-          if (dateCmp !== 0) return dateCmp;
-          return (b.created_at || "").localeCompare(a.created_at || "");
-        });
-      } catch (err) {
-        console.error("Erro ao buscar intercorrências:", err);
-        return [];
+      const col = collection(db, INCIDENTS_COLLECTION);
+      let q = query(col);
+      if (dateFilter) {
+        q = query(col, where("date", "==", dateFilter));
       }
+      const snap = await getDocs(q);
+      const incidents: SalesIncident[] = snap.docs.map((docSnap) => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          date: String(d["date"] || ""),
+          category: String(d["category"] || "Outros"),
+          incident: String(d["incident"] || ""),
+          action_taken: String(d["action_taken"] || ""),
+          to_meeting: Boolean(d["to_meeting"]),
+          status: (d["status"] as IncidentStatus) || "pendente",
+          resolution_notes: d["resolution_notes"] || null,
+          resolved_at: d["resolved_at"] || null,
+          user_id: d["user_id"] || null,
+          user_name: String(d["user_name"] || "Operador"),
+          created_at: (d["created_at"] as { toDate?: () => Date })?.toDate
+            ? (d["created_at"] as { toDate: () => Date }).toDate().toISOString()
+            : (d["created_at"] as string) || new Date().toISOString(),
+          updated_at: (d["updated_at"] as { toDate?: () => Date })?.toDate
+            ? (d["updated_at"] as { toDate: () => Date }).toDate().toISOString()
+            : (d["updated_at"] as string) || null,
+        };
+      });
+
+      return incidents.sort((a, b) => {
+        const dateCmp = b.date.localeCompare(a.date);
+        if (dateCmp !== 0) return dateCmp;
+        return (b.created_at || "").localeCompare(a.created_at || "");
+      });
     },
   });
 }
@@ -695,11 +722,10 @@ export function computeDay4WeeksComparison(
     delivery_sw_fast: 0,
   };
   let currentDayAmount = 0;
-  let currentDayOrders = 0;
+  const currentDayOrders = extractCanonicalOrdersCount(currentDayRecs);
 
   for (const r of currentDayRecs) {
     currentDayAmount += r.amount;
-    if (r.orders_count) currentDayOrders += r.orders_count;
     if (r.channel in currentDayChannels) {
       currentDayChannels[r.channel] += r.amount;
     }
@@ -720,11 +746,10 @@ export function computeDay4WeeksComparison(
       delivery_sw_fast: 0,
     };
     let amount = 0;
-    let ordersCount = 0;
+    const ordersCount = extractCanonicalOrdersCount(pRecs);
 
     for (const r of pRecs) {
       amount += r.amount;
-      if (r.orders_count) ordersCount += r.orders_count;
       if (r.channel in channels) {
         channels[r.channel] += r.amount;
       }

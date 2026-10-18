@@ -82,6 +82,7 @@ import {
   useSalesIncidents,
 } from "@/lib/vendas";
 import { SALES_CHANNELS, type SalesChannelKey } from "@/lib/vendas-types";
+import { useCanWrite } from "@/lib/auth";
 
 export const Route = createFileRoute("/_authenticated/vendas")({
   head: () => ({
@@ -98,6 +99,7 @@ export const Route = createFileRoute("/_authenticated/vendas")({
 });
 
 function VendasPage() {
+  const canWrite = useCanWrite();
   const currentMonthKey = useMemo(() => getCurrentMonthKey(), []);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthKey);
   const [showOnlyDaysWithSales, setShowOnlyDaysWithSales] = useState<boolean>(false);
@@ -350,31 +352,35 @@ function VendasPage() {
                 <span className="hidden xs:inline">Exportar</span>
               </Button>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setIncidentDialogDate(getTodayDateString());
-                  setIncidentDialogOpen(true);
-                }}
-                className="h-8 gap-1.5 text-xs font-semibold border-amber-300 bg-amber-50/70 text-amber-900 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-200"
-              >
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-                <span>+ Intercorrência</span>
-                {pendingIncidentsCount > 0 && (
-                  <Badge className="h-4 px-1 text-[9px] bg-rose-600 text-white font-bold ml-0.5">
-                    {pendingIncidentsCount}
-                  </Badge>
-                )}
-              </Button>
+              {canWrite && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setIncidentDialogDate(getTodayDateString());
+                      setIncidentDialogOpen(true);
+                    }}
+                    className="h-8 gap-1.5 text-xs font-semibold border-amber-300 bg-amber-50/70 text-amber-900 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-200"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                    <span>+ Intercorrência</span>
+                    {pendingIncidentsCount > 0 && (
+                      <Badge className="h-4 px-1 text-[9px] bg-rose-600 text-white font-bold ml-0.5">
+                        {pendingIncidentsCount}
+                      </Badge>
+                    )}
+                  </Button>
 
-              <Button
-                onClick={() => openNewSale()}
-                className="h-8 gap-1.5 text-xs font-semibold shadow-xs"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Lançar Vendas</span>
-              </Button>
+                  <Button
+                    onClick={() => openNewSale()}
+                    className="h-8 gap-1.5 text-xs font-semibold shadow-xs"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Lançar Vendas</span>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         }
@@ -766,37 +772,41 @@ function VendasPage() {
                                 >
                                   <LineChart className="h-3.5 w-3.5" />
                                 </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                                  onClick={() => openNewSale(d.date)}
-                                  title="Editar ou lançar vendas deste dia"
-                                >
-                                  <Edit2 className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-amber-600 hover:text-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                                  onClick={() => {
-                                    setIncidentDialogDate(d.date);
-                                    setIncidentDialogOpen(true);
-                                  }}
-                                  title="Registrar intercorrência ou contato neste dia"
-                                >
-                                  <AlertTriangle className="h-3.5 w-3.5" />
-                                </Button>
-                                {hasSales && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                                    onClick={() => setDeleteDate(d.date)}
-                                    title="Remover lançamentos deste dia"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
+                                {canWrite && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                      onClick={() => openNewSale(d.date)}
+                                      title="Editar ou lançar vendas deste dia"
+                                    >
+                                      <Edit2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-amber-600 hover:text-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                                      onClick={() => {
+                                        setIncidentDialogDate(d.date);
+                                        setIncidentDialogOpen(true);
+                                      }}
+                                      title="Registrar intercorrência ou contato neste dia"
+                                    >
+                                      <AlertTriangle className="h-3.5 w-3.5" />
+                                    </Button>
+                                    {hasSales && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                                        onClick={() => setDeleteDate(d.date)}
+                                        title="Remover lançamentos deste dia"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             </TableCell>

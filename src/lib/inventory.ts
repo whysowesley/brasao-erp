@@ -19,7 +19,7 @@ export const DEFAULT_RULES: PurchaseRules = {
   safety_margin_percent: 5,
   default_lead_time_days: 0,
   attention_threshold_percent: 20,
-  is_post_operation: true,
+  is_post_operation: false,
 };
 
 export type StockStatus = "critico" | "atencao" | "normal";
@@ -91,6 +91,11 @@ export function getDayOfWeekFromDate(d: Date = new Date()): DayOfWeek {
  * Exemplo: se hoje é Sábado e é pós-operação, restam apenas Domingo e Segunda (2 dias, não 3).
  */
 export function getRemainingCycleDays(refDay: DayOfWeek, isPostOperation = false): DayOfWeek[] {
+  if (refDay === "seg" && !isPostOperation) {
+    // Na segunda-feira pré-operação (manhã da chegada), a compra abastece o ciclo que se inicia hoje.
+    // Portanto, o consumo prévio até a chegada é zero (o estoque atual já é o saldo que entra na 2ª feira).
+    return [];
+  }
   const idx = DAYS_CYCLE_ORDER.indexOf(refDay);
   if (idx === -1) return [...DAYS_CYCLE_ORDER];
   const startIdx = isPostOperation ? idx + 1 : idx;
@@ -104,11 +109,14 @@ export function getRemainingCycleDays(refDay: DayOfWeek, isPostOperation = false
 export function getRemainingDaysLabel(refDay: DayOfWeek, isPostOperation = false): string {
   const days = getRemainingCycleDays(refDay, isPostOperation);
   if (days.length === 0) {
+    if (refDay === "seg" && !isPostOperation) {
+      return "Chegada hoje (2ª feira)";
+    }
     return "0 dias restantes (Ciclo atual concluído)";
   }
   const first = DAYS_OF_WEEK.find((d) => d.key === days[0])?.short ?? "Amanhã";
   const last = DAYS_OF_WEEK.find((d) => d.key === days[days.length - 1])?.short ?? "SEG 2";
-  const suffix = isPostOperation ? " (Pós-operação)" : "";
+  const suffix = isPostOperation ? " (Pós-op)" : "";
   if (days.length === 1) return `${first} (1 dia)${suffix}`;
   return `${first} a ${last} (${days.length} dias)${suffix}`;
 }
@@ -237,18 +245,33 @@ export function computeProduct(
   const daily = getDailyConsumptionFromProduct(p);
   const todayConsumption = round(Number(daily[refDay]) || 0);
 
-  // A quantidade informada (current, ex: 6 kg de abóbora) é o estoque físico disponível no momento da análise.
+  // Giro semanal do ciclo (Segunda a Segunda, 8 dias):
+  // O estoque deve durar de uma segunda-feira até a outra.
+  // Se o item tem consumo diário customizado, soma os 8 dias (ex: 5kg x 8 = 40kg).
+  // Se for constante ou semanal, usa constant_daily_consumption * 8, avg_weekly_consumption ou a soma diária.
+  const cycleWeeklyConsumption =
+    p.daily_consumption_mode === "custom" && p.daily_consumption
+      ? sumDailyConsumption(daily)
+      : p.constant_daily_consumption && p.constant_daily_consumption > 0
+        ? round(p.constant_daily_consumption * 8)
+        : Number(p.avg_weekly_consumption) || sumDailyConsumption(daily);
+
+  // Demanda necessária para sustentar a semana de Segunda a Segunda:
+  const weeklyDemand = round(weeks * cycleWeeklyConsumption);
+
+  // Tratamento da flag pós-operação:
   // - Em PRÉ-OPERAÇÃO (isPostOperation = false):
-  //   A operação de hoje ainda NÃO ocorreu ("não teve saída no dia atual").
-  //   O consumo do dia vigente ainda vai acontecer e precisa ser suprido por este estoque, junto com os demais dias.
-  //   Portanto, os dias restantes a suprir incluem o dia de hoje (Segunda a Segunda 2).
+  //   A operação de hoje ainda NÃO ocorreu. O consumo do dia de referência ainda acontecerá.
+  //   Dias restantes a consumir incluem o dia de hoje e vão até a 2ª feira (Seg2).
+  //   Exemplo do usuário: domingo pré-op com 10kg de estoque -> giro hoje (dom) = 5kg e amanhã (seg) = 5kg -> consome 10kg.
   // - Em PÓS-OPERAÇÃO (isPostOperation = true):
-  //   A operação de hoje JÁ OCORREU ("estoque já é considerando o que saiu da segunda").
-  //   O estoque de 6 já é o saldo que restou após o consumo de hoje!
-  //   Portanto, NÃO se deduz novamente a saída média do dia atual do estoque.
-  //   Os dias restantes a serem supridos começam da TERÇA EM DIANTE (da terça até a Segunda 2).
-  //   Com menos dias a suprir, o consumo restante é menor, o saldo previsto é maior e a compra sugerida RECAI.
-  const effectiveCurrent = current;
+  //   "se hoje é domingo de manhã e eu marco a flag 'pos-operação', então deduzo que já usei o consumo definido no cadastro daquele dia".
+  //   Se a contagem ainda não é pós-operação (!isStockAlreadyPostOp), deduz o consumo de hoje do estoque atual.
+  //   Portanto, os dias restantes a suprir começam a partir de amanhã até a 2ª feira (Seg2).
+  const effectiveCurrent =
+    isPostOperation && !isStockAlreadyPostOp && refDay !== "seg2"
+      ? round(current - todayConsumption)
+      : current;
 
   const remainingDays = getRemainingCycleDays(refDay, isPostOperation);
   let remainingConsumption = 0;
@@ -258,47 +281,33 @@ export function computeProduct(
   remainingConsumption = round(remainingConsumption);
   const remainingDaysLabel = getRemainingDaysLabel(refDay, isPostOperation);
 
-  // Saldo de estoque previsto que vai ficar para segunda-feira caso NENHUMA compra seja feita:
-  // (Estoque Físico Atual - Consumo Restante dos dias a suprir até a 2ª feira)
-  // Ex: 20kg de maminha - 70kg de consumo no ciclo = -50kg (déficit de 50kg)
+  // Saldo de estoque previsto que vai sobrar na 2ª feira (sem compra):
+  // (Estoque Efetivo - Consumo Restante dos dias até a 2ª feira)
+  // No exemplo do usuário: 10kg no domingo - 10kg de consumo até 2ª = 0kg.
   const projectedCycleEndStock = round(effectiveCurrent - remainingConsumption);
 
-  // MARGEM DE CHEGADA NA PRÓXIMA SEGUNDA-FEIRA:
-  // Conforme o modelo operacional da galeteria/restaurante:
-  // Compra-se sempre a margem estritamente necessária para durar até a próxima segunda-feira,
-  // chegando na 2ª feira com uma margem de segurança configurável (ex.: 5% ou estoque de 5kg, bem próximo do zero).
+  // Margem de chegada / Estoque de segurança desejado:
   const marginPercent = Math.max(0, Number(rules.safety_margin_percent) || 0);
-  const percentBuffer = round(remainingConsumption * (marginPercent / 100));
-
-  // O buffer desejado ao chegar na 2ª feira respeita:
-  // 1. O estoque de segurança explícito do produto (ex.: 5kg)
-  // 2. A margem percentual configurada (ex.: 5% de 80kg = 4kg)
-  // 3. Reserva mínima desejada (caso configurado desired_stock < consumo)
-  // 4. Semanas extras de cobertura (caso coverage_weeks > 1 para itens secos/embalagens)
-  const extraWeeksBuffer = weeks > 1 ? round((weeks - 1) * consumption) : 0;
-  const desiredBuffer = desired > 0 && desired < consumption ? desired : 0;
-  const targetEndStock = round(Math.max(safety, percentBuffer, desiredBuffer) + extraWeeksBuffer);
-
-  // Demanda total do ciclo: consumo necessário para durar até segunda + margem de chegada desejada
-  const totalCycleRequirement = round(remainingConsumption + targetEndStock);
-  const targetTurnover = totalCycleRequirement;
+  const percentBuffer = round(weeklyDemand * (marginPercent / 100));
+  const desiredBuffer = desired > 0 && desired < cycleWeeklyConsumption ? desired : 0;
+  const targetEndStock = round(Math.max(safety, percentBuffer, desiredBuffer));
 
   // Compra sugerida:
-  // Demanda necessária (Consumo + Margem de Chegada) menos o disponível (Estoque Atual + Pedidos a caminho).
-  // Equivale a: targetEndStock - projectedCycleEndStock - incoming.
-  // Se o estoque atual já supre o ciclo e atinge a margem, a sugestão é 0.
-  // Conforme solicitado pelo usuário, sempre arredonda para cima (número inteiro):
-  // Ex: se o giro é 20kg e tem 10kg no estoque, sugere 10kg arredondado (nunca números quebrados como 9.8kg ou 9.57kg).
-  const rawSuggestion = targetEndStock - projectedCycleEndStock - incoming;
+  // Para sustentar o ciclo de Segunda a Segunda (weeklyDemand) mais margem (targetEndStock),
+  // deduzindo o saldo que sobra na 2ª feira (projectedCycleEndStock) e pedidos a caminho (incoming).
+  // Exemplo do usuário: 40kg (semana) + 0 - 0kg (saldo na 2ª) - 0 = 40kg!
+  // Se o saldo previsto na 2ª feira já supre a semana, a sugestão é 0.
+  const rawSuggestion = weeklyDemand + targetEndStock - projectedCycleEndStock - incoming;
   const roundedRaw = round(Math.max(0, rawSuggestion));
   const suggestedPurchase = roundedRaw > 0 ? Math.ceil(roundedRaw) : 0;
 
-  // Projeções de estoque futuro:
+  // Projeções de estoque futuro na 2ª feira:
   // - Sem compra: saldo que sobra na segunda (pode ser negativo/déficit caso não compre)
   const futureStock = round(projectedCycleEndStock + incoming);
-  // - Com compra sugerida: chega na próxima segunda-feira exatamente na margem desejada (ex: 5kg ou ~0kg)
+  // - Com compra sugerida: saldo que sobra na segunda + compra sugerida (ex: 0 + 40 = 40kg)
   const futureStockWithSuggestion = round(projectedCycleEndStock + incoming + suggestedPurchase);
   const projectedStock = projectedCycleEndStock;
+  const targetTurnover = round(weeklyDemand + targetEndStock);
 
   // Status do estoque: só é crítico se o saldo previsto na 2ª feira for menor que zero (< 0)
   let status: StockStatus = "normal";

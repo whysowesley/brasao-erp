@@ -190,8 +190,7 @@ export function useAllDailyBankBalances() {
     const unsub = onSnapshot(
       collection(db, "daily_bank_balances"),
       (snap) => {
-        const localMap = getAllDailyLocalBalances();
-        const map: Record<string, BankBalances> = { ...localMap };
+        const map: Record<string, BankBalances> = {};
         snap.forEach((docSnap) => {
           const docData = normalizeBalances(docSnap.data(), docSnap.id);
           map[docSnap.id] = docData;
@@ -213,31 +212,24 @@ export function useAllDailyBankBalances() {
   const query = useQuery({
     queryKey: ["all_daily_bank_balances"],
     queryFn: async (): Promise<Record<string, BankBalances>> => {
-      const localMap = getAllDailyLocalBalances();
-      try {
-        const snap = await getDocs(collection(db, "daily_bank_balances"));
-        const map: Record<string, BankBalances> = { ...localMap };
-        snap.forEach((docSnap) => {
-          const docData = normalizeBalances(docSnap.data(), docSnap.id);
-          map[docSnap.id] = docData;
-          try {
-            localStorage.setItem(`financeiro_bank_balances_${docSnap.id}`, JSON.stringify(docData));
-          } catch {
-            // ignore
-          }
-        });
-        return map;
-      } catch (err) {
-        console.warn("Falha ao buscar daily_bank_balances no Firestore, usando dados locais:", err);
-        return localMap;
-      }
+      const snap = await getDocs(collection(db, "daily_bank_balances"));
+      const map: Record<string, BankBalances> = {};
+      snap.forEach((docSnap) => {
+        const docData = normalizeBalances(docSnap.data(), docSnap.id);
+        map[docSnap.id] = docData;
+        try {
+          localStorage.setItem(`financeiro_bank_balances_${docSnap.id}`, JSON.stringify(docData));
+        } catch {
+          // ignore
+        }
+      });
+      return map;
     },
-    initialData: () => getAllDailyLocalBalances(),
     staleTime: 1000 * 60 * 5,
   });
 
   return {
-    balancesMap: query.data || getAllDailyLocalBalances(),
+    balancesMap: query.data || {},
     isLoading: query.isLoading,
   };
 }
@@ -273,8 +265,19 @@ export function calculateRollingBalances(
   // Percorre as datas em ordem cronológica
   for (let i = 0; i < dates.length; i++) {
     const curDate = dates[i];
-    const prevDate = i > 0 ? dates[i - 1] : format(subDays(parseISO(curDate), 1), "yyyy-MM-dd");
-    const prevDayRolling = i > 0 ? result[prevDate] : null;
+    if (!curDate) continue;
+
+    let prevDate = "";
+    if (i > 0 && dates[i - 1]) {
+      prevDate = dates[i - 1]!;
+    } else {
+      try {
+        prevDate = format(subDays(parseISO(curDate), 1), "yyyy-MM-dd");
+      } catch {
+        prevDate = "";
+      }
+    }
+    const prevDayRolling = prevDate ? result[prevDate] : null;
 
     let priorTotal = 0;
     let priorBills = 0;
@@ -288,14 +291,16 @@ export function calculateRollingBalances(
       priorRemaining = prevDayRolling.remainingAfterDay;
       isCarriedFromPrior = true;
       actualPriorDate = prevDate;
-    } else if (savedBalancesMap[prevDate]) {
+    } else if (prevDate && savedBalancesMap[prevDate]) {
       const prevDoc = savedBalancesMap[prevDate];
-      const prevAccountsTotal = prevDoc.accounts.reduce((s, a) => s + (a.balance || 0), 0);
-      priorTotal = (prevDoc.carried_balance || 0) + prevAccountsTotal;
-      priorBills = dayBillsMap[prevDate] || 0;
-      priorRemaining = Math.max(0, priorTotal - priorBills);
-      isCarriedFromPrior = true;
-      actualPriorDate = prevDate;
+      if (prevDoc) {
+        const prevAccountsTotal = prevDoc.accounts.reduce((s, a) => s + (a.balance || 0), 0);
+        priorTotal = (prevDoc.carried_balance || 0) + prevAccountsTotal;
+        priorBills = dayBillsMap[prevDate] || 0;
+        priorRemaining = Math.max(0, priorTotal - priorBills);
+        isCarriedFromPrior = true;
+        actualPriorDate = prevDate;
+      }
     }
 
     const curDoc = savedBalancesMap[curDate];
@@ -510,39 +515,38 @@ export function useUpdateBankBalances(targetDate?: string) {
         updated_at: new Date().toISOString(),
       };
 
+      const firestorePayload: Record<string, unknown> = {
+        date: cleanData.date,
+        accounts: cleanData.accounts,
+        jam: cleanData.jam,
+        gbm: cleanData.gbm,
+        ton: cleanData.ton,
+        sicredi: cleanData.sicredi,
+        carried_balance: cleanData.carried_balance ?? 0,
+        manual_carried_balance: cleanData.manual_carried_balance ?? null,
+        is_manually_saved: cleanData.is_manually_saved ?? true,
+        is_replicated: false,
+        replicated_from_date: null,
+        updated_at: cleanData.updated_at,
+        updated_at_server: serverTimestamp(),
+      };
+
+      // 1. Grava no Firestore primeiro. Se falhar, o erro é propagado para a mutation e não reporta falso sucesso
+      await setDoc(dailyDocRef, firestorePayload, { merge: true });
+
+      const todayStr = new Date().toISOString().split("T")[0] || "";
+      if (todayStr && saveDate >= todayStr) {
+        await setDoc(generalDocRef, firestorePayload, { merge: true });
+      }
+
+      // 2. Apenas após a confirmação do Firestore atualiza o cache local do navegador
       try {
         localStorage.setItem(`financeiro_bank_balances_${saveDate}`, JSON.stringify(cleanData));
         localStorage.setItem("financeiro_bank_balances", JSON.stringify(cleanData));
       } catch (err) {
-        console.warn("Erro ao salvar localmente:", err);
+        console.warn("Erro ao salvar cache local de saldos:", err);
       }
 
-      try {
-        const firestorePayload: Record<string, unknown> = {
-          date: cleanData.date,
-          accounts: cleanData.accounts,
-          jam: cleanData.jam,
-          gbm: cleanData.gbm,
-          ton: cleanData.ton,
-          sicredi: cleanData.sicredi,
-          carried_balance: cleanData.carried_balance ?? 0,
-          manual_carried_balance: cleanData.manual_carried_balance ?? null,
-          is_manually_saved: cleanData.is_manually_saved ?? true,
-          is_replicated: false,
-          replicated_from_date: null,
-          updated_at: cleanData.updated_at,
-          updated_at_server: serverTimestamp(),
-        };
-
-        await setDoc(dailyDocRef, firestorePayload, { merge: true });
-
-        const todayStr = new Date().toISOString().split("T")[0];
-        if (saveDate >= todayStr) {
-          await setDoc(generalDocRef, firestorePayload, { merge: true });
-        }
-      } catch (err) {
-        console.warn("Saldos diários salvos localmente, sincronização remota pendente:", err);
-      }
       return cleanData;
     },
     onSuccess: (data) => {

@@ -566,7 +566,7 @@ function EstoquePage() {
           <div
             className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-1 text-xs cursor-pointer shadow-xs hover:bg-muted/40 transition-colors"
             onClick={() => setIsPostOperation(!isPostOperation)}
-            title="Pós-operação: o dia de hoje já encerrou e foi consumido. O estoque contado atenderá a partir de amanhã até a 2ª feira. Ex: Sábado à noite conta 2 dias de consumo (Dom e Seg) em vez de 3."
+            title="Pré-operação: o consumo de hoje ainda vai acontecer até o encerramento. Pós-operação: deduz o consumo previsto de hoje do estoque, restando suprir até a 2ª feira."
           >
             <Switch
               id="post-op-estoque"
@@ -579,8 +579,8 @@ function EstoquePage() {
               className="cursor-pointer font-medium select-none text-[11px] leading-tight text-foreground"
             >
               {isPostOperation
-                ? "Pós-operação (Hoje já usado)"
-                : "Pré-operação (Hoje ainda será usado)"}
+                ? "Pós-operação (Deduz giro de hoje do estoque)"
+                : "Pré-operação (Giro de hoje ainda a consumir)"}
             </Label>
           </div>
         </div>

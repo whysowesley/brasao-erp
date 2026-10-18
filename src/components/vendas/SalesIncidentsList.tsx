@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { IncidentStatus, SalesIncident } from "@/lib/vendas-types";
 import { useDeleteSalesIncident, useSalesIncidents, useUpdateIncidentStatus } from "@/lib/vendas";
+import { useCanWrite } from "@/lib/auth";
 import { SalesIncidentDialog } from "./SalesIncidentDialog";
 
 interface SalesIncidentsListProps {
@@ -38,6 +39,7 @@ interface SalesIncidentsListProps {
 }
 
 export function SalesIncidentsList({ initialDateFilter, onSelectDate }: SalesIncidentsListProps) {
+  const canWrite = useCanWrite();
   const [dateFilter, setDateFilter] = useState<string>(initialDateFilter || "");
   const [statusFilter, setStatusFilter] = useState<string>("todos");
   const [onlyMeeting, setOnlyMeeting] = useState<boolean>(false);
@@ -179,17 +181,19 @@ export function SalesIncidentsList({ initialDateFilter, onSelectDate }: SalesInc
                 )}
               </div>
 
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditingIncident(null);
-                  setDialogOpen(true);
-                }}
-                className="h-8 text-xs gap-1.5 font-semibold"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Nova Intercorrência
-              </Button>
+              {canWrite && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditingIncident(null);
+                    setDialogOpen(true);
+                  }}
+                  className="h-8 text-xs gap-1.5 font-semibold"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Nova Intercorrência
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
@@ -199,6 +203,28 @@ export function SalesIncidentsList({ initialDateFilter, onSelectDate }: SalesInc
       {incidentsQuery.isLoading ? (
         <Card className="p-8 text-center text-xs text-muted-foreground">
           Carregando intercorrências e histórico de faturamento...
+        </Card>
+      ) : incidentsQuery.isError ? (
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="py-8 text-center space-y-3">
+            <div className="mx-auto h-10 w-10 rounded-full bg-destructive/15 flex items-center justify-center text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Não foi possível carregar as intercorrências
+            </h3>
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+              Houve uma oscilação na conexão com o banco de dados do Firestore.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => incidentsQuery.refetch()}
+              className="text-xs"
+            >
+              Tentar novamente
+            </Button>
+          </CardContent>
         </Card>
       ) : filteredIncidents.length === 0 ? (
         <Card className="border-dashed border-border/80">
@@ -214,17 +240,19 @@ export function SalesIncidentsList({ initialDateFilter, onSelectDate }: SalesInc
                 ? `Não há intercorrências registradas para ${dateFilter.split("-").reverse().join("/")}.`
                 : "Tudo rodando tranquilamente! Clique em 'Nova Intercorrência' caso precise registrar imprevistos ou contatos de faturamento."}
             </p>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setEditingIncident(null);
-                setDialogOpen(true);
-              }}
-              className="mt-2 text-xs"
-            >
-              Registrar Ocorrência
-            </Button>
+            {canWrite && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setEditingIncident(null);
+                  setDialogOpen(true);
+                }}
+                className="mt-2 text-xs"
+              >
+                Registrar Ocorrência
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -290,40 +318,42 @@ export function SalesIncidentsList({ initialDateFilter, onSelectDate }: SalesInc
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant={isResolved ? "outline" : "default"}
-                        size="sm"
-                        onClick={() => handleToggleResolve(inc)}
-                        className="h-7 text-xs gap-1 px-2.5"
-                      >
-                        <Check className="h-3.5 w-3.5" />
-                        <span>{isResolved ? "Reabrir" : "Concluir"}</span>
-                      </Button>
+                    {canWrite && (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant={isResolved ? "outline" : "default"}
+                          size="sm"
+                          onClick={() => handleToggleResolve(inc)}
+                          className="h-7 text-xs gap-1 px-2.5"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          <span>{isResolved ? "Reabrir" : "Concluir"}</span>
+                        </Button>
 
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                        onClick={() => {
-                          setEditingIncident(inc);
-                          setDialogOpen(true);
-                        }}
-                        title="Editar"
-                      >
-                        <Edit2 className="h-3.5 w-3.5" />
-                      </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            setEditingIncident(inc);
+                            setDialogOpen(true);
+                          }}
+                          title="Editar"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </Button>
 
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                        onClick={() => setIncidentToDelete(inc)}
-                        title="Excluir"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                          onClick={() => setIncidentToDelete(inc)}
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Body: Intercorrência & Ação Tomada */}
