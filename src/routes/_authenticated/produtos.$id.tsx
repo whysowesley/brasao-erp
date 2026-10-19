@@ -172,9 +172,9 @@ function ProductDetail() {
     ["Estoque mínimo", formatQty(product.min_stock, product.unit)],
     ["Estoque de segurança", formatQty(product.safety_stock, product.unit)],
     ["Saldo 2ª previsto (sem compra)", formatQty(product.projectedStock, product.unit)],
-    ["Compra sugerida (na margem)", formatQty(product.suggestedPurchase, product.unit)],
+    ["Compra sugerida (para zerar na 2ª)", formatQty(product.suggestedPurchase, product.unit)],
     [
-      "Estoque futuro 2ª feira (com compra sugerida)",
+      "Estoque futuro na 2ª feira (com compra sugerida)",
       formatQty(product.futureStockWithSuggestion, product.unit),
     ],
   ];

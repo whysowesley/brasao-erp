@@ -288,17 +288,32 @@ function EstoquePage() {
     [plan],
   );
 
-  // O estoque futuro é o saldo projetado (Estoque Atual deduzindo o consumo do ciclo) + pedidos a caminho + quero comprar
+  // O estoque futuro é o saldo residual que restará na próxima 2ª feira após o consumo do período:
+  // (Estoque disponível + pedidos a caminho + quero comprar) - demanda do período.
+  // Fica perto de 0 (0, 1, 2, 3, no máximo 10) quando se compra a quantidade sugerida!
   const futureWithBuy = useCallback(
     (p: ComputedProduct) => {
       if (!p) return 0;
-      const projected =
-        typeof p.projectedCycleEndStock === "number" && !isNaN(p.projectedCycleEndStock)
-          ? p.projectedCycleEndStock
-          : (Number(p.current_stock) || 0) - (Number(p.remainingConsumption) || 0);
       const incoming = Number(p.incoming) || 0;
       const buy = buyQty(p);
-      return Math.round((projected + incoming + buy + Number.EPSILON) * 1000) / 1000;
+
+      let targetDemand = Number(p.targetTurnover ?? p.avg_weekly_consumption) || 0;
+      let availableStock = Number(p.current_stock) || 0;
+
+      if (p.referenceDay === "seg" && !p.isPostOperation) {
+        targetDemand = Number(p.targetTurnover ?? p.avg_weekly_consumption) || 0;
+        availableStock = Number(p.current_stock) || 0;
+      } else if (p.referenceDay === "dom") {
+        targetDemand = Number(p.targetTurnover ?? p.avg_weekly_consumption) || 0;
+        availableStock =
+          typeof p.projectedCycleEndStock === "number" ? p.projectedCycleEndStock : 0;
+      } else {
+        targetDemand = Number(p.remainingConsumption) || 0;
+        availableStock = Number(p.effectiveCurrentStock ?? p.current_stock) || 0;
+      }
+
+      const residual = availableStock + incoming + buy - targetDemand;
+      return Math.round((residual + Number.EPSILON) * 1000) / 1000;
     },
     [buyQty],
   );
@@ -871,16 +886,15 @@ function EstoquePage() {
 
                   <div className="text-right">
                     <span className="text-[9px] uppercase tracking-wider text-muted-foreground block font-medium">
-                      Estoque Futuro
+                      Estoque Futuro (Sobra 2ª)
                     </span>
                     <span
                       className={`num font-bold text-xs ${
-                        future <= 0
+                        future < -0.001
                           ? "text-rose-600 dark:text-rose-400 font-bold"
-                          : future < Number(p.min_stock)
-                            ? "text-amber-600 dark:text-amber-400 font-semibold"
-                            : "text-foreground"
+                          : "text-foreground font-semibold"
                       }`}
+                      title={`Sobra final prevista na próxima 2ª feira: ${formatQty(future, p.unit)}`}
                     >
                       {formatQty(future, p.unit)}
                     </span>
@@ -983,7 +997,7 @@ function EstoquePage() {
                     <div className="flex flex-col items-end">
                       <span>Estoque Futuro</span>
                       <span className="text-[10px] font-normal text-muted-foreground">
-                        (Saldo 2ª + Comprar)
+                        (Sobra na Próx. 2ª)
                       </span>
                     </div>
                   </Th>
@@ -1105,12 +1119,11 @@ function EstoquePage() {
                         <TableCell className="num text-right font-semibold">
                           <span
                             className={
-                              futureWithBuy(p) <= 0
+                              futureWithBuy(p) < -0.001
                                 ? "text-rose-600 dark:text-rose-400 font-bold"
-                                : futureWithBuy(p) < Number(p.min_stock)
-                                  ? "text-amber-600 dark:text-amber-400 font-semibold"
-                                  : "text-foreground"
+                                : "text-foreground font-semibold"
                             }
+                            title={`Sobra final prevista na próxima 2ª feira após o consumo do período: ${formatQty(futureWithBuy(p), p.unit)}`}
                           >
                             {formatQty(futureWithBuy(p), p.unit)}
                           </span>

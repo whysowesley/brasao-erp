@@ -16,7 +16,7 @@ export type PurchaseRules = {
 
 export const DEFAULT_RULES: PurchaseRules = {
   coverage_weeks: 1,
-  safety_margin_percent: 5,
+  safety_margin_percent: 0,
   default_lead_time_days: 0,
   attention_threshold_percent: 20,
   is_post_operation: false,
@@ -286,28 +286,54 @@ export function computeProduct(
   // No exemplo do usuário: 10kg no domingo - 10kg de consumo até 2ª = 0kg.
   const projectedCycleEndStock = round(effectiveCurrent - remainingConsumption);
 
-  // Margem de chegada / Estoque de segurança desejado:
+  // Demanda necessária a suprir dependendo do momento da compra:
+  // 1) Na segunda-feira pré-operação (comprando no início do ciclo semanal de 8 dias para durar até a próxima segunda):
+  //    targetDemand = weeklyDemand (ex: 80kg)
+  //    availableStock = current (ex: 30kg)
+  //    Falta comprar = 80kg - 30kg = 50kg! Para que no final da semana reste 0kg!
+  // 2) No domingo (comprando o pedido semanal que chega na 2ª feira):
+  //    targetDemand = weeklyDemand (ex: 40kg)
+  //    availableStock = projectedCycleEndStock (ex: 0kg)
+  //    Falta comprar = 40kg - 0kg = 40kg!
+  // 3) No meio da semana (terça a sábado):
+  //    targetDemand = remainingConsumption (o consumo restante de amanhã até a outra segunda)
+  //    availableStock = effectiveCurrent (o estoque atual disponível)
+  //    Falta comprar = remainingConsumption - effectiveCurrent! Para que dure até a outra segunda perto de 0!
+  let targetDemand = weeklyDemand;
+  let availableStock = current;
+
+  if (refDay === "seg" && !isPostOperation) {
+    targetDemand = weeklyDemand;
+    availableStock = current;
+  } else if (refDay === "dom") {
+    targetDemand = weeklyDemand;
+    availableStock = projectedCycleEndStock;
+  } else {
+    targetDemand = remainingConsumption;
+    availableStock = effectiveCurrent;
+  }
+
+  // Margem de segurança opcional (se explicitamente configurada e pequena <= 10):
   const marginPercent = Math.max(0, Number(rules.safety_margin_percent) || 0);
-  const percentBuffer = round(weeklyDemand * (marginPercent / 100));
-  const desiredBuffer = desired > 0 && desired < cycleWeeklyConsumption ? desired : 0;
-  const targetEndStock = round(Math.max(safety, percentBuffer, desiredBuffer));
+  const percentBuffer = marginPercent > 0 ? round(targetDemand * (marginPercent / 100)) : 0;
+  const safetyBuffer = safety > 0 && safety <= 10 ? safety : 0;
+  const targetBuffer = Math.min(10, Math.max(safetyBuffer, percentBuffer));
 
   // Compra sugerida:
-  // Para sustentar o ciclo de Segunda a Segunda (weeklyDemand) mais margem (targetEndStock),
-  // deduzindo o saldo que sobra na 2ª feira (projectedCycleEndStock) e pedidos a caminho (incoming).
-  // Exemplo do usuário: 40kg (semana) + 0 - 0kg (saldo na 2ª) - 0 = 40kg!
-  // Se o saldo previsto na 2ª feira já supre a semana, a sugestão é 0.
-  const rawSuggestion = weeklyDemand + targetEndStock - projectedCycleEndStock - incoming;
-  const roundedRaw = round(Math.max(0, rawSuggestion));
+  // A quantidade que falta para suprir o consumo até a próxima segunda-feira e terminar perto de 0 (0, 1, 2, 3, no máximo 10)
+  const rawSuggestion = Math.max(0, targetDemand + targetBuffer - availableStock - incoming);
+  const roundedRaw = round(rawSuggestion);
   const suggestedPurchase = roundedRaw > 0 ? Math.ceil(roundedRaw) : 0;
 
-  // Projeções de estoque futuro na 2ª feira:
-  // - Sem compra: saldo que sobra na segunda (pode ser negativo/déficit caso não compre)
-  const futureStock = round(projectedCycleEndStock + incoming);
-  // - Com compra sugerida: saldo que sobra na segunda + compra sugerida (ex: 0 + 40 = 40kg)
-  const futureStockWithSuggestion = round(projectedCycleEndStock + incoming + suggestedPurchase);
+  // Projeções de estoque futuro na próxima 2ª feira (saldo residual que restará após todo o consumo do período):
+  // - Sem compra: estoque disponível menos a demanda do período (pode ser negativo/déficit caso não compre)
+  const futureStock = round(availableStock + incoming - targetDemand);
+  // - Com compra sugerida: estoque disponível + compra sugerida - demanda do período (sempre perto de 0!)
+  const futureStockWithSuggestion = round(
+    availableStock + incoming + suggestedPurchase - targetDemand,
+  );
   const projectedStock = projectedCycleEndStock;
-  const targetTurnover = round(weeklyDemand + targetEndStock);
+  const targetTurnover = round(targetDemand);
 
   // Status do estoque: só é crítico se o saldo previsto na 2ª feira for menor que zero (< 0)
   let status: StockStatus = "normal";
@@ -349,29 +375,21 @@ export function computeProduct(
 /**
  * Status do estoque futuro:
  * Conforme regra de negócio: só fica 'critico' se for negativo (< 0, déficit).
- * O intuito é comprar sempre na margem para suprir o consumo médio.
- * Se >= 0 e abaixo ou no limiar do estoque mínimo -> 'atencao'.
- * Acima do estoque mínimo -> 'normal'.
+ * O intuito é comprar sempre na margem para suprir o consumo médio e terminar perto de 0 (0 a 10).
  */
 export function futureStatusFor(
   futureStock: number,
-  minStock: number,
-  rules?: PurchaseRules | null,
+  _minStock: number,
+  _rules?: PurchaseRules | null,
 ): StockStatus {
-  const r = rules || DEFAULT_RULES;
   const future = Number(futureStock) || 0;
-  const min = Number(minStock) || 0;
 
-  // Só fica crítico se for negativo (déficit)
-  if (future < 0) {
+  // Só fica crítico se for negativo (< 0, faltará produto antes da próxima segunda-feira)
+  if (future < -0.001) {
     return "critico";
   }
 
-  const threshold = min * (1 + (r.attention_threshold_percent || 0) / 100);
-  if (future === 0 || future < min || (min > 0 && future <= threshold)) {
-    return min > 0 || future === 0 ? "atencao" : "normal";
-  }
-
+  // O estoque futuro terminar perto de 0 (0 a 10) é o comportamento planejado correto
   return "normal";
 }
 

@@ -309,7 +309,7 @@ function SugestoesPage() {
                 <TableHead className="text-right">Giro Semanal</TableHead>
                 <TableHead className="text-right">Compra Sugerida</TableHead>
                 <TableHead className="text-right">Quero Comprar</TableHead>
-                <TableHead className="text-right">Estoque Futuro</TableHead>
+                <TableHead className="text-right">Estoque Futuro (Sobra 2ª)</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Status Futuro</TableHead>
               </TableRow>
@@ -325,11 +325,29 @@ function SugestoesPage() {
                     : p.suggestedPurchase > 0
                       ? Math.ceil(p.suggestedPurchase)
                       : 0;
-                // Estoque Futuro = Saldo da 2ª Segunda + Valor a comprar para a próxima semana
+
+                // Estoque Futuro = Saldo residual previsto na próxima 2ª feira após o consumo do período
+                let targetDemand = Number(p.targetTurnover ?? p.avg_weekly_consumption) || 0;
+                let availableStock = Number(p.current_stock) || 0;
+
+                if (p.referenceDay === "seg" && !p.isPostOperation) {
+                  targetDemand = Number(p.targetTurnover ?? p.avg_weekly_consumption) || 0;
+                  availableStock = Number(p.current_stock) || 0;
+                } else if (p.referenceDay === "dom") {
+                  targetDemand = Number(p.targetTurnover ?? p.avg_weekly_consumption) || 0;
+                  availableStock =
+                    typeof p.projectedCycleEndStock === "number" ? p.projectedCycleEndStock : 0;
+                } else {
+                  targetDemand = Number(p.remainingConsumption) || 0;
+                  availableStock = Number(p.effectiveCurrentStock ?? p.current_stock) || 0;
+                }
+
                 const future =
                   Math.round(
-                    ((p.projectedCycleEndStock ?? Number(p.current_stock)) +
-                      wanted +
+                    (availableStock +
+                      Number(p.incoming || 0) +
+                      wanted -
+                      targetDemand +
                       Number.EPSILON) *
                       1000,
                   ) / 1000;
@@ -377,7 +395,16 @@ function SugestoesPage() {
                         className="num ml-auto h-8 w-28 text-right font-semibold"
                       />
                     </TableCell>
-                    <TableCell className="num text-right">{formatQty(future, p.unit)}</TableCell>
+                    <TableCell
+                      className={`num text-right ${
+                        future < -0.001
+                          ? "text-rose-600 dark:text-rose-400 font-bold"
+                          : "font-semibold text-foreground"
+                      }`}
+                      title={`Sobra final prevista na próxima 2ª feira: ${formatQty(future, p.unit)}`}
+                    >
+                      {formatQty(future, p.unit)}
+                    </TableCell>
                     <TableCell>
                       <StatusBadge status={p.status} />
                     </TableCell>
