@@ -18,8 +18,9 @@ import {
   ArrowDownRight,
   ChevronRight,
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { safeFormatDate, safeCompareDates } from "@/lib/date-utils";
 import {
   ResponsiveContainer,
   BarChart,
@@ -69,8 +70,41 @@ export const Route = createFileRoute("/_authenticated/financeiro/")({
       },
     ],
   }),
+  errorComponent: FinanceiroDashboardErrorFallback,
   component: FinanceiroDashboardPage,
 });
+
+function FinanceiroDashboardErrorFallback({ error, reset }: { error: Error; reset: () => void }) {
+  return (
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        title="Financeiro"
+        description="Visão geral do fluxo de caixa e desempenho financeiro"
+      />
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-4 max-w-xl mx-auto my-8">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+          <AlertTriangle className="h-6 w-6" />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-foreground">
+            Ocorreu um erro ao carregar o Painel Financeiro
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {error?.message || "Erro inesperado ao carregar dados financeiros."}
+          </p>
+        </div>
+        <div className="flex justify-center gap-2">
+          <Button onClick={() => reset()} variant="default" size="sm">
+            Tentar novamente
+          </Button>
+          <Button onClick={() => window.location.reload()} variant="outline" size="sm">
+            Recarregar página
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function formatCurrency(val: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -107,7 +141,7 @@ function FinanceiroDashboardPage() {
           t.status !== "cancelado" &&
           resolveTransactionStatus(t.status, t.due_date, today) === "atrasado",
       )
-      .sort((a, b) => a.due_date.localeCompare(b.due_date));
+      .sort((a, b) => safeCompareDates(a.due_date, b.due_date));
   }, [transactions, today]);
 
   const contasHoje = useMemo(() => {
@@ -119,7 +153,7 @@ function FinanceiroDashboardPage() {
           t.status !== "cancelado" &&
           t.due_date === today,
       )
-      .sort((a, b) => b.amount - a.amount);
+      .sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0));
   }, [transactions, today]);
 
   const proximosPagamentos = useMemo(() => {
@@ -129,9 +163,9 @@ function FinanceiroDashboardPage() {
           t.type === "despesa" &&
           t.status !== "pago" &&
           t.status !== "cancelado" &&
-          t.due_date >= today,
+          (t.due_date || "") >= today,
       )
-      .sort((a, b) => a.due_date.localeCompare(b.due_date))
+      .sort((a, b) => safeCompareDates(a.due_date, b.due_date))
       .slice(0, 5);
   }, [transactions, today]);
 
@@ -455,7 +489,7 @@ function FinanceiroDashboardPage() {
                           t.supplier_name ||
                           t.category?.name ||
                           "Sem fornecedor"}{" "}
-                        · {format(parseISO(t.due_date), "dd/MM/yyyy")}
+                        · {safeFormatDate(t.due_date, "dd/MM/yyyy")}
                       </p>
                     </div>
 
@@ -535,7 +569,7 @@ function FinanceiroDashboardPage() {
                     return (
                       <TableRow key={t.id} className="hover:bg-muted/30">
                         <TableCell className="text-xs font-medium">
-                          {format(parseISO(t.due_date), "dd/MM/yyyy")}
+                          {safeFormatDate(t.due_date, "dd/MM/yyyy")}
                         </TableCell>
                         <TableCell className="font-medium text-foreground">
                           <div className="flex items-center gap-1.5">

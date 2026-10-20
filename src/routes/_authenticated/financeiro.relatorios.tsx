@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import {
   format,
-  parseISO,
   startOfMonth,
   endOfMonth,
   subMonths,
@@ -27,6 +26,7 @@ import {
   startOfQuarter,
   endOfQuarter,
 } from "date-fns";
+import { safeFormatDate } from "@/lib/date-utils";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import {
@@ -92,8 +92,41 @@ export const Route = createFileRoute("/_authenticated/financeiro/relatorios")({
       },
     ],
   }),
+  errorComponent: RelatoriosErrorFallback,
   component: RelatoriosPage,
 });
+
+function RelatoriosErrorFallback({ error, reset }: { error: Error; reset: () => void }) {
+  return (
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        title="Relatórios & DRE"
+        description="Demonstrativo de Resultado do Exercício e relatórios analíticos de fluxo de caixa"
+      />
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-4 max-w-xl mx-auto my-8">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+          <AlertTriangle className="h-6 w-6" />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-foreground">
+            Ocorreu um erro ao carregar os Relatórios
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {error?.message || "Erro inesperado ao gerar os relatórios financeiros."}
+          </p>
+        </div>
+        <div className="flex justify-center gap-2">
+          <Button onClick={() => reset()} variant="default" size="sm">
+            Tentar novamente
+          </Button>
+          <Button onClick={() => window.location.reload()} variant="outline" size="sm">
+            Recarregar página
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const PIE_COLORS = [
   "#3b82f6",
@@ -824,7 +857,7 @@ function RelatoriosPage() {
                     return (
                       <TableRow key={t.id} className="hover:bg-muted/30">
                         <TableCell className="text-xs font-medium">
-                          {format(parseISO(t.due_date), "dd/MM/yyyy")}
+                          {safeFormatDate(t.due_date, "dd/MM/yyyy")}
                         </TableCell>
                         <TableCell className="font-medium text-foreground">
                           {getTransactionDisplayTitle(t)}

@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from "react";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { safeFormatDate, safeCompareDates, safeCompareStrings } from "@/lib/date-utils";
 import {
   Printer,
   Download,
@@ -140,18 +141,20 @@ export function ExtratoFinanceiroPdfModal({
     list.sort((a, b) => {
       switch (sortOption) {
         case "date_asc":
-          return a.due_date.localeCompare(b.due_date);
+          return safeCompareDates(a.due_date, b.due_date);
         case "date_desc":
-          return b.due_date.localeCompare(a.due_date);
+          return safeCompareDates(b.due_date, a.due_date);
         case "amount_desc": {
-          const amtA = a.status === "pago" && a.paid_amount ? a.paid_amount : a.amount;
-          const amtB = b.status === "pago" && b.paid_amount ? b.paid_amount : b.amount;
+          const amtA =
+            Number(a.status === "pago" && a.paid_amount != null ? a.paid_amount : a.amount) || 0;
+          const amtB =
+            Number(b.status === "pago" && b.paid_amount != null ? b.paid_amount : b.amount) || 0;
           return amtB - amtA;
         }
         case "desc_asc": {
           const titleA = resolveTransactionDisplay(a).mainTitle;
           const titleB = resolveTransactionDisplay(b).mainTitle;
-          return titleA.localeCompare(titleB, "pt-BR");
+          return safeCompareStrings(titleA, titleB);
         }
         default:
           return 0;
@@ -493,8 +496,8 @@ export function ExtratoFinanceiroPdfModal({
                             </p>
                             {startDate && endDate && (
                               <p className="text-[9px] text-neutral-500 font-mono">
-                                ({format(parseISO(startDate), "dd/MM/yyyy")} a{" "}
-                                {format(parseISO(endDate), "dd/MM/yyyy")})
+                                ({safeFormatDate(startDate, "dd/MM/yyyy")} a{" "}
+                                {safeFormatDate(endDate, "dd/MM/yyyy")})
                               </p>
                             )}
                           </div>
@@ -612,19 +615,18 @@ export function ExtratoFinanceiroPdfModal({
                                   {/* Data de Vencimento e Pagamento */}
                                   <td className="py-1.5 px-2 font-mono text-[9px] overflow-hidden">
                                     <div className="font-bold text-neutral-900">
-                                      {format(parseISO(tx.due_date), "dd/MM/yyyy")}
+                                      {safeFormatDate(tx.due_date, "dd/MM/yyyy")}
                                     </div>
                                     {isPaid && tx.payment_date && (
                                       <div className="text-[7.5px] text-emerald-700 font-semibold truncate">
-                                        Pago: {format(parseISO(tx.payment_date), "dd/MM")}
+                                        Pago: {safeFormatDate(tx.payment_date, "dd/MM")}
                                       </div>
                                     )}
                                     {!isPaid &&
                                       tx.expected_payment_date &&
                                       tx.expected_payment_date !== tx.due_date && (
                                         <div className="text-[7.5px] text-blue-600 font-semibold truncate">
-                                          Prev:{" "}
-                                          {format(parseISO(tx.expected_payment_date), "dd/MM")}
+                                          Prev: {safeFormatDate(tx.expected_payment_date, "dd/MM")}
                                         </div>
                                       )}
                                   </td>

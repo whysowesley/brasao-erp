@@ -220,3 +220,91 @@ export interface Day4WeeksComparison {
   channelComparisons: DayChannelComparison[];
   incidents: SalesIncident[];
 }
+
+/* -------------------------------------------------------------------------- */
+/*             PROJEÇÃO DE VENDAS & ANÁLISE SEMANAL POR PESO DIÁRIO           */
+/* -------------------------------------------------------------------------- */
+
+export interface AtypicalDayEntry {
+  date: string; // YYYY-MM-DD
+  isAtypical: boolean; // se é feriado ou dia atípico
+  reason?: string | null; // ex: "Feriado", "Chuva torrencial", etc.
+  user_name?: string | null;
+  updated_at?: string | null;
+}
+
+export interface WeekdayWeightMetric {
+  dayOfWeekIndex: number; // 0=Domingo, 1=Segunda, ..., 6=Sábado
+  dayOfWeekName: string; // "Segunda-feira", etc.
+  dayOfWeekShort: string; // "Seg", etc.
+  totalOccurrencesInMonth: number; // Ex: 4 segundas no mês
+  pastOccurrencesCount: number; // Quantas já passaram ou foram lançadas
+  normalDaysCount: number; // Quantas foram normais (com vendas > 0 e NÃO atípicas)
+  atypicalDaysCount: number; // Quantas foram marcadas como atípicas/feriado
+  normalDaysSum: number; // Soma do faturamento dos dias normais
+  avgAmount: number; // normalDaysSum / normalDaysCount (peso médio por dia)
+  isFallback: boolean; // se usou média de fallback (ex: histórico anterior)
+  remainingDaysCount: number; // Quantas faltam no mês
+  projectedSubtotal: number; // avgAmount * remainingDaysCount
+}
+
+export type DayProjectionStatus = "realizado" | "projetado" | "hoje_realizado" | "hoje_pendente";
+
+export interface DayProjectionItem {
+  date: string; // YYYY-MM-DD
+  dayOfMonth: number; // 1 a 31
+  dayOfWeekIndex: number; // 0 a 6
+  dayOfWeekName: string; // "Segunda-feira"
+  dayOfWeekShort: string; // "Seg"
+  formattedDate: string; // "20/10"
+  weekNumber: number; // 1 a 5
+  isPast: boolean;
+  isToday: boolean;
+  isFuture: boolean;
+  hasActualSales: boolean;
+  actualAmount: number;
+  projectedAmount: number;
+  effectiveAmount: number; // actualAmount se realizado, senão projectedAmount
+  isAtypical: boolean;
+  atypicalReason?: string | null;
+  status: DayProjectionStatus;
+  statusLabel: string;
+  statusColorClass: string;
+  weekdayWeight: number; // média daquele dia da semana aplicada
+  cumulativeTotal: number;
+}
+
+export interface WeekProjectionGroup {
+  weekNumber: number; // 1, 2, 3, 4, 5
+  label: string; // "Semana 1 (01 a 07/10)", etc.
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  days: DayProjectionItem[];
+  totalRealizado: number;
+  totalProjetado: number;
+  totalPrevisto: number; // totalRealizado + totalProjetado
+  daysWithSalesCount: number;
+  daysProjectedCount: number;
+  atypicalDaysCount: number;
+  isCompleted: boolean;
+  isCurrentWeek: boolean;
+}
+
+export interface MonthSalesProjectionMetrics {
+  monthKey: string; // YYYY-MM
+  monthLabel: string; // "Outubro de 2026"
+  daysInMonth: number;
+  referenceDate: string; // Data de referência (hoje)
+  daysPassedCount: number;
+  daysRemainingCount: number;
+  totalRealizado: number;
+  totalProjetado: number;
+  totalPrevistoMes: number; // totalRealizado + totalProjetado
+  avgDiariaRealizada: number;
+  avgDiariaProjetada: number;
+  atypicalDaysCount: number;
+  weekdayWeights: WeekdayWeightMetric[];
+  weeks: WeekProjectionGroup[];
+  days: DayProjectionItem[];
+}
+

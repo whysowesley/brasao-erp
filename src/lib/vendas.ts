@@ -4,8 +4,10 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
+  setDoc,
   where,
   writeBatch,
   serverTimestamp,
@@ -24,6 +26,11 @@ import type {
   DayChannelComparison,
   HistoricalWeekPoint,
   DayComparisonStatus,
+  AtypicalDayEntry,
+  WeekdayWeightMetric,
+  DayProjectionItem,
+  WeekProjectionGroup,
+  MonthSalesProjectionMetrics,
 } from "@/lib/vendas-types";
 import { SALES_CHANNELS } from "@/lib/vendas-types";
 
@@ -925,3 +932,414 @@ export function useDay4WeeksAnalysis(targetDate: string) {
     },
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/*      PROJEÇÃO DE VENDAS & ANÁLISE SEMANAL POR PESO DE MÉDIA DIÁRIA         */
+/* -------------------------------------------------------------------------- */
+
+export const ATYPICAL_DAYS_DOC = "sales_atypical_days";
+
+export function useAtypicalDays() {
+  return useQuery({
+    queryKey: ["sales_atypical_days"],
+    queryFn: async (): Promise<Record<string, AtypicalDayEntry>> => {
+      try {
+        const snap = await getDoc(doc(db, "settings", ATYPICAL_DAYS_DOC));
+        if (!snap.exists()) return {};
+        const data = snap.data() as Record<string, unknown>;
+        const result: Record<string, AtypicalDayEntry> = {};
+
+        for (const [key, val] of Object.entries(data)) {
+          if (val && typeof val === "object") {
+            const entry = val as Record<string, unknown>;
+            result[key] = {
+              date: String(entry["date"] || key),
+              isAtypical: Boolean(entry["isAtypical"]),
+              reason: (entry["reason"] as string) || null,
+              user_name: (entry["user_name"] as string) || null,
+              updated_at: (entry["updated_at"] as string) || null,
+            };
+          }
+        }
+        return result;
+      } catch (err) {
+        console.warn("Aviso ao buscar dias atípicos de vendas:", err);
+        return {};
+      }
+    },
+  });
+}
+
+export function useToggleAtypicalDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      date,
+      isAtypical,
+      reason,
+      userName = "Administrador",
+    }: {
+      date: string;
+      isAtypical: boolean;
+      reason?: string | null;
+      userName?: string;
+    }) => {
+      const docRef = doc(db, "settings", ATYPICAL_DAYS_DOC);
+      const payload: Record<string, unknown> = {
+        [date]: {
+          date,
+          isAtypical,
+          reason: isAtypical ? (reason ? reason.trim() : "Feriado / Dia Atípico") : null,
+          user_name: userName,
+          updated_at: new Date().toISOString(),
+        },
+      };
+
+      await setDoc(docRef, payload, { merge: true });
+      return { date, isAtypical };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sales_atypical_days"] });
+      qc.invalidateQueries({ queryKey: ["daily_sales"] });
+    },
+  });
+}
+
+const WEEKDAY_FULL_NAMES = [
+  "Domingo",
+  "Segunda-feira",
+  "Terça-feira",
+  "Quarta-feira",
+  "Quinta-feira",
+  "Sexta-feira",
+  "Sábado",
+];
+
+const WEEKDAY_SHORT_NAMES = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+/**
+ * Calcula a análise semanal e a projeção de vendas do mês com base no peso médio
+ * de cada dia da semana (excluindo dias com feriado / atipicidade da base de média).
+ */
+export function computeWeeklySalesProjection(
+  allSales: DailySaleRecord[],
+  atypicalDays: Record<string, AtypicalDayEntry> = {},
+  monthKey: string = getCurrentMonthKey(),
+  referenceDate: string = getTodayDateString(),
+): MonthSalesProjectionMetrics {
+  const [yearStr, monthStr] = monthKey.split("-");
+  const year = parseInt(yearStr || "2026", 10);
+  const month = parseInt(monthStr || "10", 10);
+
+  // Total de dias no mês
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const monthLabel = getMonthLabel(monthKey);
+
+  // Agrupar registros do mês por data
+  const dateSalesMap = new Map<string, number>();
+  for (const r of allSales) {
+    if (r.date && r.date.startsWith(`${monthKey}-`)) {
+      const cur = dateSalesMap.get(r.date) || 0;
+      dateSalesMap.set(r.date, cur + (Number(r.amount) || 0));
+    }
+  }
+
+  // Estatísticas preliminares por dia da semana (0..6)
+  interface WeekdayAccumulator {
+    totalOccurrences: number;
+    pastOccurrences: number;
+    normalDaysCount: number;
+    atypicalDaysCount: number;
+    normalDaysSum: number;
+    remainingDaysCount: number;
+  }
+
+  const weekdayAcc: WeekdayAccumulator[] = Array.from({ length: 7 }, () => ({
+    totalOccurrences: 0,
+    pastOccurrences: 0,
+    normalDaysCount: 0,
+    atypicalDaysCount: 0,
+    normalDaysSum: 0,
+    remainingDaysCount: 0,
+  }));
+
+  // Primeiro passo: mapear todos os dias do mês e apurar os dados reais
+  interface TempDayInfo {
+    dayNum: number;
+    dateStr: string;
+    dayOfWeekIndex: number;
+    actualAmount: number;
+    hasSales: boolean;
+    isPast: boolean;
+    isToday: boolean;
+    isFuture: boolean;
+    isAtypical: boolean;
+    atypicalReason: string | null;
+  }
+
+  const tempDays: TempDayInfo[] = [];
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayStr = String(d).padStart(2, "0");
+    const dateStr = `${monthKey}-${dayStr}`;
+    const dayDate = new Date(year, month - 1, d);
+    const dayOfWeekIndex = dayDate.getDay();
+
+    const actualAmount = dateSalesMap.get(dateStr) || 0;
+    const hasSales = dateSalesMap.has(dateStr) && actualAmount > 0;
+
+    const isToday = dateStr === referenceDate;
+    const isPast = dateStr < referenceDate;
+    const isFuture = dateStr > referenceDate;
+
+    const atypicalEntry = atypicalDays[dateStr];
+    const isAtypical = Boolean(atypicalEntry?.isAtypical);
+    const atypicalReason = atypicalEntry?.reason || null;
+
+    const acc = weekdayAcc[dayOfWeekIndex]!;
+    acc.totalOccurrences++;
+
+    // Considera como realizado se tem vendas lançadas ou se é dia passado já registrado
+    const isDayResolved = hasSales || (isPast && dateSalesMap.has(dateStr));
+
+    if (isDayResolved) {
+      acc.pastOccurrences++;
+      if (isAtypical) {
+        acc.atypicalDaysCount++;
+      } else if (actualAmount > 0) {
+        acc.normalDaysCount++;
+        acc.normalDaysSum += actualAmount;
+      }
+    } else {
+      acc.remainingDaysCount++;
+    }
+
+    tempDays.push({
+      dayNum: d,
+      dateStr,
+      dayOfWeekIndex,
+      actualAmount,
+      hasSales,
+      isPast,
+      isToday,
+      isFuture,
+      isAtypical,
+      atypicalReason,
+    });
+  }
+
+  // Média geral do mês de fallback caso algum dia da semana ainda não tenha ocorrências normais
+  const totalNormalSumInMonth = weekdayAcc.reduce((acc, w) => acc + w.normalDaysSum, 0);
+  const totalNormalCountInMonth = weekdayAcc.reduce((acc, w) => acc + w.normalDaysCount, 0);
+  const generalMonthNormalAvg =
+    totalNormalCountInMonth > 0 ? totalNormalSumInMonth / totalNormalCountInMonth : 0;
+
+  // Segundo passo: calcular o peso médio de cada dia da semana
+  const weekdayWeights: WeekdayWeightMetric[] = weekdayAcc.map((acc, wIdx) => {
+    let avg = 0;
+    let isFallback = false;
+
+    if (acc.normalDaysCount > 0) {
+      avg = acc.normalDaysSum / acc.normalDaysCount;
+    } else {
+      // Tenta buscar no histórico geral (meses anteriores) para esse mesmo dia da semana
+      const pastNormalDaysOfSameWeekday = allSales.filter((r) => {
+        if (!r.date || r.date.startsWith(`${monthKey}-`)) return false;
+        const [ry, rm, rd] = r.date.split("-").map(Number);
+        if (!ry || !rm || !rd) return false;
+        const dt = new Date(ry, rm - 1, rd);
+        if (dt.getDay() !== wIdx) return false;
+        if (atypicalDays[r.date]?.isAtypical) return false;
+        return (r.amount || 0) > 0;
+      });
+
+      if (pastNormalDaysOfSameWeekday.length > 0) {
+        const dateSums = new Map<string, number>();
+        for (const r of pastNormalDaysOfSameWeekday) {
+          dateSums.set(r.date, (dateSums.get(r.date) || 0) + (r.amount || 0));
+        }
+        let total = 0;
+        dateSums.forEach((val) => (total += val));
+        avg = dateSums.size > 0 ? total / dateSums.size : generalMonthNormalAvg;
+        isFallback = true;
+      } else {
+        avg = generalMonthNormalAvg;
+        isFallback = true;
+      }
+    }
+
+    const projectedSubtotal = Math.round(avg * acc.remainingDaysCount * 100) / 100;
+
+    return {
+      dayOfWeekIndex: wIdx,
+      dayOfWeekName: WEEKDAY_FULL_NAMES[wIdx] || "",
+      dayOfWeekShort: WEEKDAY_SHORT_NAMES[wIdx] || "",
+      totalOccurrencesInMonth: acc.totalOccurrences,
+      pastOccurrencesCount: acc.pastOccurrences,
+      normalDaysCount: acc.normalDaysCount,
+      atypicalDaysCount: acc.atypicalDaysCount,
+      normalDaysSum: acc.normalDaysSum,
+      avgAmount: Math.round(avg * 100) / 100,
+      isFallback,
+      remainingDaysCount: acc.remainingDaysCount,
+      projectedSubtotal,
+    };
+  });
+
+  // Terceiro passo: atribuir realizado ou projetado para cada dia do mês
+  let cumulativeTotal = 0;
+  let totalRealizado = 0;
+  let totalProjetado = 0;
+  let daysPassedCount = 0;
+  let daysRemainingCount = 0;
+  let atypicalDaysCount = 0;
+
+  const days: DayProjectionItem[] = tempDays.map((td) => {
+    const wMetric = weekdayWeights[td.dayOfWeekIndex]!;
+    const isResolved = td.hasSales || (td.isPast && dateSalesMap.has(td.dateStr));
+
+    let actualAmount = 0;
+    let projectedAmount = 0;
+    let effectiveAmount = 0;
+    let status: DayProjectionStatus;
+    let statusLabel: string;
+    let statusColorClass: string;
+
+    if (td.isAtypical) {
+      atypicalDaysCount++;
+    }
+
+    if (isResolved) {
+      actualAmount = td.actualAmount;
+      effectiveAmount = actualAmount;
+      projectedAmount = 0;
+      totalRealizado += actualAmount;
+      daysPassedCount++;
+
+      if (td.isToday) {
+        status = "hoje_realizado";
+        statusLabel = "Hoje (Lançado)";
+        statusColorClass = "text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40 border-emerald-300";
+      } else {
+        status = "realizado";
+        statusLabel = "Realizado";
+        statusColorClass = "text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40 border-emerald-200";
+      }
+    } else {
+      actualAmount = 0;
+      projectedAmount = wMetric.avgAmount;
+      effectiveAmount = projectedAmount;
+      totalProjetado += projectedAmount;
+      daysRemainingCount++;
+
+      if (td.isToday) {
+        status = "hoje_pendente";
+        statusLabel = "Hoje (Projetado)";
+        statusColorClass = "text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40 border-amber-300";
+      } else {
+        status = "projetado";
+        statusLabel = "Projeção";
+        statusColorClass = "text-blue-700 bg-blue-50 dark:text-blue-300 dark:bg-blue-950/40 border-blue-200";
+      }
+    }
+
+    cumulativeTotal += effectiveAmount;
+
+    // Determina a semana do calendário (Segunda a Domingo)
+    // Para simplificar a visualização por semanas:
+    // Semana 1: dia 1 até o primeiro domingo (ou blocos de 7 dias)
+    return {
+      date: td.dateStr,
+      dayOfMonth: td.dayNum,
+      dayOfWeekIndex: td.dayOfWeekIndex,
+      dayOfWeekName: WEEKDAY_FULL_NAMES[td.dayOfWeekIndex] || "",
+      dayOfWeekShort: WEEKDAY_SHORT_NAMES[td.dayOfWeekIndex] || "",
+      formattedDate: `${String(td.dayNum).padStart(2, "0")}/${monthStr}`,
+      weekNumber: 1, // recalculado abaixo
+      isPast: td.isPast,
+      isToday: td.isToday,
+      isFuture: td.isFuture,
+      hasActualSales: td.hasSales,
+      actualAmount,
+      projectedAmount,
+      effectiveAmount,
+      isAtypical: td.isAtypical,
+      atypicalReason: td.atypicalReason,
+      status,
+      statusLabel,
+      statusColorClass,
+      weekdayWeight: wMetric.avgAmount,
+      cumulativeTotal: Math.round(cumulativeTotal * 100) / 100,
+    };
+  });
+
+  // Quarto passo: Agrupar os dias em Semanas operacionais
+  // Semana 1 começa no dia 1. A cada Domingo encerrado, a próxima Segunda inicia uma nova semana.
+  const weeks: WeekProjectionGroup[] = [];
+  let curWeekNum = 1;
+  let curWeekDays: DayProjectionItem[] = [];
+
+  for (let i = 0; i < days.length; i++) {
+    const item = days[i]!;
+    item.weekNumber = curWeekNum;
+    curWeekDays.push(item);
+
+    // Se for Domingo (dayOfWeekIndex === 0) ou último dia do mês, fecha a semana
+    const isSunday = item.dayOfWeekIndex === 0;
+    const isLastDay = i === days.length - 1;
+
+    if (isSunday || isLastDay) {
+      const startDay = curWeekDays[0]!;
+      const endDay = curWeekDays[curWeekDays.length - 1]!;
+      const weekRealizado = curWeekDays.reduce((acc, d) => acc + d.actualAmount, 0);
+      const weekProjetado = curWeekDays.reduce((acc, d) => acc + d.projectedAmount, 0);
+      const withSales = curWeekDays.filter((d) => d.hasActualSales).length;
+      const projectedCount = curWeekDays.filter((d) => d.projectedAmount > 0).length;
+      const atyCount = curWeekDays.filter((d) => d.isAtypical).length;
+
+      weeks.push({
+        weekNumber: curWeekNum,
+        label: `Semana ${curWeekNum} (${startDay.formattedDate} a ${endDay.formattedDate})`,
+        startDate: startDay.date,
+        endDate: endDay.date,
+        days: [...curWeekDays],
+        totalRealizado: Math.round(weekRealizado * 100) / 100,
+        totalProjetado: Math.round(weekProjetado * 100) / 100,
+        totalPrevisto: Math.round((weekRealizado + weekProjetado) * 100) / 100,
+        daysWithSalesCount: withSales,
+        daysProjectedCount: projectedCount,
+        atypicalDaysCount: atyCount,
+        isCompleted: curWeekDays.every((d) => d.hasActualSales),
+        isCurrentWeek: curWeekDays.some((d) => d.isToday),
+      });
+
+      curWeekNum++;
+      curWeekDays = [];
+    }
+  }
+
+  const totalPrevistoMes = Math.round((totalRealizado + totalProjetado) * 100) / 100;
+  const avgDiariaRealizada =
+    daysPassedCount > 0 ? Math.round((totalRealizado / daysPassedCount) * 100) / 100 : 0;
+  const avgDiariaProjetada =
+    daysRemainingCount > 0 ? Math.round((totalProjetado / daysRemainingCount) * 100) / 100 : 0;
+
+  return {
+    monthKey,
+    monthLabel,
+    daysInMonth,
+    referenceDate,
+    daysPassedCount,
+    daysRemainingCount,
+    totalRealizado: Math.round(totalRealizado * 100) / 100,
+    totalProjetado: Math.round(totalProjetado * 100) / 100,
+    totalPrevistoMes,
+    avgDiariaRealizada,
+    avgDiariaProjetada,
+    atypicalDaysCount,
+    weekdayWeights,
+    weeks,
+    days,
+  };
+}
+

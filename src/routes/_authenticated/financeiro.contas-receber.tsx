@@ -20,8 +20,9 @@ import {
   Sparkles,
   Check,
 } from "lucide-react";
-import { format, parseISO, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import { toast } from "sonner";
+import { safeFormatDate } from "@/lib/date-utils";
 
 import { PageHeader } from "@/components/PageHeader";
 import { FinanceiroStatCard } from "@/components/financeiro/FinanceiroStatCard";
@@ -94,8 +95,41 @@ export const Route = createFileRoute("/_authenticated/financeiro/contas-receber"
       },
     ],
   }),
+  errorComponent: ContasReceberErrorFallback,
   component: ContasReceberPage,
 });
+
+function ContasReceberErrorFallback({ error, reset }: { error: Error; reset: () => void }) {
+  return (
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        title="Contas a Receber"
+        description="Controle de recebimentos, faturamentos e receitas da Brasão."
+      />
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-4 max-w-xl mx-auto my-8">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+          <AlertTriangle className="h-6 w-6" />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-foreground">
+            Ocorreu um erro ao carregar as Contas a Receber
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {error?.message || "Erro inesperado ao carregar dados financeiros."}
+          </p>
+        </div>
+        <div className="flex justify-center gap-2">
+          <Button onClick={() => reset()} variant="default" size="sm">
+            Tentar novamente
+          </Button>
+          <Button onClick={() => window.location.reload()} variant="outline" size="sm">
+            Recarregar página
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function formatCurrency(val: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -567,7 +601,7 @@ function ContasReceberPage() {
                         )}`}
                       >
                         <TableCell className="text-xs font-medium">
-                          {format(parseISO(t.due_date), "dd/MM/yyyy")}
+                          {safeFormatDate(t.due_date, "dd/MM/yyyy")}
                         </TableCell>
 
                         <TableCell>
@@ -629,7 +663,7 @@ function ContasReceberPage() {
                         </TableCell>
 
                         <TableCell className="text-xs text-muted-foreground">
-                          {t.payment_date ? format(parseISO(t.payment_date), "dd/MM/yyyy") : "—"}
+                          {t.payment_date ? safeFormatDate(t.payment_date, "dd/MM/yyyy") : "—"}
                         </TableCell>
 
                         <TableCell className="text-right">

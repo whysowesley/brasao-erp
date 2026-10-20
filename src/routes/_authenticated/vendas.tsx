@@ -71,6 +71,7 @@ import { LancarVendaDialog } from "@/components/vendas/LancarVendaDialog";
 import { Sales4WeeksAnalysisCard } from "@/components/vendas/Sales4WeeksAnalysisCard";
 import { SalesIncidentsList } from "@/components/vendas/SalesIncidentsList";
 import { SalesIncidentDialog } from "@/components/vendas/SalesIncidentDialog";
+import { SalesWeeklyProjectionModule } from "@/components/vendas/SalesWeeklyProjectionModule";
 import {
   computeMonthSalesMetrics,
   formatCurrency,
@@ -535,6 +536,10 @@ function VendasPage() {
               <CalendarDays className="h-3.5 w-3.5" />
               Diário & Soma Mês
             </TabsTrigger>
+            <TabsTrigger value="projecao" className="gap-1.5 text-xs font-semibold">
+              <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+              Projeção & Semanas
+            </TabsTrigger>
             <TabsTrigger value="analise" className="gap-1.5 text-xs font-semibold">
               <LineChart className="h-3.5 w-3.5 text-primary" />
               Análise de Decisão (4 Semanas)
@@ -847,7 +852,20 @@ function VendasPage() {
           </Card>
         </TabsContent>
 
-        {/* TAB 2: GRÁFICOS & ANÁLISE DE CANAIS */}
+        {/* TAB 2: PROJEÇÃO SEMANAL POR PESO DE VENDA MÉDIA DIA */}
+        <TabsContent value="projecao" className="space-y-6 m-0">
+          <SalesWeeklyProjectionModule
+            salesRecords={records}
+            monthKey={selectedMonth}
+            onOpenSaleEntry={(date) => {
+              setEditingDate(date);
+              setDialogOpen(true);
+            }}
+            canWrite={canWrite}
+          />
+        </TabsContent>
+
+        {/* TAB 3: GRÁFICOS & ANÁLISE DE CANAIS */}
         <TabsContent value="graficos" className="space-y-6 m-0">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Gráfico 1: Evolução Diária & Acumulado */}

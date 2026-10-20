@@ -31,6 +31,7 @@ import type {
   TransactionComment,
   HighlightColor,
 } from "@/lib/financeiro-types";
+import { normalizeDateString } from "@/lib/date-utils";
 
 export type {
   FinancialTransaction,
@@ -384,12 +385,12 @@ export function useFinancialTransactions(filters?: FinancialFilters) {
           description: (data["description"] as string) || null,
           type: (data["type"] || "despesa") as TipoTransacao,
           amount: Number(data["amount"]) || 0,
-          due_date: (data["due_date"] as string) || today,
-          expected_payment_date: (data["expected_payment_date"] as string) || null,
-          issue_date: (data["issue_date"] as string) || null,
+          due_date: normalizeDateString(data["due_date"], today),
+          expected_payment_date: normalizeDateString(data["expected_payment_date"]) || null,
+          issue_date: normalizeDateString(data["issue_date"]) || null,
           code: (data["code"] as string | number) ?? null,
           order_index: typeof data["order_index"] === "number" ? data["order_index"] : null,
-          payment_date: (data["payment_date"] as string) || null,
+          payment_date: normalizeDateString(data["payment_date"]) || null,
           paid_amount:
             data["paid_amount"] !== undefined && data["paid_amount"] !== null
               ? Number(data["paid_amount"])
@@ -530,12 +531,12 @@ export function useFinancialTransaction(id: string | null) {
         description: (data["description"] as string) || null,
         type: (data["type"] || "despesa") as TipoTransacao,
         amount: Number(data["amount"]) || 0,
-        due_date: (data["due_date"] as string) || today,
-        expected_payment_date: (data["expected_payment_date"] as string) || null,
-        issue_date: (data["issue_date"] as string) || null,
+        due_date: normalizeDateString(data["due_date"], today),
+        expected_payment_date: normalizeDateString(data["expected_payment_date"]) || null,
+        issue_date: normalizeDateString(data["issue_date"]) || null,
         code: (data["code"] as string | number) ?? null,
         order_index: typeof data["order_index"] === "number" ? data["order_index"] : null,
-        payment_date: (data["payment_date"] as string) || null,
+        payment_date: normalizeDateString(data["payment_date"]) || null,
         paid_amount:
           data["paid_amount"] !== undefined && data["paid_amount"] !== null
             ? Number(data["paid_amount"])

@@ -28,9 +28,15 @@ import {
   Sparkles,
   Check,
 } from "lucide-react";
-import { format, parseISO, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import {
+  safeFormatDate,
+  safeParseDate,
+  safeCompareDates,
+  safeCompareStrings,
+} from "@/lib/date-utils";
 
 import { PageHeader } from "@/components/PageHeader";
 import { LancamentoDialog } from "@/components/financeiro/LancamentoDialog";
@@ -113,8 +119,41 @@ export const Route = createFileRoute("/_authenticated/financeiro/lancamentos")({
       },
     ],
   }),
+  errorComponent: LancamentosErrorFallback,
   component: LancamentosPage,
 });
+
+function LancamentosErrorFallback({ error, reset }: { error: Error; reset: () => void }) {
+  return (
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        title="Fluxo de Caixa"
+        description="Controle de entradas, saídas e compromissos financeiros"
+      />
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-4 max-w-xl mx-auto my-8">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+          <AlertTriangle className="h-6 w-6" />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-foreground">
+            Ocorreu um erro ao carregar o Fluxo de Caixa
+          </h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {error?.message || "Erro inesperado ao processar os lançamentos financeiros."}
+          </p>
+        </div>
+        <div className="flex justify-center gap-2">
+          <Button onClick={() => reset()} variant="default" size="sm">
+            Tentar novamente
+          </Button>
+          <Button onClick={() => window.location.reload()} variant="outline" size="sm">
+            Recarregar página
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function formatCurrency(val: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -286,7 +325,7 @@ function LancamentosPage() {
       return `Ano Atual (${new Date().getFullYear()})`;
     }
     if (periodPreset === "custom" && customStartDate && customEndDate) {
-      return `${format(parseISO(customStartDate), "dd/MM/yyyy")} até ${format(parseISO(customEndDate), "dd/MM/yyyy")}`;
+      return `${safeFormatDate(customStartDate, "dd/MM/yyyy")} até ${safeFormatDate(customEndDate, "dd/MM/yyyy")}`;
     }
     return "Todos os Lançamentos";
   }, [periodPreset, customStartDate, customEndDate]);
@@ -312,7 +351,7 @@ function LancamentosPage() {
     let desp = 0;
     for (const t of transactions) {
       if (t.status === "cancelado") continue;
-      const amt = t.status === "pago" && t.paid_amount ? t.paid_amount : t.amount;
+      const amt = Number(t.status === "pago" && t.paid_amount != null ? t.paid_amount : t.amount) || 0;
       if (t.type === "receita") rec += amt;
       else desp += amt;
     }
@@ -332,51 +371,51 @@ function LancamentosPage() {
       let comparison = 0;
       switch (sortField) {
         case "due_date":
-          comparison = a.due_date.localeCompare(b.due_date);
+          comparison = safeCompareDates(a.due_date, b.due_date);
           break;
         case "expected_payment_date": {
           const dateA = a.expected_payment_date || a.due_date;
           const dateB = b.expected_payment_date || b.due_date;
-          comparison = dateA.localeCompare(dateB);
+          comparison = safeCompareDates(dateA, dateB);
           break;
         }
         case "description": {
           const descA = a.description || "";
           const descB = b.description || "";
-          comparison = descA.localeCompare(descB, "pt-BR", { sensitivity: "base" });
+          comparison = safeCompareStrings(descA, descB, "base");
           break;
         }
         case "type":
-          comparison = a.type.localeCompare(b.type);
+          comparison = safeCompareStrings(a.type, b.type, "base");
           break;
         case "category": {
           const catA = a.category?.name || a.category_name || "";
           const catB = b.category?.name || b.category_name || "";
-          comparison = catA.localeCompare(catB, "pt-BR", { sensitivity: "base" });
+          comparison = safeCompareStrings(catA, catB, "base");
           break;
         }
         case "cost_center": {
           const ccA = a.cost_center?.name || a.cost_center_name || "";
           const ccB = b.cost_center?.name || b.cost_center_name || "";
-          comparison = ccA.localeCompare(ccB, "pt-BR", { sensitivity: "base" });
+          comparison = safeCompareStrings(ccA, ccB, "base");
           break;
         }
         case "supplier": {
           const supA = a.supplier?.name || a.supplier_name || "";
           const supB = b.supplier?.name || b.supplier_name || "";
-          comparison = supA.localeCompare(supB, "pt-BR", { sensitivity: "base" });
+          comparison = safeCompareStrings(supA, supB, "base");
           break;
         }
         case "amount": {
-          const amtA = a.status === "pago" && a.paid_amount ? a.paid_amount : a.amount;
-          const amtB = b.status === "pago" && b.paid_amount ? b.paid_amount : b.amount;
+          const amtA = Number(a.status === "pago" && a.paid_amount != null ? a.paid_amount : a.amount) || 0;
+          const amtB = Number(b.status === "pago" && b.paid_amount != null ? b.paid_amount : b.amount) || 0;
           comparison = amtA - amtB;
           break;
         }
         case "status": {
           const statusA = resolveTransactionStatus(a.status, a.due_date, today);
           const statusB = resolveTransactionStatus(b.status, b.due_date, today);
-          comparison = statusA.localeCompare(statusB);
+          comparison = safeCompareStrings(statusA, statusB, "base");
           break;
         }
         default:
@@ -961,10 +1000,10 @@ function LancamentosPage() {
                       {/* Dia de Vencimento (Original) */}
                       <TableCell className="text-xs font-medium">
                         <div>
-                          <span>{format(parseISO(t.due_date), "dd/MM/yyyy")}</span>
+                          <span>{safeFormatDate(t.due_date, "dd/MM/yyyy")}</span>
                           {isPago && t.payment_date && (
                             <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
-                              Pago em {format(parseISO(t.payment_date), "dd/MM")}
+                              Pago em {safeFormatDate(t.payment_date, "dd/MM")}
                             </p>
                           )}
                         </div>
@@ -987,7 +1026,7 @@ function LancamentosPage() {
                             >
                               <Calendar className="mr-1 h-3 w-3" />
                               {t.expected_payment_date
-                                ? format(parseISO(t.expected_payment_date), "dd/MM/yyyy")
+                                ? safeFormatDate(t.expected_payment_date, "dd/MM/yyyy")
                                 : "—"}
                             </Button>
                           </PopoverTrigger>
@@ -997,9 +1036,9 @@ function LancamentosPage() {
                               <CalendarPicker
                                 mode="single"
                                 selected={
-                                  t.expected_payment_date
-                                    ? parseISO(t.expected_payment_date)
-                                    : parseISO(t.due_date)
+                                  safeParseDate(t.expected_payment_date) ||
+                                  safeParseDate(t.due_date) ||
+                                  new Date()
                                 }
                                 onSelect={async (newDate) => {
                                   if (newDate) {
