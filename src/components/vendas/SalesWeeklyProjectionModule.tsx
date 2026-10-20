@@ -1,39 +1,30 @@
 import { useMemo, useState } from "react";
 import {
-  Calendar as CalendarIcon,
   CalendarDays,
   CalendarRange,
   ChevronDown,
   ChevronUp,
   CircleDollarSign,
-  DollarSign,
-  Download,
-  Filter,
-  HelpCircle,
-  Info,
-  Layers,
-  LineChart,
-  Palmtree,
   PartyPopper,
   Percent,
-  Plus,
-  RefreshCw,
   Sparkles,
   Table as TableIcon,
   TrendingUp,
-  AlertCircle,
+  TrendingDown,
+  AlertTriangle,
   CheckCircle2,
-  Clock,
-  ArrowRight,
   Flame,
+  ArrowUpRight,
+  ArrowDownRight,
+  Activity,
+  Layers,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Table,
   TableBody,
@@ -64,7 +55,6 @@ import type {
   DailySaleRecord,
   DayProjectionItem,
   MonthSalesProjectionMetrics,
-  WeekProjectionGroup,
   WeekdayWeightMetric,
 } from "@/lib/vendas-types";
 
@@ -83,8 +73,8 @@ export function SalesWeeklyProjectionModule({
 }: SalesWeeklyProjectionModuleProps) {
   const todayStr = useMemo(() => getTodayDateString(), []);
 
-  // View state: 'tabela' | 'calendario' | 'pesos'
-  const [viewMode, setViewMode] = useState<"tabela" | "calendario" | "pesos">("tabela");
+  // View state: 'tabela' | 'calendario' | 'dpi'
+  const [viewMode, setViewMode] = useState<"tabela" | "calendario" | "dpi">("tabela");
 
   // Filtro de exibição
   const [filterOnlyAtypical, setFilterOnlyAtypical] = useState<boolean>(false);
@@ -107,7 +97,7 @@ export function SalesWeeklyProjectionModule({
   const [atypicalReasonInput, setAtypicalReasonInput] = useState<string>("");
 
   // Firestore hooks
-  const { data: atypicalDays = {}, isLoading: loadingAtypical } = useAtypicalDays();
+  const { data: atypicalDays = {} } = useAtypicalDays();
   const toggleAtypicalMutation = useToggleAtypicalDay();
 
   // Cálculo da Projeção e Análise Semanal com base nas vendas reais e nos dias atípicos
@@ -180,12 +170,6 @@ export function SalesWeeklyProjectionModule({
       ? Math.min(100, Math.round((projection.totalRealizado / projection.totalPrevistoMes) * 100))
       : 0;
 
-  // Dias restantes vs dias do mês
-  const percentDaysPassed =
-    projection.daysInMonth > 0
-      ? Math.round((projection.daysPassedCount / projection.daysInMonth) * 100)
-      : 0;
-
   return (
     <div className="space-y-6">
       {/* BANNER INFORMATIVO EXPLICATIVO */}
@@ -209,13 +193,14 @@ export function SalesWeeklyProjectionModule({
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Os dias restantes do mês são projetados individualmente pelo peso real de cada dia
-                  (ex: média de todas as segundas-feiras normais). Feriados e dias atípicos podem
-                  ser marcados com a flag{" "}
+                  Cada dia possui sua <strong>Projeção</strong> calculada por histórico diário
+                  (média de todas as segundas, terças, etc.). Dias já faturados exibem a{" "}
+                  <strong>diferença exata</strong> em relação à projeção (verde se superou, vermelho
+                  se ficou abaixo). Feriados e dias atípicos podem ser marcados com a flag{" "}
                   <span className="font-semibold text-amber-700 dark:text-amber-400">
                     &ldquo;Feriado/Atípico&rdquo;
                   </span>{" "}
-                  para serem desconsiderados do cálculo das médias normais.
+                  para serem desconsiderados do divisor da média.
                 </p>
               </div>
             </div>
@@ -241,20 +226,20 @@ export function SalesWeeklyProjectionModule({
                 <span>Calendário</span>
               </Button>
               <Button
-                variant={viewMode === "pesos" ? "default" : "ghost"}
+                variant={viewMode === "dpi" ? "default" : "ghost"}
                 size="sm"
                 className="h-8 text-xs gap-1.5"
-                onClick={() => setViewMode("pesos")}
+                onClick={() => setViewMode("dpi")}
               >
-                <Percent className="h-3.5 w-3.5" />
-                <span>Pesos Diários</span>
+                <Activity className="h-3.5 w-3.5 text-primary" />
+                <span>DPI / Diagnóstico Diário</span>
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* CARDS DE RESUMO EXECUTIVO */}
+      {/* QUADRANTES EXECUTIVOS COM DIAGNÓSTICO INTEGRADO */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Faturamento Realizado */}
         <Card className="border-border/80 shadow-xs">
@@ -326,12 +311,12 @@ export function SalesWeeklyProjectionModule({
           <CardContent className="pt-0 text-xs text-muted-foreground flex items-center justify-between">
             <span>Realizado + Projeção</span>
             <Badge className="bg-primary/15 text-primary border-primary/30 text-[10px] font-bold">
-              {percentCompleted}% do total
+              {percentCompleted}% atingido
             </Badge>
           </CardContent>
         </Card>
 
-        {/* Card 4: Dias Atípicos / Feriados */}
+        {/* Card 4: Feriados & Exceções */}
         <Card className="border-border/80 shadow-xs">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -355,29 +340,117 @@ export function SalesWeeklyProjectionModule({
                 Excluídos do divisor das médias
               </span>
             ) : (
-              <span>Nenhum feriado/atipicidade no mês</span>
+              <span>Nenhum feriado no mês</span>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* PESOS POR DIA DA SEMANA (CHIPS / CARDS EXPANSÍVEIS) */}
+      {/* PAINEL DE DIAGNÓSTICO RÁPIDO DO MÊS (RECORDES & ALERTAS DIÁRIOS) */}
+      <Card className="border-border/80 bg-muted/20 shadow-xs">
+        <CardContent className="p-3.5 sm:p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 divide-y md:divide-y-0 md:divide-x divide-border">
+            {/* Recorde do Mês */}
+            <div className="flex items-center gap-3 pr-2">
+              <div className="h-9 w-9 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <Flame className="h-5 w-5" />
+              </div>
+              <div className="text-xs">
+                <span className="text-muted-foreground block text-[11px] font-medium">
+                  Melhor Dia do Mês (Recorde)
+                </span>
+                {projection.bestDay ? (
+                  <div className="flex items-baseline gap-1.5 mt-0.5">
+                    <span className="font-extrabold text-foreground text-sm">
+                      {formatCurrency(projection.bestDay.actualAmount)}
+                    </span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                      ({projection.bestDay.dayOfWeekShort} {projection.bestDay.formattedDate})
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">Aguardando lançamentos</span>
+                )}
+              </div>
+            </div>
+
+            {/* Menor Faturamento */}
+            <div className="flex items-center gap-3 pt-3 md:pt-0 md:px-3">
+              <div className="h-9 w-9 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                <TrendingDown className="h-5 w-5" />
+              </div>
+              <div className="text-xs">
+                <span className="text-muted-foreground block text-[11px] font-medium">
+                  Menor Dia de Vendas (Piso)
+                </span>
+                {projection.worstDay ? (
+                  <div className="flex items-baseline gap-1.5 mt-0.5">
+                    <span className="font-extrabold text-foreground text-sm">
+                      {formatCurrency(projection.worstDay.actualAmount)}
+                    </span>
+                    <span className="text-rose-600 dark:text-rose-400 font-semibold">
+                      ({projection.worstDay.dayOfWeekShort} {projection.worstDay.formattedDate})
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">Aguardando lançamentos</span>
+                )}
+              </div>
+            </div>
+
+            {/* Alertas de Dias Críticos */}
+            <div className="flex items-center gap-3 pt-3 md:pt-0 md:pl-3">
+              <div className="h-9 w-9 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="text-xs">
+                <span className="text-muted-foreground block text-[11px] font-medium">
+                  Dias Abaixo da Média (&lt; -15%)
+                </span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="font-extrabold text-foreground text-sm">
+                    {projection.underperformingDays.length}{" "}
+                    {projection.underperformingDays.length === 1
+                      ? "dia em alerta"
+                      : "dias em alerta"}
+                  </span>
+                  {projection.underperformingDays.length > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300"
+                    >
+                      Atenção
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* PESOS POR DIA DA SEMANA (RESUMO COMPACTO) */}
       <Card className="border-border/80 shadow-xs">
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle className="text-sm font-semibold tracking-tight flex items-center gap-2">
                 <Percent className="h-4 w-4 text-primary" />
-                <span>Pesos das Médias por Dia da Semana ({projection.monthLabel})</span>
+                <span>Pesos das Médias Diárias ({projection.monthLabel})</span>
               </CardTitle>
               <CardDescription className="text-xs">
                 Média calculada apenas sobre dias normais (feriados e atípicos não entram no
                 divisor).
               </CardDescription>
             </div>
-            <Badge variant="outline" className="text-[11px] bg-muted/40">
-              Base do cálculo de projeção
-            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-primary"
+              onClick={() => setViewMode("dpi")}
+            >
+              Ver Diagnóstico Detalhado &rarr;
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
@@ -409,7 +482,7 @@ export function SalesWeeklyProjectionModule({
 
                   <div className="mt-2.5 pt-2 border-t border-border/60 text-[10px] text-muted-foreground space-y-0.5">
                     <div className="flex justify-between">
-                      <span>Base de cálculo:</span>
+                      <span>Base:</span>
                       <span className="font-semibold text-foreground">
                         {w.normalDaysCount} de {w.totalOccurrencesInMonth}d
                       </span>
@@ -417,11 +490,11 @@ export function SalesWeeklyProjectionModule({
                     {w.atypicalDaysCount > 0 && (
                       <div className="flex justify-between text-amber-600 dark:text-amber-400 font-medium">
                         <span>Feriados:</span>
-                        <span>-{w.atypicalDaysCount} isolado(s)</span>
+                        <span>-{w.atypicalDaysCount}d</span>
                       </div>
                     )}
                     <div className="flex justify-between text-blue-600 dark:text-blue-400 font-semibold">
-                      <span>Restantes:</span>
+                      <span>Restam:</span>
                       <span>
                         {w.remainingDaysCount}d ({formatCurrency(w.projectedSubtotal)})
                       </span>
@@ -434,10 +507,10 @@ export function SalesWeeklyProjectionModule({
         </CardContent>
       </Card>
 
-      {/* VISUALIZAÇÃO 1: TABELA POR SEMANAS */}
+      {/* VISUALIZAÇÃO 1: TABELA POR SEMANAS COM HISTÓRICO DE PROJEÇÃO E OBSERVAÇÃO DE DIFERENÇA */}
       {viewMode === "tabela" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-primary" />
               <span>Detalhamento Semanal & Projeção Diária</span>
@@ -465,24 +538,28 @@ export function SalesWeeklyProjectionModule({
               <Card
                 key={week.weekNumber}
                 className={`border-border/80 shadow-xs transition-colors ${
-                  week.isCurrentWeek ? "ring-1 ring-primary/30" : ""
+                  week.isCurrentWeek ? "ring-1 ring-primary/40 bg-card" : ""
                 }`}
               >
-                {/* Cabeçalho da Semana */}
+                {/* Cabeçalho da Semana / Quadrante */}
                 <div
-                  className="p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3 bg-muted/20 cursor-pointer select-none hover:bg-muted/40 transition-colors"
+                  className="p-3.5 sm:p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-muted/20 cursor-pointer select-none hover:bg-muted/40 transition-colors"
                   onClick={() => toggleWeek(week.weekNumber)}
                 >
-                  <div className="flex items-center gap-3">
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0">
+                  <div className="flex items-start sm:items-center gap-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 shrink-0 mt-0.5 sm:mt-0"
+                    >
                       {isExpanded ? (
                         <ChevronUp className="h-4 w-4" />
                       ) : (
                         <ChevronDown className="h-4 w-4" />
                       )}
                     </Button>
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-bold text-foreground">{week.label}</span>
                         {week.isCurrentWeek && (
                           <Badge className="bg-primary/15 text-primary border-primary/30 text-[10px] font-bold">
@@ -494,17 +571,53 @@ export function SalesWeeklyProjectionModule({
                             100% Realizada
                           </Badge>
                         )}
+                        {/* Peso % no mês */}
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] font-semibold bg-background"
+                        >
+                          {week.weightPercentOfMonth}% do mês
+                        </Badge>
+                        {/* Badge de Saúde da Semana */}
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] font-bold ${
+                            week.healthStatus === "saudavel"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300"
+                              : week.healthStatus === "alerta"
+                                ? "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300"
+                                : "bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300"
+                          }`}
+                        >
+                          {week.healthLabel}
+                        </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {week.daysWithSalesCount} dias realizados · {week.daysProjectedCount} dias
-                        projetados
-                        {week.atypicalDaysCount > 0 && ` · ${week.atypicalDaysCount} feriado(s)`}
-                      </p>
+
+                      {/* Comparativos com Semanas Anteriores */}
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
+                        <span>
+                          {week.daysWithSalesCount} dias realizados · {week.daysProjectedCount} dias
+                          projetados
+                        </span>
+                        {week.comparisons.map((c) => (
+                          <span
+                            key={c.targetWeekNumber}
+                            className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded font-semibold text-[10px] ${
+                              c.diffPercent >= 0
+                                ? "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30"
+                                : "text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30"
+                            }`}
+                          >
+                            vs Sem. {c.targetWeekNumber}: {c.diffPercent >= 0 ? "+" : ""}
+                            {c.diffPercent.toFixed(1)}%
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Totais da Semana */}
-                  <div className="flex items-center gap-3 sm:gap-6 text-xs">
+                  {/* Totais do Quadrante Semanal */}
+                  <div className="flex items-center gap-3 sm:gap-6 text-xs pl-10 md:pl-0">
                     <div>
                       <span className="text-muted-foreground block text-[10px]">Realizado</span>
                       <span className="font-bold text-emerald-600 dark:text-emerald-400">
@@ -519,7 +632,7 @@ export function SalesWeeklyProjectionModule({
                     </div>
                     <div className="border-l border-border/80 pl-3 sm:pl-6">
                       <span className="text-muted-foreground block text-[10px] font-semibold text-primary">
-                        Total Previsto
+                        Soma da Semana
                       </span>
                       <span className="font-extrabold text-sm text-foreground">
                         {formatCurrency(week.totalPrevisto)}
@@ -534,14 +647,14 @@ export function SalesWeeklyProjectionModule({
                     <Table>
                       <TableHeader className="bg-muted/10 text-xs">
                         <TableRow>
-                          <TableHead className="w-28">Data</TableHead>
-                          <TableHead className="w-32">Dia da Semana</TableHead>
-                          <TableHead className="w-32">Status</TableHead>
+                          <TableHead className="w-24">Data</TableHead>
+                          <TableHead className="w-28">Dia da Semana</TableHead>
+                          <TableHead className="w-28">Status</TableHead>
                           <TableHead className="text-right w-36">Venda Realizada</TableHead>
-                          <TableHead className="text-right w-36">Projeção (Peso)</TableHead>
-                          <TableHead className="text-right w-36">Efetivo Acumulado</TableHead>
-                          <TableHead className="w-56 text-center">Feriado / Atípico</TableHead>
-                          <TableHead className="text-right w-24">Ação</TableHead>
+                          <TableHead className="text-right w-44">Projeção</TableHead>
+                          <TableHead className="text-right w-32">Acumulado</TableHead>
+                          <TableHead className="w-48 text-center">Feriado / Atípico</TableHead>
+                          <TableHead className="text-right w-20">Ação</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody className="text-xs">
@@ -589,17 +702,45 @@ export function SalesWeeklyProjectionModule({
                                 {isRealized ? formatCurrency(day.actualAmount) : "—"}
                               </TableCell>
 
-                              {/* Projeção */}
+                              {/* Projeção (Com Histórico Calculado e Observação de Diferença) */}
                               <TableCell className="text-right">
-                                {!isRealized ? (
-                                  <div className="font-bold text-blue-700 dark:text-blue-400">
-                                    {formatCurrency(day.projectedAmount)}
-                                    <span className="block text-[9px] font-normal text-muted-foreground">
-                                      Peso: {formatCurrency(day.weekdayWeight)}
+                                {isRealized ? (
+                                  <div>
+                                    {/* Valor calculado de projeção em azul */}
+                                    <span className="font-bold text-blue-700 dark:text-blue-400">
+                                      {formatCurrency(day.projectionBenchmark)}
                                     </span>
+                                    {/* Observação de Diferença abaixo em tamanho pequeno */}
+                                    {day.diffAmount !== null && (
+                                      <div
+                                        className={`text-[10px] font-semibold tracking-tight mt-0.5 flex items-center justify-end gap-0.5 ${
+                                          day.diffAmount > 0
+                                            ? "text-emerald-600 dark:text-emerald-400"
+                                            : day.diffAmount < 0
+                                              ? "text-rose-600 dark:text-rose-400"
+                                              : "text-muted-foreground"
+                                        }`}
+                                      >
+                                        <span>
+                                          Diferença: {day.diffAmount > 0 ? "+" : ""}
+                                          {formatCurrency(day.diffAmount)} (
+                                          {day.diffPercent !== null && day.diffPercent > 0
+                                            ? "+"
+                                            : ""}
+                                          {day.diffPercent?.toFixed(1)}%)
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 ) : (
-                                  <span className="text-muted-foreground">—</span>
+                                  <div>
+                                    <span className="font-bold text-blue-700 dark:text-blue-400">
+                                      {formatCurrency(day.projectedAmount)}
+                                    </span>
+                                    <span className="block text-[9px] text-muted-foreground">
+                                      Previsto (peso de {day.dayOfWeekShort})
+                                    </span>
+                                  </div>
                                 )}
                               </TableCell>
 
@@ -610,7 +751,7 @@ export function SalesWeeklyProjectionModule({
 
                               {/* Toggle de Feriado / Atipicidade */}
                               <TableCell className="text-center">
-                                <div className="flex items-center justify-center gap-2">
+                                <div className="flex items-center justify-center gap-1.5">
                                   <button
                                     type="button"
                                     onClick={() => handleQuickToggleAtypical(day)}
@@ -620,14 +761,14 @@ export function SalesWeeklyProjectionModule({
                                         ? "Clique para remover status de Feriado/Atípico (voltará a ser usado no cálculo da média)"
                                         : "Clique para marcar como Feriado/Atípico (será EXCLUÍDO da base de cálculo da média)"
                                     }
-                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
+                                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold border transition-all cursor-pointer ${
                                       day.isAtypical
                                         ? "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-400/50 shadow-2xs"
                                         : "bg-background text-muted-foreground border-border/80 hover:text-foreground hover:bg-muted/40"
                                     }`}
                                   >
                                     <PartyPopper
-                                      className={`h-3.5 w-3.5 ${
+                                      className={`h-3 w-3 ${
                                         day.isAtypical ? "text-amber-600" : "opacity-40"
                                       }`}
                                     />
@@ -675,7 +816,7 @@ export function SalesWeeklyProjectionModule({
         </div>
       )}
 
-      {/* VISUALIZAÇÃO 2: CALENDÁRIO VISUAL */}
+      {/* VISUALIZAÇÃO 2: CALENDÁRIO VISUAL COM HISTÓRICO DE PROJEÇÃO */}
       {viewMode === "calendario" && (
         <Card className="border-border/80 shadow-xs">
           <CardHeader className="pb-3">
@@ -685,7 +826,8 @@ export function SalesWeeklyProjectionModule({
                   Calendário Mensal de Vendas & Projeções ({projection.monthLabel})
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Visão em grade com cada dia indicando faturamento real ou valor projetado.
+                  Visão em grade mensal mostrando o faturamento realizado, a projeção calculada e a
+                  diferença.
                 </CardDescription>
               </div>
 
@@ -736,7 +878,7 @@ export function SalesWeeklyProjectionModule({
                   return (
                     <div
                       key={day.date}
-                      className={`min-h-[100px] p-2 flex flex-col justify-between transition-colors relative group ${
+                      className={`min-h-[110px] p-2 flex flex-col justify-between transition-colors relative group ${
                         day.isToday
                           ? "bg-primary/5 ring-2 ring-primary/40"
                           : day.isAtypical
@@ -744,7 +886,7 @@ export function SalesWeeklyProjectionModule({
                             : "bg-card hover:bg-muted/20"
                       }`}
                     >
-                      {/* Topo do dia: número do dia + badge hoje */}
+                      {/* Topo do dia */}
                       <div className="flex items-center justify-between">
                         <span
                           className={`text-xs font-bold ${
@@ -763,8 +905,8 @@ export function SalesWeeklyProjectionModule({
                         )}
                       </div>
 
-                      {/* Valor do dia */}
-                      <div className="my-1.5 text-center">
+                      {/* Conteúdo de valores do dia */}
+                      <div className="my-1 text-center space-y-1">
                         {isRealized ? (
                           <div className="rounded bg-emerald-500/10 px-1.5 py-1 border border-emerald-500/20">
                             <span className="text-[9px] font-semibold text-emerald-700 dark:text-emerald-300 block uppercase">
@@ -773,6 +915,24 @@ export function SalesWeeklyProjectionModule({
                             <span className="text-xs sm:text-sm font-extrabold text-emerald-800 dark:text-emerald-300">
                               {formatCurrency(day.actualAmount)}
                             </span>
+                            {/* Projeção e Diferença */}
+                            <div className="pt-0.5 border-t border-emerald-500/20 mt-0.5 text-[9px]">
+                              <span className="text-blue-700 dark:text-blue-400 font-medium">
+                                Proj: {formatCurrency(day.projectionBenchmark)}
+                              </span>
+                              {day.diffAmount !== null && (
+                                <span
+                                  className={`block font-bold ${
+                                    day.diffAmount >= 0
+                                      ? "text-emerald-700 dark:text-emerald-400"
+                                      : "text-rose-600 dark:text-rose-400"
+                                  }`}
+                                >
+                                  {day.diffAmount >= 0 ? "+" : ""}
+                                  {day.diffPercent?.toFixed(0)}%
+                                </span>
+                              )}
+                            </div>
                           </div>
                         ) : (
                           <div className="rounded bg-blue-500/10 px-1.5 py-1 border border-blue-500/20 border-dashed">
@@ -786,7 +946,7 @@ export function SalesWeeklyProjectionModule({
                         )}
                       </div>
 
-                      {/* Rodapé do dia: Feriado / Atípico */}
+                      {/* Rodapé do dia */}
                       <div className="flex items-center justify-between text-[10px]">
                         {day.isAtypical ? (
                           <Badge
@@ -827,87 +987,147 @@ export function SalesWeeklyProjectionModule({
         </Card>
       )}
 
-      {/* VISUALIZAÇÃO 3: PESOS E COMPARAÇÃO DAS MÉDIAS */}
-      {viewMode === "pesos" && (
-        <Card className="border-border/80 shadow-xs">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold tracking-tight">
-              Análise Ponderada das Vendas por Dia da Semana
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Demonstrativo de como o racional de peso diário compõe o faturamento total projetado
-              até o fechamento do mês.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader className="text-xs bg-muted/20">
-                  <TableRow>
-                    <TableHead>Dia da Semana</TableHead>
-                    <TableHead className="text-center">Total no Mês</TableHead>
-                    <TableHead className="text-center">Dias Realizados (Normais)</TableHead>
-                    <TableHead className="text-center">Feriados / Atípicos</TableHead>
-                    <TableHead className="text-right">Faturamento dos Dias Normais</TableHead>
-                    <TableHead className="text-right">Média do Dia (Peso)</TableHead>
-                    <TableHead className="text-center">Dias Restantes</TableHead>
-                    <TableHead className="text-right">Subtotal Projetado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="text-xs">
-                  {projection.weekdayWeights.map((w) => (
-                    <TableRow key={w.dayOfWeekIndex} className="hover:bg-muted/30">
-                      <TableCell className="font-bold text-foreground">{w.dayOfWeekName}</TableCell>
-                      <TableCell className="text-center">{w.totalOccurrencesInMonth}x</TableCell>
-                      <TableCell className="text-center font-semibold text-emerald-600 dark:text-emerald-400">
-                        {w.normalDaysCount}x
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {w.atypicalDaysCount > 0 ? (
-                          <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300 text-[10px]">
-                            {w.atypicalDaysCount}x excluído(s)
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">0</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(w.normalDaysSum)}
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-foreground">
-                        {formatCurrency(w.avgAmount)}
-                        {w.isFallback && (
-                          <span className="block text-[9px] text-muted-foreground font-normal">
-                            (Média Histórica)
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center font-semibold text-blue-600 dark:text-blue-400">
-                        {w.remainingDaysCount}x
-                      </TableCell>
-                      <TableCell className="text-right font-extrabold text-blue-700 dark:text-blue-300">
-                        {formatCurrency(w.projectedSubtotal)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-                <TableFooter className="text-xs font-bold bg-muted/40">
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-right">
-                      Total Projetado para os Dias Restantes:
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {projection.daysRemainingCount} dias
-                    </TableCell>
-                    <TableCell className="text-right text-sm text-blue-700 dark:text-blue-300">
-                      {formatCurrency(projection.totalProjetado)}
-                    </TableCell>
-                  </TableRow>
-                </TableFooter>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+      {/* VISUALIZAÇÃO 3: DPI & DIAGNÓSTICO DETALHADO POR DIA DA SEMANA (SEGUNDAS, TERÇAS...) */}
+      {viewMode === "dpi" && (
+        <div className="space-y-6">
+          <Card className="border-border/80 shadow-xs">
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base font-semibold tracking-tight flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-primary" />
+                    <span>DPI: Diagnóstico de Desempenho Diário por Dia da Semana</span>
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Analise todas as Segundas-feiras, Terças-feiras, etc., para descobrir
+                    consistência de faturamento, variações atípicas e gargalos em dias específicos.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="text-xs font-semibold bg-muted/40">
+                  Análise Comparativa Diária
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Grade de Análise Individual por Dia da Semana (Segunda a Domingo) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {projection.weekdayWeights.map((w) => {
+                  return (
+                    <Card key={w.dayOfWeekIndex} className="border-border/80 bg-card shadow-2xs">
+                      <CardHeader className="pb-2.5 pt-3.5 px-4 bg-muted/20 border-b border-border/60">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-sm text-foreground">
+                              {w.dayOfWeekName}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] font-bold ${
+                                w.healthStatus === "saudavel"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                  : w.healthStatus === "alerta"
+                                    ? "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300"
+                                    : "bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300"
+                              }`}
+                            >
+                              {w.healthStatus === "saudavel"
+                                ? "Desempenho Saudável"
+                                : w.healthStatus === "alerta"
+                                  ? "Atenção: Quedas Frequentes"
+                                  : "Estável / Na Média"}
+                            </Badge>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-muted-foreground block">
+                              Média do Dia
+                            </span>
+                            <span className="font-extrabold text-sm text-foreground">
+                              {formatCurrency(w.avgAmount)}
+                            </span>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-3.5 space-y-2 text-xs">
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader className="text-[11px] bg-muted/10">
+                              <TableRow>
+                                <TableHead className="w-20">Data</TableHead>
+                                <TableHead className="text-right">Realizado</TableHead>
+                                <TableHead className="text-right">Projeção</TableHead>
+                                <TableHead className="text-right">Diferença</TableHead>
+                                <TableHead className="text-center w-28">Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody className="text-[11px]">
+                              {w.occurrences.map((occ) => (
+                                <TableRow key={occ.date} className="hover:bg-muted/30">
+                                  <TableCell className="font-mono font-semibold">
+                                    {occ.formattedDate}
+                                  </TableCell>
+                                  <TableCell className="text-right font-bold text-emerald-700 dark:text-emerald-400">
+                                    {occ.isRealized ? formatCurrency(occ.actualAmount) : "—"}
+                                  </TableCell>
+                                  <TableCell className="text-right text-blue-700 dark:text-blue-400 font-medium">
+                                    {formatCurrency(occ.projectionAmount)}
+                                  </TableCell>
+                                  <TableCell
+                                    className={`text-right font-bold ${
+                                      occ.diffAmount !== null && occ.diffAmount > 0
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : occ.diffAmount !== null && occ.diffAmount < 0
+                                          ? "text-rose-600 dark:text-rose-400"
+                                          : "text-muted-foreground"
+                                    }`}
+                                  >
+                                    {occ.diffAmount !== null
+                                      ? `${occ.diffAmount > 0 ? "+" : ""}${formatCurrency(
+                                          occ.diffAmount,
+                                        )} (${occ.diffPercent !== null && occ.diffPercent > 0 ? "+" : ""}${occ.diffPercent?.toFixed(0)}%)`
+                                      : "—"}
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    {occ.isAtypical ? (
+                                      <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300 text-[9px]">
+                                        Feriado
+                                      </Badge>
+                                    ) : !occ.isRealized ? (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-blue-600 border-blue-200 text-[9px]"
+                                      >
+                                        Projetado
+                                      </Badge>
+                                    ) : (occ.diffPercent ?? 0) >= 3 ? (
+                                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 text-[9px]">
+                                        Acima
+                                      </Badge>
+                                    ) : (occ.diffPercent ?? 0) <= -8 ? (
+                                      <Badge className="bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 text-[9px]">
+                                        Abaixo
+                                      </Badge>
+                                    ) : (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-muted-foreground text-[9px]"
+                                      >
+                                        Na Média
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* MODAL PARA EDITAR MOTIVO DA ATIPICIDADE/FERIADO */}

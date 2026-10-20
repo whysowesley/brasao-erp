@@ -233,6 +233,20 @@ export interface AtypicalDayEntry {
   updated_at?: string | null;
 }
 
+export interface WeekdayOccurrenceDetail {
+  date: string;
+  formattedDate: string;
+  dayOfMonth: number;
+  actualAmount: number;
+  projectionAmount: number;
+  diffAmount: number | null;
+  diffPercent: number | null;
+  isAtypical: boolean;
+  atypicalReason?: string | null;
+  isRealized: boolean;
+  status: "acima" | "media" | "abaixo" | "projetado" | "feriado";
+}
+
 export interface WeekdayWeightMetric {
   dayOfWeekIndex: number; // 0=Domingo, 1=Segunda, ..., 6=Sábado
   dayOfWeekName: string; // "Segunda-feira", etc.
@@ -246,6 +260,10 @@ export interface WeekdayWeightMetric {
   isFallback: boolean; // se usou média de fallback (ex: histórico anterior)
   remainingDaysCount: number; // Quantas faltam no mês
   projectedSubtotal: number; // avgAmount * remainingDaysCount
+  occurrences: WeekdayOccurrenceDetail[];
+  bestOccurrence?: WeekdayOccurrenceDetail | null;
+  worstOccurrence?: WeekdayOccurrenceDetail | null;
+  healthStatus: "saudavel" | "estavel" | "alerta";
 }
 
 export type DayProjectionStatus = "realizado" | "projetado" | "hoje_realizado" | "hoje_pendente";
@@ -265,6 +283,10 @@ export interface DayProjectionItem {
   actualAmount: number;
   projectedAmount: number;
   effectiveAmount: number; // actualAmount se realizado, senão projectedAmount
+  projectionBenchmark: number; // O valor da projeção calculada (peso do dia)
+  diffAmount: number | null; // actualAmount - projectionBenchmark (se realizado)
+  diffPercent: number | null; // ((actualAmount - projectionBenchmark) / projectionBenchmark) * 100
+  performanceStatus: "acima" | "media" | "abaixo" | "projetado";
   isAtypical: boolean;
   atypicalReason?: string | null;
   status: DayProjectionStatus;
@@ -272,6 +294,13 @@ export interface DayProjectionItem {
   statusColorClass: string;
   weekdayWeight: number; // média daquele dia da semana aplicada
   cumulativeTotal: number;
+}
+
+export interface WeekComparisonItem {
+  targetWeekNumber: number;
+  targetLabel: string;
+  diffPercent: number; // +10.5 ou -8.2
+  isHigher: boolean;
 }
 
 export interface WeekProjectionGroup {
@@ -288,6 +317,12 @@ export interface WeekProjectionGroup {
   atypicalDaysCount: number;
   isCompleted: boolean;
   isCurrentWeek: boolean;
+  weightPercentOfMonth: number; // (totalPrevisto / totalPrevistoMes) * 100
+  comparisons: WeekComparisonItem[]; // vs Semana 1, Semana 2, etc.
+  diffVsPreviousWeek: number | null; // % vs semana imediatamente anterior
+  diffVsAverageWeeks: number | null; // % vs média semanal
+  healthStatus: "saudavel" | "estavel" | "alerta";
+  healthLabel: string;
 }
 
 export interface MonthSalesProjectionMetrics {
@@ -306,4 +341,7 @@ export interface MonthSalesProjectionMetrics {
   weekdayWeights: WeekdayWeightMetric[];
   weeks: WeekProjectionGroup[];
   days: DayProjectionItem[];
+  bestDay: DayProjectionItem | null;
+  worstDay: DayProjectionItem | null;
+  underperformingDays: DayProjectionItem[];
 }

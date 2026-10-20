@@ -28,8 +28,10 @@ import type {
   DayComparisonStatus,
   AtypicalDayEntry,
   WeekdayWeightMetric,
+  WeekdayOccurrenceDetail,
   DayProjectionItem,
   WeekProjectionGroup,
+  WeekComparisonItem,
   MonthSalesProjectionMetrics,
 } from "@/lib/vendas-types";
 import { SALES_CHANNELS } from "@/lib/vendas-types";
@@ -1183,6 +1185,8 @@ export function computeWeeklySalesProjection(
       isFallback,
       remainingDaysCount: acc.remainingDaysCount,
       projectedSubtotal,
+      occurrences: [],
+      healthStatus: "estavel" as const,
     };
   });
 
@@ -1209,12 +1213,31 @@ export function computeWeeklySalesProjection(
       atypicalDaysCount++;
     }
 
+    const projectionBenchmark = wMetric.avgAmount;
+    let diffAmount: number | null = null;
+    let diffPercent: number | null = null;
+    let performanceStatus: "acima" | "media" | "abaixo" | "projetado" = "projetado";
+
     if (isResolved) {
       actualAmount = td.actualAmount;
       effectiveAmount = actualAmount;
       projectedAmount = 0;
       totalRealizado += actualAmount;
       daysPassedCount++;
+
+      diffAmount = Math.round((actualAmount - projectionBenchmark) * 100) / 100;
+      diffPercent =
+        projectionBenchmark > 0
+          ? Math.round(((actualAmount - projectionBenchmark) / projectionBenchmark) * 1000) / 10
+          : 0;
+
+      if (diffPercent >= 3) {
+        performanceStatus = "acima";
+      } else if (diffPercent <= -5) {
+        performanceStatus = "abaixo";
+      } else {
+        performanceStatus = "media";
+      }
 
       if (td.isToday) {
         status = "hoje_realizado";
@@ -1233,6 +1256,7 @@ export function computeWeeklySalesProjection(
       effectiveAmount = projectedAmount;
       totalProjetado += projectedAmount;
       daysRemainingCount++;
+      performanceStatus = "projetado";
 
       if (td.isToday) {
         status = "hoje_pendente";
@@ -1249,9 +1273,6 @@ export function computeWeeklySalesProjection(
 
     cumulativeTotal += effectiveAmount;
 
-    // Determina a semana do calendário (Segunda a Domingo)
-    // Para simplificar a visualização por semanas:
-    // Semana 1: dia 1 até o primeiro domingo (ou blocos de 7 dias)
     return {
       date: td.dateStr,
       dayOfMonth: td.dayNum,
@@ -1267,6 +1288,10 @@ export function computeWeeklySalesProjection(
       actualAmount,
       projectedAmount,
       effectiveAmount,
+      projectionBenchmark,
+      diffAmount,
+      diffPercent,
+      performanceStatus,
       isAtypical: td.isAtypical,
       atypicalReason: td.atypicalReason,
       status,
@@ -1277,8 +1302,62 @@ export function computeWeeklySalesProjection(
     };
   });
 
+  // Atualiza as ocorrências detalhadas de cada dia da semana
+  for (const wMetric of weekdayWeights) {
+    const occs = days.filter((d) => d.dayOfWeekIndex === wMetric.dayOfWeekIndex);
+    wMetric.occurrences = occs.map((d) => {
+      const isRealized = d.status === "realizado" || d.status === "hoje_realizado";
+      let status: "acima" | "media" | "abaixo" | "projetado" | "feriado";
+      if (d.isAtypical) {
+        status = "feriado";
+      } else if (!isRealized) {
+        status = "projetado";
+      } else if ((d.diffPercent ?? 0) >= 3) {
+        status = "acima";
+      } else if ((d.diffPercent ?? 0) <= -8) {
+        status = "abaixo";
+      } else {
+        status = "media";
+      }
+
+      return {
+        date: d.date,
+        formattedDate: d.formattedDate,
+        dayOfMonth: d.dayOfMonth,
+        actualAmount: d.actualAmount,
+        projectionAmount: d.projectionBenchmark,
+        diffAmount: d.diffAmount,
+        diffPercent: d.diffPercent,
+        isAtypical: d.isAtypical,
+        atypicalReason: d.atypicalReason,
+        isRealized,
+        status,
+      };
+    });
+
+    const realizedNormal = wMetric.occurrences.filter(
+      (o) => o.isRealized && !o.isAtypical && o.actualAmount > 0,
+    );
+    if (realizedNormal.length > 0) {
+      realizedNormal.sort((a, b) => b.actualAmount - a.actualAmount);
+      wMetric.bestOccurrence = realizedNormal[0] || null;
+      wMetric.worstOccurrence = realizedNormal[realizedNormal.length - 1] || null;
+
+      const avgDiff =
+        realizedNormal.reduce((acc, o) => acc + (o.diffPercent ?? 0), 0) / realizedNormal.length;
+      if (avgDiff >= 3) {
+        wMetric.healthStatus = "saudavel";
+      } else if (avgDiff <= -6) {
+        wMetric.healthStatus = "alerta";
+      } else {
+        wMetric.healthStatus = "estavel";
+      }
+    } else {
+      wMetric.healthStatus = "estavel";
+    }
+  }
+
   // Quarto passo: Agrupar os dias em Semanas operacionais
-  // Semana 1 começa no dia 1. A cada Domingo encerrado, a próxima Segunda inicia uma nova semana.
   const weeks: WeekProjectionGroup[] = [];
   let curWeekNum = 1;
   let curWeekDays: DayProjectionItem[] = [];
@@ -1288,7 +1367,6 @@ export function computeWeeklySalesProjection(
     item.weekNumber = curWeekNum;
     curWeekDays.push(item);
 
-    // Se for Domingo (dayOfWeekIndex === 0) ou último dia do mês, fecha a semana
     const isSunday = item.dayOfWeekIndex === 0;
     const isLastDay = i === days.length - 1;
 
@@ -1315,6 +1393,12 @@ export function computeWeeklySalesProjection(
         atypicalDaysCount: atyCount,
         isCompleted: curWeekDays.every((d) => d.hasActualSales),
         isCurrentWeek: curWeekDays.some((d) => d.isToday),
+        weightPercentOfMonth: 0,
+        comparisons: [],
+        diffVsPreviousWeek: null,
+        diffVsAverageWeeks: null,
+        healthStatus: "estavel",
+        healthLabel: "Estável",
       });
 
       curWeekNum++;
@@ -1327,6 +1411,80 @@ export function computeWeeklySalesProjection(
     daysPassedCount > 0 ? Math.round((totalRealizado / daysPassedCount) * 100) / 100 : 0;
   const avgDiariaProjetada =
     daysRemainingCount > 0 ? Math.round((totalProjetado / daysRemainingCount) * 100) / 100 : 0;
+
+  // Calcula comparações entre semanas e saúde de faturamento
+  const avgWeeklyTotal = weeks.length > 0 ? totalPrevistoMes / weeks.length : 0;
+
+  for (let wIdx = 0; wIdx < weeks.length; wIdx++) {
+    const w = weeks[wIdx]!;
+    w.weightPercentOfMonth =
+      totalPrevistoMes > 0 ? Math.round((w.totalPrevisto / totalPrevistoMes) * 1000) / 10 : 0;
+
+    // Comparações com todas as semanas anteriores
+    const comps: WeekComparisonItem[] = [];
+    for (let prevIdx = 0; prevIdx < wIdx; prevIdx++) {
+      const prevW = weeks[prevIdx]!;
+      if (prevW.totalPrevisto > 0) {
+        const diff =
+          Math.round(((w.totalPrevisto - prevW.totalPrevisto) / prevW.totalPrevisto) * 1000) / 10;
+        comps.push({
+          targetWeekNumber: prevW.weekNumber,
+          targetLabel: `Semana ${prevW.weekNumber}`,
+          diffPercent: diff,
+          isHigher: diff >= 0,
+        });
+      }
+    }
+    w.comparisons = comps;
+
+    // Comparação direta com a semana imediatamente anterior
+    if (wIdx > 0) {
+      const prevWeek = weeks[wIdx - 1]!;
+      if (prevWeek.totalPrevisto > 0) {
+        w.diffVsPreviousWeek =
+          Math.round(((w.totalPrevisto - prevWeek.totalPrevisto) / prevWeek.totalPrevisto) * 1000) /
+          10;
+      }
+    }
+
+    // Comparação com a média semanal geral
+    if (avgWeeklyTotal > 0) {
+      w.diffVsAverageWeeks =
+        Math.round(((w.totalPrevisto - avgWeeklyTotal) / avgWeeklyTotal) * 1000) / 10;
+    }
+
+    // Avaliação de Saúde:
+    // Prioriza variação em relação à semana anterior se houver, ou em relação à média semanal
+    const refDiff = w.diffVsPreviousWeek ?? w.diffVsAverageWeeks ?? 0;
+    if (refDiff >= 3) {
+      w.healthStatus = "saudavel";
+      w.healthLabel = `Saudável (+${refDiff > 0 ? "+" : ""}${refDiff.toFixed(1)}%)`;
+    } else if (refDiff <= -5) {
+      w.healthStatus = "alerta";
+      w.healthLabel = `Atenção: Abaixo (${refDiff.toFixed(1)}%)`;
+    } else {
+      w.healthStatus = "estavel";
+      w.healthLabel = `Estável / Na Média (${refDiff >= 0 ? "+" : ""}${refDiff.toFixed(1)}%)`;
+    }
+  }
+
+  // Identifica recorde (melhor dia), pior dia e dias abaixo da média (< -15% da projeção)
+  const realizedDaysWithSales = days.filter(
+    (d) => (d.status === "realizado" || d.status === "hoje_realizado") && d.actualAmount > 0,
+  );
+
+  let bestDay: DayProjectionItem | null = null;
+  let worstDay: DayProjectionItem | null = null;
+
+  if (realizedDaysWithSales.length > 0) {
+    const sorted = [...realizedDaysWithSales].sort((a, b) => b.actualAmount - a.actualAmount);
+    bestDay = sorted[0] || null;
+    worstDay = sorted[sorted.length - 1] || null;
+  }
+
+  const underperformingDays = realizedDaysWithSales.filter(
+    (d) => !d.isAtypical && d.diffPercent !== null && d.diffPercent <= -15,
+  );
 
   return {
     monthKey,
@@ -1344,5 +1502,8 @@ export function computeWeeklySalesProjection(
     weekdayWeights,
     weeks,
     days,
+    bestDay,
+    worstDay,
+    underperformingDays,
   };
 }
