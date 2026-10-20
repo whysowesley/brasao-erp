@@ -66,7 +66,10 @@ const financeiroItems = [
   { title: "Relatórios / DRE", url: "/financeiro/relatorios", icon: FileSpreadsheet },
 ];
 
-const vendasItems = [{ title: "Vendas por Canal", url: "/vendas", icon: CircleDollarSign }];
+const vendasItems = [
+  { title: "Vendas por Canal", url: "/vendas", icon: CircleDollarSign },
+  { title: "Projeção & Médias", url: "/vendas-projecao", icon: TrendingUp },
+];
 
 const operacaoItems = [{ title: "Presença & Operação", url: "/presenca", icon: CalendarCheck2 }];
 
@@ -80,7 +83,7 @@ export function AppSidebar() {
   const isActive = (url: string) => {
     if (url === "/") return pathname === "/";
     if (url === "/financeiro") return pathname === "/financeiro" || pathname === "/financeiro/";
-    if (url === "/vendas") return pathname === "/vendas" || pathname.startsWith("/vendas");
+    if (url === "/vendas") return pathname === "/vendas" || pathname === "/vendas/";
     return pathname === url || pathname.startsWith(url + "/");
   };
   const handleNavClick = () => {

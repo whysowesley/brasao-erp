@@ -1219,11 +1219,13 @@ export function computeWeeklySalesProjection(
       if (td.isToday) {
         status = "hoje_realizado";
         statusLabel = "Hoje (Lançado)";
-        statusColorClass = "text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40 border-emerald-300";
+        statusColorClass =
+          "text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40 border-emerald-300";
       } else {
         status = "realizado";
         statusLabel = "Realizado";
-        statusColorClass = "text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40 border-emerald-200";
+        statusColorClass =
+          "text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40 border-emerald-200";
       }
     } else {
       actualAmount = 0;
@@ -1235,11 +1237,13 @@ export function computeWeeklySalesProjection(
       if (td.isToday) {
         status = "hoje_pendente";
         statusLabel = "Hoje (Projetado)";
-        statusColorClass = "text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40 border-amber-300";
+        statusColorClass =
+          "text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/40 border-amber-300";
       } else {
         status = "projetado";
         statusLabel = "Projeção";
-        statusColorClass = "text-blue-700 bg-blue-50 dark:text-blue-300 dark:bg-blue-950/40 border-blue-200";
+        statusColorClass =
+          "text-blue-700 bg-blue-50 dark:text-blue-300 dark:bg-blue-950/40 border-blue-200";
       }
     }
 
@@ -1342,4 +1346,3 @@ export function computeWeeklySalesProjection(
     days,
   };
 }
-

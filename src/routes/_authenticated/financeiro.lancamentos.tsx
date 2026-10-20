@@ -351,7 +351,8 @@ function LancamentosPage() {
     let desp = 0;
     for (const t of transactions) {
       if (t.status === "cancelado") continue;
-      const amt = Number(t.status === "pago" && t.paid_amount != null ? t.paid_amount : t.amount) || 0;
+      const amt =
+        Number(t.status === "pago" && t.paid_amount != null ? t.paid_amount : t.amount) || 0;
       if (t.type === "receita") rec += amt;
       else desp += amt;
     }
@@ -407,8 +408,10 @@ function LancamentosPage() {
           break;
         }
         case "amount": {
-          const amtA = Number(a.status === "pago" && a.paid_amount != null ? a.paid_amount : a.amount) || 0;
-          const amtB = Number(b.status === "pago" && b.paid_amount != null ? b.paid_amount : b.amount) || 0;
+          const amtA =
+            Number(a.status === "pago" && a.paid_amount != null ? a.paid_amount : a.amount) || 0;
+          const amtB =
+            Number(b.status === "pago" && b.paid_amount != null ? b.paid_amount : b.amount) || 0;
           comparison = amtA - amtB;
           break;
         }

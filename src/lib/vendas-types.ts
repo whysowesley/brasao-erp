@@ -307,4 +307,3 @@ export interface MonthSalesProjectionMetrics {
   weeks: WeekProjectionGroup[];
   days: DayProjectionItem[];
 }
-

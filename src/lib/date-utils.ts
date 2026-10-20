@@ -98,11 +98,7 @@ export function normalizeDateString(val: unknown, fallback = ""): string {
  * Formata qualquer valor de data com total segurança.
  * Nunca lança RangeError nem TypeError.
  */
-export function safeFormatDate(
-  dateVal: unknown,
-  fmt = "dd/MM/yyyy",
-  fallback = "—",
-): string {
+export function safeFormatDate(dateVal: unknown, fmt = "dd/MM/yyyy", fallback = "—"): string {
   if (!dateVal) return fallback;
 
   try {

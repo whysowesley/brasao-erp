@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Calendar,
   ChevronLeft,
@@ -351,6 +351,19 @@ function VendasPage() {
               >
                 <Download className="h-3.5 w-3.5" />
                 <span className="hidden xs:inline">Exportar</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-8 gap-1.5 text-xs font-semibold border-primary/30 text-primary hover:bg-primary/10"
+              >
+                <Link to="/vendas-projecao">
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Página de Projeção</span>
+                  <span className="sm:hidden">Projeção</span>
+                </Link>
               </Button>
 
               {canWrite && (

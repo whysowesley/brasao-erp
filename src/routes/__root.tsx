@@ -50,7 +50,8 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           Não foi possível carregar a página
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Ocorreu um erro ao renderizar este componente. Você pode tentar recarregar ou voltar para o início.
+          Ocorreu um erro ao renderizar este componente. Você pode tentar recarregar ou voltar para
+          o início.
         </p>
         {error?.message && (
           <div className="mt-3 p-2.5 rounded-md bg-muted/60 border text-xs text-muted-foreground font-mono text-left overflow-x-auto max-h-28">

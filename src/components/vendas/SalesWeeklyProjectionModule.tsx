@@ -201,13 +201,17 @@ export function SalesWeeklyProjectionModule({
                   <h3 className="text-sm font-bold text-foreground">
                     Projeção Inteligente por Peso Médio do Dia da Semana
                   </h3>
-                  <Badge variant="outline" className="text-[10px] bg-background border-primary/30 text-primary">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-background border-primary/30 text-primary"
+                  >
                     Tempo Real · Canal de Vendas
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Os dias restantes do mês são projetados individualmente pelo peso real de cada dia (ex: média de todas as segundas-feiras normais).
-                  Feriados e dias atípicos podem ser marcados com a flag{" "}
+                  Os dias restantes do mês são projetados individualmente pelo peso real de cada dia
+                  (ex: média de todas as segundas-feiras normais). Feriados e dias atípicos podem
+                  ser marcados com a flag{" "}
                   <span className="font-semibold text-amber-700 dark:text-amber-400">
                     &ldquo;Feriado/Atípico&rdquo;
                   </span>{" "}
@@ -367,7 +371,8 @@ export function SalesWeeklyProjectionModule({
                 <span>Pesos das Médias por Dia da Semana ({projection.monthLabel})</span>
               </CardTitle>
               <CardDescription className="text-xs">
-                Média calculada apenas sobre dias normais (feriados e atípicos não entram no divisor).
+                Média calculada apenas sobre dias normais (feriados e atípicos não entram no
+                divisor).
               </CardDescription>
             </div>
             <Badge variant="outline" className="text-[11px] bg-muted/40">
@@ -390,9 +395,7 @@ export function SalesWeeklyProjectionModule({
                 >
                   <div>
                     <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs font-bold text-foreground">
-                        {w.dayOfWeekShort}
-                      </span>
+                      <span className="text-xs font-bold text-foreground">{w.dayOfWeekShort}</span>
                       {isTodayWeekday && (
                         <span className="text-[9px] font-bold text-primary uppercase tracking-wider bg-primary/10 px-1 rounded">
                           Hoje
@@ -454,9 +457,7 @@ export function SalesWeeklyProjectionModule({
 
           {projection.weeks.map((week) => {
             const isExpanded = expandedWeeks[week.weekNumber] ?? true;
-            const weekDays = filterOnlyAtypical
-              ? week.days.filter((d) => d.isAtypical)
-              : week.days;
+            const weekDays = filterOnlyAtypical ? week.days.filter((d) => d.isAtypical) : week.days;
 
             if (filterOnlyAtypical && weekDays.length === 0) return null;
 
@@ -495,7 +496,8 @@ export function SalesWeeklyProjectionModule({
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {week.daysWithSalesCount} dias realizados · {week.daysProjectedCount} dias projetados
+                        {week.daysWithSalesCount} dias realizados · {week.daysProjectedCount} dias
+                        projetados
                         {week.atypicalDaysCount > 0 && ` · ${week.atypicalDaysCount} feriado(s)`}
                       </p>
                     </div>
@@ -544,7 +546,8 @@ export function SalesWeeklyProjectionModule({
                       </TableHeader>
                       <TableBody className="text-xs">
                         {weekDays.map((day) => {
-                          const isRealized = day.status === "realizado" || day.status === "hoje_realizado";
+                          const isRealized =
+                            day.status === "realizado" || day.status === "hoje_realizado";
                           return (
                             <TableRow
                               key={day.date}
@@ -552,8 +555,8 @@ export function SalesWeeklyProjectionModule({
                                 day.isToday
                                   ? "bg-primary/5 font-medium"
                                   : day.isAtypical
-                                  ? "bg-amber-500/5"
-                                  : ""
+                                    ? "bg-amber-500/5"
+                                    : ""
                               }`}
                             >
                               {/* Data */}
@@ -628,7 +631,9 @@ export function SalesWeeklyProjectionModule({
                                         day.isAtypical ? "text-amber-600" : "opacity-40"
                                       }`}
                                     />
-                                    <span>{day.isAtypical ? "Feriado / Atípico" : "Dia Normal"}</span>
+                                    <span>
+                                      {day.isAtypical ? "Feriado / Atípico" : "Dia Normal"}
+                                    </span>
                                   </button>
 
                                   {day.isAtypical && (
@@ -726,8 +731,7 @@ export function SalesWeeklyProjectionModule({
 
                 {/* Dias do mês */}
                 {projection.days.map((day) => {
-                  const isRealized =
-                    day.status === "realizado" || day.status === "hoje_realizado";
+                  const isRealized = day.status === "realizado" || day.status === "hoje_realizado";
 
                   return (
                     <div
@@ -736,8 +740,8 @@ export function SalesWeeklyProjectionModule({
                         day.isToday
                           ? "bg-primary/5 ring-2 ring-primary/40"
                           : day.isAtypical
-                          ? "bg-amber-500/5"
-                          : "bg-card hover:bg-muted/20"
+                            ? "bg-amber-500/5"
+                            : "bg-card hover:bg-muted/20"
                       }`}
                     >
                       {/* Topo do dia: número do dia + badge hoje */}
@@ -831,7 +835,8 @@ export function SalesWeeklyProjectionModule({
               Análise Ponderada das Vendas por Dia da Semana
             </CardTitle>
             <CardDescription className="text-xs">
-              Demonstrativo de como o racional de peso diário compõe o faturamento total projetado até o fechamento do mês.
+              Demonstrativo de como o racional de peso diário compõe o faturamento total projetado
+              até o fechamento do mês.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -852,9 +857,7 @@ export function SalesWeeklyProjectionModule({
                 <TableBody className="text-xs">
                   {projection.weekdayWeights.map((w) => (
                     <TableRow key={w.dayOfWeekIndex} className="hover:bg-muted/30">
-                      <TableCell className="font-bold text-foreground">
-                        {w.dayOfWeekName}
-                      </TableCell>
+                      <TableCell className="font-bold text-foreground">{w.dayOfWeekName}</TableCell>
                       <TableCell className="text-center">{w.totalOccurrencesInMonth}x</TableCell>
                       <TableCell className="text-center font-semibold text-emerald-600 dark:text-emerald-400">
                         {w.normalDaysCount}x
@@ -917,7 +920,8 @@ export function SalesWeeklyProjectionModule({
             </DialogTitle>
             <DialogDescription className="text-xs">
               Quando marcado, o faturamento deste dia é preservado no total do mês, mas é{" "}
-              <strong>excluído do cálculo da média</strong> de {selectedDayForAtypical?.dayOfWeekName} para não distorcer as projeções futuras.
+              <strong>excluído do cálculo da média</strong> de{" "}
+              {selectedDayForAtypical?.dayOfWeekName} para não distorcer as projeções futuras.
             </DialogDescription>
           </DialogHeader>
 
@@ -932,7 +936,8 @@ export function SalesWeeklyProjectionModule({
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Exemplo: Se a média de uma segunda é R$ 5.000, mas em feriado vendeu R$ 8.000, marcar este dia garante que as próximas segundas não fiquem superestimadas.
+              Exemplo: Se a média de uma segunda é R$ 5.000, mas em feriado vendeu R$ 8.000, marcar
+              este dia garante que as próximas segundas não fiquem superestimadas.
             </p>
           </div>
 
