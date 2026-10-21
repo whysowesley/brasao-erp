@@ -159,5 +159,9 @@ service cloud.firestore {
       allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
+    match /delivery_entries/{document=**} {
+      allow read: if isNonCounterApproved();
+      allow write: if canWrite();
+    }
   }
 }

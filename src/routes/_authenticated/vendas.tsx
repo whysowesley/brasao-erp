@@ -366,6 +366,19 @@ function VendasPage() {
                 </Link>
               </Button>
 
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-8 gap-1.5 text-xs font-semibold border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
+              >
+                <Link to="/vendas-delivery">
+                  <Bike className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Delivery & Corridas</span>
+                  <span className="sm:hidden">Delivery</span>
+                </Link>
+              </Button>
+
               {canWrite && (
                 <>
                   <Button

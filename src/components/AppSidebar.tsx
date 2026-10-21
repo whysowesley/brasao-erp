@@ -24,6 +24,7 @@ import {
   CircleDollarSign,
   ReceiptText,
   Palette,
+  Bike,
   type LucideIcon,
 } from "lucide-react";
 
@@ -69,6 +70,7 @@ const financeiroItems = [
 const vendasItems = [
   { title: "Vendas por Canal", url: "/vendas", icon: CircleDollarSign },
   { title: "Projeção & Médias", url: "/vendas-projecao", icon: TrendingUp },
+  { title: "Delivery & Corridas", url: "/vendas-delivery", icon: Bike },
 ];
 
 const operacaoItems = [{ title: "Presença & Operação", url: "/presenca", icon: CalendarCheck2 }];

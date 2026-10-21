@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Plus, CircleDollarSign, TrendingUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, CircleDollarSign, TrendingUp, Bike } from "lucide-react";
 
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -122,6 +122,18 @@ function VendasProjecaoPage() {
                   <CircleDollarSign className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="hidden sm:inline">Vendas por Canal</span>
                   <span className="sm:hidden">Canais</span>
+                </Link>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-8 text-xs font-medium gap-1.5"
+              >
+                <Link to="/vendas-delivery">
+                  <Bike className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>Delivery</span>
                 </Link>
               </Button>
 
