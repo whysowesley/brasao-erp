@@ -178,7 +178,7 @@ export async function recordFinancialDateMovement(
  * (compartilhado instantaneamente entre Fluxo de Caixa e Contas a Pagar).
  */
 export function useFinancialDateMovements() {
-  return useQuery({
+  const query = useQuery({
     queryKey: ["financial_date_movements"],
     queryFn: async (): Promise<FinancialDateMovement[]> => {
       try {
@@ -197,4 +197,12 @@ export function useFinancialDateMovements() {
     staleTime: 1000 * 5, // 5 segundos
     refetchInterval: 1000 * 15, // Polling a cada 15s para garantir sincronização entre usuários
   });
+
+  const list: FinancialDateMovement[] = query.data ?? [];
+
+  return {
+    ...query,
+    data: list,
+    movements: list,
+  };
 }

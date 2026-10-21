@@ -234,7 +234,7 @@ export function QuadrantesVencimentoView({
   const [openCategorias, setOpenCategorias] = useState(false);
   const [openQuadranteThemeDialog, setOpenQuadranteThemeDialog] = useState(false);
   const [openHistoryModal, setOpenHistoryModal] = useState(false);
-  const { movements } = useFinancialDateMovements();
+  const { movements = [] } = useFinancialDateMovements();
   const { themeConfig: quadranteTheme } = useQuadrantesTheme();
 
   // Filtros
@@ -1053,7 +1053,7 @@ export function QuadrantesVencimentoView({
             >
               <History className="h-4 w-4 text-primary" />
               <span className="hidden sm:inline">Histórico</span>
-              {movements.length > 0 && (
+              {(movements?.length ?? 0) > 0 && (
                 <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-semibold h-4">
                   {movements.length}
                 </Badge>

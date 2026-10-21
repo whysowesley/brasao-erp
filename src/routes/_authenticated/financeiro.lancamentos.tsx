@@ -226,7 +226,7 @@ function LancamentosPage() {
   const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
   const [payingTransaction, setPayingTransaction] = useState<FinancialTransaction | null>(null);
 
-  const { movements } = useFinancialDateMovements();
+  const { movements = [] } = useFinancialDateMovements();
 
   // Dialog de Exclusão
   const [deletingTransaction, setDeletingTransaction] = useState<FinancialTransaction | null>(null);
@@ -523,7 +523,7 @@ function LancamentosPage() {
             >
               <History className="h-4 w-4 text-primary" />
               <span>Histórico</span>
-              {movements.length > 0 && (
+              {(movements?.length ?? 0) > 0 && (
                 <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-semibold h-4">
                   {movements.length}
                 </Badge>
