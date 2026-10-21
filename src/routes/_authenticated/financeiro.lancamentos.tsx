@@ -791,7 +791,7 @@ function LancamentosPage() {
               {sortField === "expected_payment_date" && "Nova Data Pgto (Postergada)"}
               {sortField === "description" && "Descrição"}
               {sortField === "type" && "Tipo"}
-              {sortField === "category" && "Categoria"}
+              {sortField === "category" && "Categoria Financeira"}
               {sortField === "cost_center" && "Centro de Custo"}
               {sortField === "supplier" && "Fornecedor"}
               {sortField === "amount" && "Valor (R$)"}
@@ -899,13 +899,13 @@ function LancamentosPage() {
                 </TableHead>
 
                 <TableHead
-                  className="min-w-[95px] max-w-[130px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
-                  onClick={() => handleSort("supplier")}
-                  title="Ordenar por Conta / Fornecedor (A-Z)"
+                  className="min-w-[110px] max-w-[140px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
+                  onClick={() => handleSort("category")}
+                  title="Ordenar por Categoria Financeira (A-Z)"
                 >
                   <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
-                    <span>Conta</span>
-                    {sortField === "supplier" ? (
+                    <span>Categoria Financeira</span>
+                    {sortField === "category" ? (
                       sortDirection === "asc" ? (
                         <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
                       ) : (
@@ -916,15 +916,14 @@ function LancamentosPage() {
                     )}
                   </div>
                 </TableHead>
-
                 <TableHead
-                  className="min-w-[85px] max-w-[120px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
-                  onClick={() => handleSort("category")}
-                  title="Ordenar por Categoria (A-Z)"
+                  className="min-w-[105px] max-w-[135px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
+                  onClick={() => handleSort("cost_center")}
+                  title="Ordenar por Centro de Custo (A-Z)"
                 >
                   <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
-                    <span>Categoria</span>
-                    {sortField === "category" ? (
+                    <span>Centro de Custo</span>
+                    {sortField === "cost_center" ? (
                       sortDirection === "asc" ? (
                         <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
                       ) : (
@@ -1085,14 +1084,7 @@ function LancamentosPage() {
                         </span>
                       </TableCell>
 
-                      {/* Conta (Fornecedor / Banco) */}
-                      <TableCell className="text-xs text-muted-foreground">
-                        {(suppliers.find((s) => s.id === t.supplier_id) || t.supplier)?.name ||
-                          t.supplier_name ||
-                          "—"}
-                      </TableCell>
-
-                      {/* Categoria */}
+                      {/* Categoria Financeira */}
                       <TableCell className="text-xs">
                         {(() => {
                           const catName =
@@ -1104,6 +1096,16 @@ function LancamentosPage() {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           );
+                        })()}
+                      </TableCell>
+                      {/* Centro de Custo */}
+                      <TableCell className="text-xs text-muted-foreground">
+                        {(() => {
+                          const ccName =
+                            t.cost_center?.name ||
+                            costCenters.find((cc) => cc.id === t.cost_center_id)?.name ||
+                            (t as unknown as { cost_center_name?: string }).cost_center_name;
+                          return ccName ? <span>{ccName}</span> : <span>—</span>;
                         })()}
                       </TableCell>
 
