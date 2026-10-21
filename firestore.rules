@@ -155,5 +155,9 @@ service cloud.firestore {
       allow read: if isNonCounterApproved();
       allow write: if canWrite();
     }
+    match /financial_movements/{document=**} {
+      allow read: if isNonCounterApproved();
+      allow write: if canWrite();
+    }
   }
 }

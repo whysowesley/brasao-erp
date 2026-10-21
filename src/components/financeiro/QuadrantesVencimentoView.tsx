@@ -31,6 +31,7 @@ import {
   Tag,
   Palette,
   FolderPlus,
+  History,
   X,
 } from "lucide-react";
 import {
@@ -114,6 +115,8 @@ import { BankBalancesBar } from "./BankBalancesBar";
 import { MentionsNotificationPopup } from "./MentionsNotificationPopup";
 import { CategoriasDialog } from "./CategoriasDialog";
 import { QuadrantesThemeDialog } from "./QuadrantesThemeDialog";
+import { FinancialMovementsHistoryModal } from "./FinancialMovementsHistoryModal";
+import { useFinancialDateMovements } from "@/lib/financial-movements";
 import { useAllDailyBankBalances, calculateRollingBalances } from "@/lib/bank-balances";
 import { useQuadrantesTheme } from "@/lib/theme-manager";
 import { FiltroListaCheckbox, type FilterListItem } from "./FiltroListaCheckbox";
@@ -222,7 +225,7 @@ export function QuadrantesVencimentoView({
   initialDate = new Date(),
   onOpenCreate,
 }: QuadrantesVencimentoViewProps) {
-  const { canWrite } = useAuth();
+  const { canWrite, profile } = useAuth();
   const queryClient = useQueryClient();
   const todayStr = getTodayString();
 
@@ -230,6 +233,8 @@ export function QuadrantesVencimentoView({
   const [currentMonthDate, setCurrentMonthDate] = useState<Date>(initialDate);
   const [openCategorias, setOpenCategorias] = useState(false);
   const [openQuadranteThemeDialog, setOpenQuadranteThemeDialog] = useState(false);
+  const [openHistoryModal, setOpenHistoryModal] = useState(false);
+  const { movements } = useFinancialDateMovements();
   const { themeConfig: quadranteTheme } = useQuadrantesTheme();
 
   // Filtros
@@ -904,6 +909,11 @@ export function QuadrantesVencimentoView({
         id: draggedTx.id,
         targetDate,
         mode: dateCriterion === "due_only" ? "due" : "expected",
+        sourceModule: "contas_pagar",
+        movementType: "mudanca_quadrante",
+        txSnapshot: draggedTx,
+        userName: profile?.fullName || null,
+        userEmail: profile?.email || null,
       });
 
       const formattedTarget = formatDateBr(targetDate);
@@ -928,6 +938,11 @@ export function QuadrantesVencimentoView({
         id: tx.id,
         targetDate: newDate,
         mode: "expected", // Atualiza nova data de pagamento
+        sourceModule: "contas_pagar",
+        movementType: "data_postergada",
+        txSnapshot: tx,
+        userName: profile?.fullName || null,
+        userEmail: profile?.email || null,
       });
       toast.success(`Data reagendada para ${formatDateBr(newDate)}!`);
     } catch (err: unknown) {
@@ -1028,6 +1043,22 @@ export function QuadrantesVencimentoView({
             </div>
 
             <MentionsNotificationPopup variant="trigger" />
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOpenHistoryModal(true)}
+              className="gap-1.5 h-9"
+              title="Histórico das últimas 20 movimentações de datas e quadrantes"
+            >
+              <History className="h-4 w-4 text-primary" />
+              <span className="hidden sm:inline">Histórico</span>
+              {movements.length > 0 && (
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-semibold h-4">
+                  {movements.length}
+                </Badge>
+              )}
+            </Button>
 
             <Button
               variant="outline"
@@ -2151,6 +2182,11 @@ export function QuadrantesVencimentoView({
       <QuadrantesThemeDialog
         open={openQuadranteThemeDialog}
         onOpenChange={setOpenQuadranteThemeDialog}
+      />
+      <FinancialMovementsHistoryModal
+        open={openHistoryModal}
+        onOpenChange={setOpenHistoryModal}
+        sourceModule="contas_pagar"
       />
     </div>
   );

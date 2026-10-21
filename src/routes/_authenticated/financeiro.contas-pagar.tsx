@@ -24,6 +24,7 @@ import {
   FolderPlus,
   Tag,
   Eye,
+  History,
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import { toast } from "sonner";
@@ -35,6 +36,8 @@ import { LancamentoDialog } from "@/components/financeiro/LancamentoDialog";
 import { MarcarPagoDialog } from "@/components/financeiro/MarcarPagoDialog";
 import { QuadrantesVencimentoView } from "@/components/financeiro/QuadrantesVencimentoView";
 import { CategoriasDialog } from "@/components/financeiro/CategoriasDialog";
+import { FinancialMovementsHistoryModal } from "@/components/financeiro/FinancialMovementsHistoryModal";
+import { useFinancialDateMovements } from "@/lib/financial-movements";
 import {
   FiltroListaCheckbox,
   type FilterListItem,
@@ -173,8 +176,11 @@ function ContasPagarPage() {
   const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
   const [payingTransaction, setPayingTransaction] = useState<FinancialTransaction | null>(null);
   const [openCategorias, setOpenCategorias] = useState(false);
+  const [openHistoryModal, setOpenHistoryModal] = useState(false);
   const [deletingTransaction, setDeletingTransaction] = useState<FinancialTransaction | null>(null);
   const [deleteGroupOption, setDeleteGroupOption] = useState(false);
+
+  const { movements } = useFinancialDateMovements();
 
   // Queries
   const { data: categories = [] } = useFinancialCategories("despesa");
@@ -414,6 +420,21 @@ function ContasPagarPage() {
         description="Gerenciamento de despesas, vencimentos e quitações com fornecedores"
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOpenHistoryModal(true)}
+              className="gap-1.5 h-9"
+              title="Histórico das últimas 20 movimentações de datas e quadrantes"
+            >
+              <History className="h-4 w-4 text-primary" />
+              <span>Histórico</span>
+              {movements.length > 0 && (
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-semibold h-4">
+                  {movements.length}
+                </Badge>
+              )}
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -1039,6 +1060,11 @@ function ContasPagarPage() {
       </AlertDialog>
 
       <CategoriasDialog open={openCategorias} onOpenChange={setOpenCategorias} />
+      <FinancialMovementsHistoryModal
+        open={openHistoryModal}
+        onOpenChange={setOpenHistoryModal}
+        sourceModule="contas_pagar"
+      />
     </div>
   );
 }

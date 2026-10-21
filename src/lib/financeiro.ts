@@ -32,6 +32,15 @@ import type {
   HighlightColor,
 } from "@/lib/financeiro-types";
 import { normalizeDateString } from "@/lib/date-utils";
+import {
+  recordFinancialDateMovement,
+  useFinancialDateMovements,
+  type FinancialMovementType,
+  type FinancialDateMovement,
+} from "@/lib/financial-movements";
+
+export { useFinancialDateMovements, recordFinancialDateMovement };
+export type { FinancialDateMovement, FinancialMovementType };
 
 export type {
   FinancialTransaction,
@@ -1175,6 +1184,53 @@ export async function updateFinancialTransaction(
   if (input.highlight_color !== undefined) updatePayload["highlight_color"] = input.highlight_color;
   if (input.is_new !== undefined) updatePayload["is_new"] = input.is_new;
 
+  // Auditoria dos últimos 20 registros: se alterou due_date ou expected_payment_date
+  if (input.due_date !== undefined || input.expected_payment_date !== undefined) {
+    try {
+      const snap = await getDoc(doc(db, "financial_transactions", input.id));
+      if (snap.exists()) {
+        const prev = snap.data();
+        const prevDue = (prev["due_date"] as string) || null;
+        const prevExp = (prev["expected_payment_date"] as string) || null;
+        const dueChanged = input.due_date !== undefined && input.due_date !== prevDue;
+        const expChanged =
+          input.expected_payment_date !== undefined && input.expected_payment_date !== prevExp;
+
+        if (dueChanged || expChanged) {
+          let mType: FinancialMovementType = "data_postergada";
+          if (dueChanged && expChanged) mType = "ambas_datas";
+          else if (dueChanged) mType = "vencimento_alterado";
+          else mType = "data_postergada";
+
+          const title =
+            input.supplier_name ||
+            (prev["supplier_name"] as string) ||
+            input.description ||
+            (prev["description"] as string) ||
+            "Lançamento";
+          const amt = input.amount !== undefined ? input.amount : Number(prev["amount"]) || 0;
+
+          await recordFinancialDateMovement({
+            transaction_id: input.id,
+            movement_type: mType,
+            title,
+            amount: amt,
+            type: (input.type || prev["type"] || "despesa") as "despesa" | "receita",
+            source_module: "fluxo_caixa",
+            previous_due_date: prevDue,
+            new_due_date: input.due_date !== undefined ? input.due_date : prevDue,
+            previous_expected_date: prevExp,
+            new_expected_date:
+              input.expected_payment_date !== undefined ? input.expected_payment_date : prevExp,
+            due_date_original: prevDue,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Aviso ao auditar movimentação de data na edição:", e);
+    }
+  }
+
   await updateDoc(doc(db, "financial_transactions", input.id), updatePayload);
 }
 
@@ -1255,6 +1311,7 @@ export function useUpdateFinancialTransaction() {
     },
     onSettled: async () => {
       await invalidate();
+      qc.invalidateQueries({ queryKey: ["financial_date_movements"] });
     },
   });
 }
@@ -1497,17 +1554,61 @@ export function useDeleteTransactionComment() {
 
 /** Hook para mover transação de dia/quadrante facilmente (atualiza data prevista ou vencimento) */
 export function useMoveFinancialTransactionDay() {
+  const qc = useQueryClient();
   const invalidate = useInvalidateFinancial();
   return useMutation({
     mutationFn: async ({
       id,
       targetDate,
       mode = "expected",
+      sourceModule = "contas_pagar",
+      movementType,
+      txSnapshot,
+      userName,
+      userEmail,
     }: {
       id: string;
       targetDate: string;
       mode?: "expected" | "due" | "both";
+      sourceModule?: "contas_pagar" | "fluxo_caixa";
+      movementType?: FinancialMovementType;
+      txSnapshot?: FinancialTransaction | null;
+      userName?: string | null;
+      userEmail?: string | null;
     }) => {
+      let prevExpected: string | null = null;
+      let prevDue: string | null = null;
+      let title = "Lançamento";
+      let amount = 0;
+      let type: "despesa" | "receita" = "despesa";
+
+      if (txSnapshot) {
+        prevExpected = txSnapshot.expected_payment_date || null;
+        prevDue = txSnapshot.due_date || null;
+        title =
+          txSnapshot.supplier_name ||
+          txSnapshot.supplier?.name ||
+          txSnapshot.description ||
+          "Lançamento";
+        amount = txSnapshot.amount || 0;
+        type = txSnapshot.type || "despesa";
+      } else {
+        try {
+          const snap = await getDoc(doc(db, "financial_transactions", id));
+          if (snap.exists()) {
+            const data = snap.data();
+            prevExpected = (data["expected_payment_date"] as string) || null;
+            prevDue = (data["due_date"] as string) || null;
+            title =
+              (data["supplier_name"] as string) || (data["description"] as string) || "Lançamento";
+            amount = Number(data["amount"]) || 0;
+            type = (data["type"] as "despesa" | "receita") || "despesa";
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       const payload: Record<string, unknown> = {
         updated_at: serverTimestamp(),
       };
@@ -1518,8 +1619,40 @@ export function useMoveFinancialTransactionDay() {
         payload["due_date"] = targetDate;
       }
       await updateDoc(doc(db, "financial_transactions", id), payload);
+
+      // Determina o tipo exato de movimentação
+      let resolvedType: FinancialMovementType = movementType || "data_postergada";
+      if (!movementType) {
+        if (mode === "due") {
+          resolvedType = "vencimento_alterado";
+        } else if (mode === "both") {
+          resolvedType = "ambas_datas";
+        } else {
+          resolvedType = sourceModule === "contas_pagar" ? "mudanca_quadrante" : "data_postergada";
+        }
+      }
+
+      // Registra nos últimos 20 movimentos
+      await recordFinancialDateMovement({
+        transaction_id: id,
+        movement_type: resolvedType,
+        title,
+        amount,
+        type,
+        source_module: sourceModule,
+        previous_expected_date: prevExpected,
+        new_expected_date: mode === "expected" || mode === "both" ? targetDate : prevExpected,
+        previous_due_date: prevDue,
+        new_due_date: mode === "due" || mode === "both" ? targetDate : prevDue,
+        due_date_original: prevDue,
+        userName,
+        userEmail,
+      });
     },
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["financial_date_movements"] });
+    },
   });
 }
 

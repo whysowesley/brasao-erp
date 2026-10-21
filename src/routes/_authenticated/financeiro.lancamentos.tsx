@@ -27,6 +27,7 @@ import {
   Palette,
   Sparkles,
   Check,
+  History,
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -43,6 +44,8 @@ import { LancamentoDialog } from "@/components/financeiro/LancamentoDialog";
 import { MarcarPagoDialog } from "@/components/financeiro/MarcarPagoDialog";
 import { CategoriasDialog } from "@/components/financeiro/CategoriasDialog";
 import { ExtratoFinanceiroPdfModal } from "@/components/financeiro/ExtratoFinanceiroPdfModal";
+import { FinancialMovementsHistoryModal } from "@/components/financeiro/FinancialMovementsHistoryModal";
+import { useFinancialDateMovements } from "@/lib/financial-movements";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -176,7 +179,7 @@ type SortField =
 type SortDirection = "asc" | "desc";
 
 function LancamentosPage() {
-  const { canWrite } = useAuth();
+  const { canWrite, profile } = useAuth();
 
   // Estados de Filtros
   const [searchTerm, setSearchTerm] = useState("");
@@ -219,8 +222,11 @@ function LancamentosPage() {
   const [openLancamento, setOpenLancamento] = useState(false);
   const [openCategorias, setOpenCategorias] = useState(false);
   const [openExtratoPdf, setOpenExtratoPdf] = useState(false);
+  const [openHistoryModal, setOpenHistoryModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
   const [payingTransaction, setPayingTransaction] = useState<FinancialTransaction | null>(null);
+
+  const { movements } = useFinancialDateMovements();
 
   // Dialog de Exclusão
   const [deletingTransaction, setDeletingTransaction] = useState<FinancialTransaction | null>(null);
@@ -508,6 +514,21 @@ function LancamentosPage() {
         description="Controle de entradas, saídas e compromissos financeiros"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOpenHistoryModal(true)}
+              className="gap-1.5 h-9"
+              title="Histórico das últimas 20 movimentações de datas e quadrantes"
+            >
+              <History className="h-4 w-4 text-primary" />
+              <span>Histórico</span>
+              {movements.length > 0 && (
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-semibold h-4">
+                  {movements.length}
+                </Badge>
+              )}
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -1050,6 +1071,11 @@ function LancamentosPage() {
                                       id: t.id,
                                       targetDate: formatted,
                                       mode: "expected",
+                                      sourceModule: "fluxo_caixa",
+                                      movementType: "data_postergada",
+                                      txSnapshot: t,
+                                      userName: profile?.fullName || null,
+                                      userEmail: profile?.email || null,
                                     });
                                     toast.success(
                                       `Data reagendada para ${format(newDate, "dd/MM/yyyy")}!`,
@@ -1397,6 +1423,12 @@ function LancamentosPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <FinancialMovementsHistoryModal
+        open={openHistoryModal}
+        onOpenChange={setOpenHistoryModal}
+        sourceModule="fluxo_caixa"
+      />
     </div>
   );
 }
