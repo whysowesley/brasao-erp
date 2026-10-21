@@ -861,25 +861,6 @@ function LancamentosPage() {
                 </TableHead>
 
                 <TableHead
-                  className="w-[98px] min-w-[92px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
-                  onClick={() => handleSort("expected_payment_date")}
-                  title="Ordenar por Nova Data Prevista de Pagamento"
-                >
-                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
-                    <span>Data Prevista</span>
-                    {sortField === "expected_payment_date" ? (
-                      sortDirection === "asc" ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
-                      ) : (
-                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
-                    )}
-                  </div>
-                </TableHead>
-
-                <TableHead
                   className="min-w-[130px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
                   onClick={() => handleSort("description")}
                   title="Ordenar por Descrição (A-Z ou Z-A)"
@@ -918,6 +899,25 @@ function LancamentosPage() {
                 </TableHead>
 
                 <TableHead
+                  className="min-w-[95px] max-w-[130px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
+                  onClick={() => handleSort("supplier")}
+                  title="Ordenar por Conta / Fornecedor (A-Z)"
+                >
+                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
+                    <span>Conta</span>
+                    {sortField === "supplier" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
+                    )}
+                  </div>
+                </TableHead>
+
+                <TableHead
                   className="min-w-[85px] max-w-[120px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
                   onClick={() => handleSort("category")}
                   title="Ordenar por Categoria (A-Z)"
@@ -925,44 +925,6 @@ function LancamentosPage() {
                   <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
                     <span>Categoria</span>
                     {sortField === "category" ? (
-                      sortDirection === "asc" ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
-                      ) : (
-                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
-                    )}
-                  </div>
-                </TableHead>
-
-                <TableHead
-                  className="min-w-[85px] max-w-[120px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
-                  onClick={() => handleSort("cost_center")}
-                  title="Ordenar por Centro de Custo (A-Z)"
-                >
-                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
-                    <span>Centro Custo</span>
-                    {sortField === "cost_center" ? (
-                      sortDirection === "asc" ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
-                      ) : (
-                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
-                    )}
-                  </div>
-                </TableHead>
-
-                <TableHead
-                  className="min-w-[95px] max-w-[130px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
-                  onClick={() => handleSort("supplier")}
-                  title="Ordenar por Fornecedor (A-Z)"
-                >
-                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
-                    <span>Fornecedor</span>
-                    {sortField === "supplier" ? (
                       sortDirection === "asc" ? (
                         <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
                       ) : (
@@ -1049,7 +1011,12 @@ function LancamentosPage() {
                         t.highlight_color,
                       )}`}
                     >
-                      {/* Dia de Vencimento (Original) */}
+                      {/* Emissão */}
+                      <TableCell className="text-xs text-muted-foreground">
+                        {t.issue_date ? safeFormatDate(t.issue_date, "dd/MM/yyyy") : "—"}
+                      </TableCell>
+
+                      {/* Vencimento */}
                       <TableCell className="text-xs font-medium">
                         <div>
                           <span>{safeFormatDate(t.due_date, "dd/MM/yyyy")}</span>
@@ -1059,62 +1026,6 @@ function LancamentosPage() {
                             </p>
                           )}
                         </div>
-                      </TableCell>
-
-                      {/* Nova Data Pgto (Postergada / Previsão) */}
-                      <TableCell className="text-xs">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled={!canWrite}
-                              className={`h-7 px-2 text-xs font-medium ${
-                                hasPostponedDate
-                                  ? "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100"
-                                  : "text-muted-foreground hover:text-foreground"
-                              }`}
-                              title="Clique para alterar a data postergada de pagamento"
-                            >
-                              <Calendar className="mr-1 h-3 w-3" />
-                              {t.expected_payment_date
-                                ? safeFormatDate(t.expected_payment_date, "dd/MM/yyyy")
-                                : "—"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-3" align="start">
-                            <div className="space-y-2">
-                              <p className="text-xs font-semibold">Nova Data de Pagamento:</p>
-                              <CalendarPicker
-                                mode="single"
-                                selected={
-                                  safeParseDate(t.expected_payment_date) ||
-                                  safeParseDate(t.due_date) ||
-                                  new Date()
-                                }
-                                onSelect={async (newDate) => {
-                                  if (newDate) {
-                                    const formatted = format(newDate, "yyyy-MM-dd");
-                                    await moveDayMutation.mutateAsync({
-                                      id: t.id,
-                                      targetDate: formatted,
-                                      mode: "expected",
-                                      sourceModule: "fluxo_caixa",
-                                      movementType: "data_postergada",
-                                      txSnapshot: t,
-                                      userName: profile?.fullName || null,
-                                      userEmail: profile?.email || null,
-                                    });
-                                    toast.success(
-                                      `Data reagendada para ${format(newDate, "dd/MM/yyyy")}!`,
-                                    );
-                                  }
-                                }}
-                                initialFocus
-                              />
-                            </div>
-                          </PopoverContent>
-                        </Popover>
                       </TableCell>
 
                       {/* Descrição & Detalhes */}
@@ -1174,6 +1085,13 @@ function LancamentosPage() {
                         </span>
                       </TableCell>
 
+                      {/* Conta (Fornecedor / Banco) */}
+                      <TableCell className="text-xs text-muted-foreground">
+                        {(suppliers.find((s) => s.id === t.supplier_id) || t.supplier)?.name ||
+                          t.supplier_name ||
+                          "—"}
+                      </TableCell>
+
                       {/* Categoria */}
                       <TableCell className="text-xs">
                         {(() => {
@@ -1187,21 +1105,6 @@ function LancamentosPage() {
                             <span className="text-muted-foreground">—</span>
                           );
                         })()}
-                      </TableCell>
-
-                      {/* Centro de Custo */}
-                      <TableCell className="text-xs text-muted-foreground font-medium">
-                        {t.cost_center?.name ||
-                          costCenters.find((c) => c.id === t.cost_center_id)?.name ||
-                          (t as unknown as { cost_center_name?: string }).cost_center_name ||
-                          "—"}
-                      </TableCell>
-
-                      {/* Fornecedor */}
-                      <TableCell className="text-xs text-muted-foreground">
-                        {(suppliers.find((s) => s.id === t.supplier_id) || t.supplier)?.name ||
-                          t.supplier_name ||
-                          "—"}
                       </TableCell>
 
                       {/* Valor */}
