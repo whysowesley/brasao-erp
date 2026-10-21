@@ -166,6 +166,7 @@ function formatCurrency(val: number): string {
 }
 
 type SortField =
+  | "issue_date"
   | "due_date"
   | "expected_payment_date"
   | "description"
@@ -200,7 +201,12 @@ function LancamentosPage() {
     } else {
       setSortField(field);
       // Para texto A-Z por padrão, para data/valor mais recente/maior por padrão
-      if (field === "amount" || field === "due_date" || field === "expected_payment_date") {
+      if (
+        field === "amount" ||
+        field === "due_date" ||
+        field === "expected_payment_date" ||
+        field === "issue_date"
+      ) {
         setSortDirection("desc");
       } else {
         setSortDirection("asc");
@@ -377,6 +383,9 @@ function LancamentosPage() {
     list.sort((a, b) => {
       let comparison = 0;
       switch (sortField) {
+        case "issue_date":
+          comparison = safeCompareDates(a.issue_date, b.issue_date);
+          break;
         case "due_date":
           comparison = safeCompareDates(a.due_date, b.due_date);
           break;
@@ -810,16 +819,35 @@ function LancamentosPage() {
           <span className="font-mono text-[10px] text-primary">↔ deslize</span>
         </div>
         <div className="overflow-x-auto">
-          <Table className="min-w-[880px]">
+          <Table className="w-full text-xs">
             <TableHeader>
-              <TableRow>
+              <TableRow className="hover:bg-transparent">
                 <TableHead
-                  className="w-32 cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  className="w-[82px] min-w-[78px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
+                  onClick={() => handleSort("issue_date")}
+                  title="Ordenar por Data de Emissão"
+                >
+                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
+                    <span>Emissão</span>
+                    {sortField === "issue_date" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 transition-opacity ml-1 shrink-0" />
+                    )}
+                  </div>
+                </TableHead>
+
+                <TableHead
+                  className="w-[88px] min-w-[82px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
                   onClick={() => handleSort("due_date")}
                   title="Ordenar por Dia de Vencimento"
                 >
                   <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
-                    <span>Dia de Vencimento</span>
+                    <span>Vencimento</span>
                     {sortField === "due_date" ? (
                       sortDirection === "asc" ? (
                         <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
@@ -833,12 +861,12 @@ function LancamentosPage() {
                 </TableHead>
 
                 <TableHead
-                  className="w-36 cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  className="w-[98px] min-w-[92px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
                   onClick={() => handleSort("expected_payment_date")}
                   title="Ordenar por Nova Data Prevista de Pagamento"
                 >
                   <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
-                    <span>Nova Data Pgto</span>
+                    <span>Data Prevista</span>
                     {sortField === "expected_payment_date" ? (
                       sortDirection === "asc" ? (
                         <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
@@ -852,7 +880,7 @@ function LancamentosPage() {
                 </TableHead>
 
                 <TableHead
-                  className="cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  className="min-w-[130px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
                   onClick={() => handleSort("description")}
                   title="Ordenar por Descrição (A-Z ou Z-A)"
                 >
@@ -871,7 +899,7 @@ function LancamentosPage() {
                 </TableHead>
 
                 <TableHead
-                  className="w-24 cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  className="w-[76px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
                   onClick={() => handleSort("type")}
                   title="Ordenar por Tipo (Receita / Despesa)"
                 >
@@ -890,7 +918,7 @@ function LancamentosPage() {
                 </TableHead>
 
                 <TableHead
-                  className="cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  className="min-w-[85px] max-w-[120px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
                   onClick={() => handleSort("category")}
                   title="Ordenar por Categoria (A-Z)"
                 >
@@ -909,12 +937,12 @@ function LancamentosPage() {
                 </TableHead>
 
                 <TableHead
-                  className="cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  className="min-w-[85px] max-w-[120px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
                   onClick={() => handleSort("cost_center")}
                   title="Ordenar por Centro de Custo (A-Z)"
                 >
                   <div className="flex items-center gap-1 font-semibold text-xs text-foreground group">
-                    <span>Centro de Custo</span>
+                    <span>Centro Custo</span>
                     {sortField === "cost_center" ? (
                       sortDirection === "asc" ? (
                         <ArrowUp className="h-3.5 w-3.5 text-primary ml-1 shrink-0" />
@@ -928,7 +956,7 @@ function LancamentosPage() {
                 </TableHead>
 
                 <TableHead
-                  className="cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  className="min-w-[95px] max-w-[130px] cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
                   onClick={() => handleSort("supplier")}
                   title="Ordenar por Fornecedor (A-Z)"
                 >
@@ -947,7 +975,7 @@ function LancamentosPage() {
                 </TableHead>
 
                 <TableHead
-                  className="text-right cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  className="w-[90px] text-right cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
                   onClick={() => handleSort("amount")}
                   title="Ordenar por Valor (Maior para menor ou menor para maior)"
                 >
@@ -966,7 +994,7 @@ function LancamentosPage() {
                 </TableHead>
 
                 <TableHead
-                  className="w-28 text-center cursor-pointer select-none hover:bg-muted/60 transition-colors"
+                  className="w-[80px] text-center cursor-pointer select-none hover:bg-muted/60 transition-colors py-2.5 px-1.5"
                   onClick={() => handleSort("status")}
                   title="Ordenar por Status"
                 >
@@ -984,14 +1012,14 @@ function LancamentosPage() {
                   </div>
                 </TableHead>
 
-                <TableHead className="w-16 text-right">Ações</TableHead>
+                <TableHead className="w-[42px] text-right py-2.5 px-1.5">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={10}>
+                    <TableCell colSpan={11}>
                       <Skeleton className="h-8 w-full" />
                     </TableCell>
                   </TableRow>
@@ -999,7 +1027,7 @@ function LancamentosPage() {
               ) : transactions.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={10}
+                    colSpan={11}
                     className="h-32 text-center text-sm text-muted-foreground"
                   >
                     Nenhum lançamento financeiro encontrado com os filtros selecionados.
