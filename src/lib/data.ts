@@ -624,6 +624,7 @@ export type ProductInput = {
   lead_time_days: number;
   notes?: string | null;
   current_stock?: number;
+  active?: boolean;
 };
 
 export async function saveProduct(
@@ -670,6 +671,7 @@ export async function saveProduct(
     coverage_weeks: input.coverage_weeks ?? null,
     lead_time_days: Math.round(input.lead_time_days),
     notes: input.notes?.trim() || null,
+    active: input.active !== undefined ? input.active : true,
     updated_at: serverTimestamp(),
   };
 
@@ -692,7 +694,7 @@ export async function saveProduct(
     const docRef = await addDoc(collection(db, "products"), {
       ...payload,
       current_stock: 0,
-      active: true,
+      active: input.active !== undefined ? input.active : true,
       created_at: serverTimestamp(),
     });
 
@@ -707,6 +709,14 @@ export async function saveProduct(
     }
     return docRef.id;
   }
+}
+
+export async function toggleProductActive(productId: string, active: boolean) {
+  const productRef = doc(db, "products", productId);
+  await updateDoc(productRef, {
+    active,
+    updated_at: serverTimestamp(),
+  });
 }
 
 export async function updateProductConsumption(

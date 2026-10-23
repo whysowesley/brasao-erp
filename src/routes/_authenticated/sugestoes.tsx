@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Filter, Search, ShoppingCart } from "lucide-react";
+import { Filter, Lock, Search, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/PageHeader";
 import { PlanInput } from "@/components/PlanInput";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -103,7 +104,7 @@ function SugestoesPage() {
     }
 
     if (!showAllStock) {
-      list = list.filter((p) => p.suggestedPurchase > 0);
+      list = list.filter((p) => p.active !== false && p.suggestedPurchase > 0);
     }
 
     if (search.trim()) {
@@ -118,8 +119,9 @@ function SugestoesPage() {
     return list;
   }, [recomputedProducts, supplierFilter, showAllStock, search]);
 
-  const allChecked = rows.length > 0 && rows.every((r) => selected[r.id]);
-  const chosen = rows.filter((r) => selected[r.id]);
+  const activeRows = rows.filter((r) => r.active !== false);
+  const allChecked = activeRows.length > 0 && activeRows.every((r) => selected[r.id]);
+  const chosen = rows.filter((r) => r.active !== false && selected[r.id]);
 
   async function generateOrders() {
     if (chosen.length === 0) {
@@ -298,7 +300,7 @@ function SugestoesPage() {
                   <Checkbox
                     checked={allChecked}
                     onCheckedChange={(v) =>
-                      setSelected(v ? Object.fromEntries(rows.map((r) => [r.id, true])) : {})
+                      setSelected(v ? Object.fromEntries(activeRows.map((r) => [r.id, true])) : {})
                     }
                   />
                 </TableHead>
@@ -316,9 +318,11 @@ function SugestoesPage() {
             </TableHeader>
             <TableBody>
               {rows.map((p) => {
+                const isInactive = p.active === false;
                 const plannedValue = plan[p.id];
-                const wanted =
-                  plannedValue !== undefined
+                const wanted = isInactive
+                  ? 0
+                  : plannedValue !== undefined
                     ? plannedValue > 0
                       ? Math.ceil(plannedValue)
                       : 0
@@ -352,14 +356,42 @@ function SugestoesPage() {
                       1000,
                   ) / 1000;
                 return (
-                  <TableRow key={p.id} data-state={selected[p.id] ? "selected" : undefined}>
+                  <TableRow
+                    key={p.id}
+                    data-state={selected[p.id] ? "selected" : undefined}
+                    className={
+                      isInactive
+                        ? "bg-rose-500/5 dark:bg-rose-950/20 border-l-4 border-l-rose-500"
+                        : ""
+                    }
+                  >
                     <TableCell>
-                      <Checkbox
-                        checked={!!selected[p.id]}
-                        onCheckedChange={(v) => setSelected((s) => ({ ...s, [p.id]: !!v }))}
-                      />
+                      {isInactive ? (
+                        <div title="Item inativo - compra bloqueada">
+                          <Checkbox disabled checked={false} className="opacity-50" />
+                        </div>
+                      ) : (
+                        <Checkbox
+                          checked={!!selected[p.id]}
+                          onCheckedChange={(v) => setSelected((s) => ({ ...s, [p.id]: !!v }))}
+                        />
+                      )}
                     </TableCell>
-                    <TableCell className="font-medium">{p.description}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={isInactive ? "text-rose-950 dark:text-rose-200" : ""}>
+                          {p.description}
+                        </span>
+                        {isInactive && (
+                          <Badge
+                            variant="outline"
+                            className="border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold gap-1 text-[10px] px-1.5 py-0 inline-flex items-center"
+                          >
+                            <Lock className="h-2.5 w-2.5" /> Inativo
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{p.supplierName}</TableCell>
                     <TableCell className="num text-right">
                       {formatQty(p.current_stock, p.unit)}
@@ -386,14 +418,35 @@ function SugestoesPage() {
                       {formatQty(p.avg_weekly_consumption, p.unit)}
                     </TableCell>
                     <TableCell className="num text-right font-semibold">
-                      {p.suggestedPurchase > 0 ? formatQty(p.suggestedPurchase, p.unit) : "0"}
+                      {isInactive ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400"
+                          title="Produto inativo — compra travada"
+                        >
+                          <Lock className="h-3 w-3" /> Travado
+                        </span>
+                      ) : p.suggestedPurchase > 0 ? (
+                        formatQty(p.suggestedPurchase, p.unit)
+                      ) : (
+                        "0"
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <PlanInput
-                        value={wanted}
-                        onChange={(val) => setPlanned(p.id, val)}
-                        className="num ml-auto h-8 w-28 text-right font-semibold"
-                      />
+                      {isInactive ? (
+                        <div
+                          className="flex items-center justify-end gap-1 px-2 py-1 rounded bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold ml-auto w-fit"
+                          title="Produto inativo: compra bloqueada para evitar pedidos por engano"
+                        >
+                          <Lock className="h-3.5 w-3.5 text-rose-500" />
+                          <span className="text-[11px]">Trava Ativa</span>
+                        </div>
+                      ) : (
+                        <PlanInput
+                          value={wanted}
+                          onChange={(val) => setPlanned(p.id, val)}
+                          className="num ml-auto h-8 w-28 text-right font-semibold"
+                        />
+                      )}
                     </TableCell>
                     <TableCell
                       className={`num text-right ${
@@ -406,10 +459,28 @@ function SugestoesPage() {
                       {formatQty(future, p.unit)}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={p.status} />
+                      {isInactive ? (
+                        <Badge
+                          variant="outline"
+                          className="border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold gap-1 text-xs"
+                        >
+                          <Lock className="h-3 w-3" /> Inativo
+                        </Badge>
+                      ) : (
+                        <StatusBadge status={p.status} />
+                      )}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={futureStatusFor(future, Number(p.min_stock), rules)} />
+                      {isInactive ? (
+                        <Badge
+                          variant="outline"
+                          className="border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold gap-1 text-xs"
+                        >
+                          <Lock className="h-3 w-3" /> Inativo
+                        </Badge>
+                      ) : (
+                        <StatusBadge status={futureStatusFor(future, Number(p.min_stock), rules)} />
+                      )}
                     </TableCell>
                   </TableRow>
                 );

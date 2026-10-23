@@ -13,6 +13,8 @@ import {
   Table as TableIcon,
   Check,
   RefreshCw,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -56,6 +58,7 @@ import {
 import {
   applyMovement,
   deleteProduct,
+  toggleProductActive,
   updateProductConsumption,
   useCategories,
   useInvalidateAll,
@@ -258,9 +261,9 @@ function EstoquePage() {
   };
 
   // Filtro rápido de 1 toque no celular
-  const [quickFilter, setQuickFilter] = useState<"todos" | "sugestoes" | "criticos" | "planejados">(
-    "todos",
-  );
+  const [quickFilter, setQuickFilter] = useState<
+    "todos" | "sugestoes" | "criticos" | "planejados" | "inativos" | "ativos"
+  >("todos");
 
   // Flag de momento da contagem: pós-operação (fechamento, dia de hoje já usado) vs pré-operação
   const [isPostOperation, setIsPostOperation] = usePostOperationMode();
@@ -275,10 +278,10 @@ function EstoquePage() {
   }, [products, rules, effectiveRefDay, isPostOperation]);
 
   // Se o usuário não digitou manualmente um valor em Quero Comprar, o padrão é a compra sugerida arredondada para cima.
-  // Sempre arredonda para cima valores inteiros (ex: 9.8 vira 10).
+  // Sempre arredonda para cima valores inteiros (ex: 9.8 vira 10). Se inativo, trava em 0.
   const buyQty = useCallback(
     (p: ComputedProduct) => {
-      if (!p) return 0;
+      if (!p || p.active === false) return 0;
       if (plan && plan[p.id] !== undefined) {
         const val = plan[p.id];
         return typeof val === "number" && val > 0 ? Math.ceil(val) : 0;
@@ -323,6 +326,7 @@ function EstoquePage() {
     const batch: Record<string, number> = {};
     let count = 0;
     for (const p of recomputedProducts) {
+      if (p.active === false) continue; // Pula itens inativos / travados
       const sug = p.suggestedPurchase > 0 ? Math.ceil(p.suggestedPurchase) : 0;
       if (sug > 0) {
         batch[p.id] = sug;
@@ -330,7 +334,7 @@ function EstoquePage() {
       }
     }
     if (count === 0) {
-      toast.info("Nenhum produto possui sugestão de compra pendente.");
+      toast.info("Nenhum produto ativo possui sugestão de compra pendente.");
       return;
     }
     setPlannedBatch(batch);
@@ -362,21 +366,35 @@ function EstoquePage() {
     }
     if (supplier !== "todos") list = list.filter((p) => p?.supplier_id === supplier);
     if (category !== "todas") list = list.filter((p) => p?.category_id === category);
-    if (status !== "todos") list = list.filter((p) => stockStatus(p) === status);
+    if (status !== "todos") {
+      if (status === "inativos") {
+        list = list.filter((p) => p?.active === false);
+      } else if (status === "ativos") {
+        list = list.filter((p) => p?.active !== false);
+      } else {
+        list = list.filter((p) => stockStatus(p) === status);
+      }
+    }
 
     if (quickFilter === "sugestoes") {
-      list = list.filter((p) => (p?.suggestedPurchase ?? 0) > 0);
+      list = list.filter((p) => p?.active !== false && (p?.suggestedPurchase ?? 0) > 0);
     } else if (quickFilter === "criticos") {
-      list = list.filter((p) => stockStatus(p) !== "normal");
+      list = list.filter((p) => p?.active !== false && stockStatus(p) !== "normal");
     } else if (quickFilter === "planejados") {
-      list = list.filter((p) => plan && plan[p?.id] !== undefined && plan[p?.id] > 0);
+      list = list.filter(
+        (p) => p?.active !== false && plan && plan[p?.id] !== undefined && plan[p?.id] > 0,
+      );
+    } else if (quickFilter === "inativos") {
+      list = list.filter((p) => p?.active === false);
+    } else if (quickFilter === "ativos") {
+      list = list.filter((p) => p?.active !== false);
     }
 
     const sorted = [...list].sort((a, b) => {
       const dir = sort.dir === "asc" ? 1 : -1;
       if (sort.key === "status") {
-        const orderA = statusOrder[stockStatus(a)] ?? 2;
-        const orderB = statusOrder[stockStatus(b)] ?? 2;
+        const orderA = a.active === false ? 99 : (statusOrder[stockStatus(a)] ?? 2);
+        const orderB = b.active === false ? 99 : (statusOrder[stockStatus(b)] ?? 2);
         return (orderA - orderB) * dir;
       }
       if (sort.key === "futureStock") return (futureWithBuy(a) - futureWithBuy(b)) * dir;
@@ -408,6 +426,23 @@ function EstoquePage() {
 
   const toggleSort = (key: SortKey) =>
     setSort((s) => ({ key, dir: s.key === key && s.dir === "asc" ? "desc" : "asc" }));
+
+  async function handleToggleActive(p: ComputedProduct, nextActive: boolean) {
+    try {
+      await toggleProductActive(p.id, nextActive);
+      if (!nextActive) {
+        clearPlan([p.id]);
+      }
+      invalidate();
+      toast.success(
+        nextActive
+          ? `Produto ${p.description} reativado com sucesso.`
+          : `Produto ${p.description} desativado. Trava de compra acionada!`,
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   async function removeProduct(p: ComputedProduct) {
     try {
@@ -646,11 +681,13 @@ function EstoquePage() {
             </Select>
 
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="h-9 text-xs w-full sm:w-36">
+              <SelectTrigger className="h-9 text-xs w-full sm:w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todos os status</SelectItem>
+                <SelectItem value="todos">Todos os produtos</SelectItem>
+                <SelectItem value="ativos">Apenas Ativos</SelectItem>
+                <SelectItem value="inativos">Inativos (Bloqueados)</SelectItem>
                 <SelectItem value="critico">Crítico</SelectItem>
                 <SelectItem value="atencao">Atenção</SelectItem>
                 <SelectItem value="normal">Normal</SelectItem>
@@ -709,7 +746,12 @@ function EstoquePage() {
               className="h-7 px-2.5 text-[11px] rounded-full"
             >
               <Sparkles className="h-3 w-3 mr-1 text-primary" />
-              Precisam Comprar ({recomputedProducts.filter((p) => p.suggestedPurchase > 0).length})
+              Precisam Comprar (
+              {
+                recomputedProducts.filter((p) => p.active !== false && p.suggestedPurchase > 0)
+                  .length
+              }
+              )
             </Button>
             <Button
               size="sm"
@@ -718,7 +760,25 @@ function EstoquePage() {
               className="h-7 px-2.5 text-[11px] rounded-full"
             >
               Críticos / Atenção (
-              {recomputedProducts.filter((p) => stockStatus(p) !== "normal").length})
+              {
+                recomputedProducts.filter((p) => p.active !== false && stockStatus(p) !== "normal")
+                  .length
+              }
+              )
+            </Button>
+            <Button
+              size="sm"
+              variant={quickFilter === "inativos" ? "default" : "outline"}
+              onClick={() => setQuickFilter("inativos")}
+              className={cn(
+                "h-7 px-2.5 text-[11px] rounded-full gap-1",
+                quickFilter === "inativos"
+                  ? "bg-rose-700 hover:bg-rose-800 text-white"
+                  : "text-rose-700 border-rose-300 dark:text-rose-300 dark:border-rose-800",
+              )}
+            >
+              <Lock className="h-3 w-3 text-rose-500" />
+              Inativos ({recomputedProducts.filter((p) => p.active === false).length})
             </Button>
             {Object.keys(plan).length > 0 && (
               <Button
@@ -776,18 +836,38 @@ function EstoquePage() {
             return (
               <div
                 key={p.id}
-                className="rounded-lg border bg-card p-3.5 shadow-xs space-y-3 transition-colors hover:border-primary/40"
+                className={cn(
+                  "rounded-lg border p-3.5 shadow-xs space-y-3 transition-colors",
+                  p.active === false
+                    ? "border-rose-500/50 bg-rose-500/5 dark:bg-rose-950/25 border-l-4 border-l-rose-500"
+                    : "border-border bg-card hover:border-primary/40",
+                )}
               >
                 {/* Cabeçalho do Card */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <Link
-                      to="/produtos/$id"
-                      params={{ id: p.id }}
-                      className="font-semibold text-sm text-foreground hover:underline line-clamp-1"
-                    >
-                      {p.description}
-                    </Link>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Link
+                        to="/produtos/$id"
+                        params={{ id: p.id }}
+                        className={cn(
+                          "font-semibold text-sm hover:underline line-clamp-1",
+                          p.active === false
+                            ? "text-rose-950 dark:text-rose-200"
+                            : "text-foreground",
+                        )}
+                      >
+                        {p.description}
+                      </Link>
+                      {p.active === false && (
+                        <Badge
+                          variant="outline"
+                          className="border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold gap-1 text-[10px] px-1.5 py-0 inline-flex items-center shrink-0"
+                        >
+                          <Lock className="h-2.5 w-2.5" /> Inativo
+                        </Badge>
+                      )}
+                    </div>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px] text-muted-foreground">
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
                         {p.unit}
@@ -801,7 +881,16 @@ function EstoquePage() {
                       )}
                     </div>
                   </div>
-                  <StatusBadge status={statusVal} />
+                  {p.active === false ? (
+                    <Badge
+                      variant="outline"
+                      className="border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold gap-1 text-xs shrink-0"
+                    >
+                      <Lock className="h-3 w-3" /> Inativo
+                    </Badge>
+                  ) : (
+                    <StatusBadge status={statusVal} />
+                  )}
                 </div>
 
                 {/* Métricas Principais em Grade de 3 Colunas */}
@@ -855,7 +944,14 @@ function EstoquePage() {
                       Compra Sugerida
                     </span>
                     <div className="mt-1">
-                      {sugRounded > 0 ? (
+                      {p.active === false ? (
+                        <Badge
+                          variant="outline"
+                          className="border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-[11px] px-1.5 py-0 gap-1"
+                        >
+                          <Lock className="h-2.5 w-2.5" /> Travado
+                        </Badge>
+                      ) : sugRounded > 0 ? (
                         <Badge
                           variant="outline"
                           className="border-primary/50 bg-primary/10 text-primary font-bold text-xs px-1.5 py-0"
@@ -875,13 +971,23 @@ function EstoquePage() {
                     <span className="text-xs font-semibold text-foreground whitespace-nowrap">
                       Quero Comprar:
                     </span>
-                    <PlanInput
-                      value={plannedQty}
-                      placeholder={sugRounded > 0 ? String(sugRounded) : "0"}
-                      onChange={(val) => setPlanned(p.id, val)}
-                      roundUp={true}
-                      className="num h-8 w-24 text-center font-bold text-xs"
-                    />
+                    {p.active === false ? (
+                      <div
+                        className="flex items-center gap-1 px-2.5 py-1 rounded bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold"
+                        title="Produto inativo: compra bloqueada para evitar pedidos por engano"
+                      >
+                        <Lock className="h-3.5 w-3.5 text-rose-500" />
+                        <span className="text-[11px]">Trava Ativa</span>
+                      </div>
+                    ) : (
+                      <PlanInput
+                        value={plannedQty}
+                        placeholder={sugRounded > 0 ? String(sugRounded) : "0"}
+                        onChange={(val) => setPlanned(p.id, val)}
+                        roundUp={true}
+                        className="num h-8 w-24 text-center font-bold text-xs"
+                      />
+                    )}
                   </div>
 
                   <div className="text-right">
@@ -904,6 +1010,32 @@ function EstoquePage() {
                 {/* Ações do Card */}
                 {!isCounter && canWrite && (
                   <div className="flex items-center justify-end gap-1 pt-1.5 border-t border-dashed">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleToggleActive(p, p.active === false)}
+                      className={cn(
+                        "h-7 px-2 text-xs",
+                        p.active === false
+                          ? "text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      title={
+                        p.active === false
+                          ? "Reativar produto (liberar compras)"
+                          : "Desativar produto (travar compras)"
+                      }
+                    >
+                      {p.active === false ? (
+                        <>
+                          <Unlock className="h-3.5 w-3.5 mr-1" /> Reativar
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="h-3.5 w-3.5 mr-1" /> Desativar
+                        </>
+                      )}
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -1035,15 +1167,39 @@ function EstoquePage() {
                             </TableCell>
                           </TableRow>
                         )}
-                      <TableRow>
-                        <TableCell className="font-medium sticky left-0 bg-card z-10 shadow-xs">
-                          <Link
-                            to="/produtos/$id"
-                            params={{ id: p.id }}
-                            className="hover:underline font-semibold"
-                          >
-                            {p.description}
-                          </Link>
+                      <TableRow
+                        className={
+                          p.active === false
+                            ? "bg-rose-500/5 dark:bg-rose-950/20 border-l-4 border-l-rose-500"
+                            : ""
+                        }
+                      >
+                        <TableCell
+                          className={cn(
+                            "font-medium sticky left-0 z-10 shadow-xs",
+                            p.active === false ? "bg-rose-50/70 dark:bg-rose-950/40" : "bg-card",
+                          )}
+                        >
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Link
+                              to="/produtos/$id"
+                              params={{ id: p.id }}
+                              className={cn(
+                                "hover:underline font-semibold",
+                                p.active === false ? "text-rose-950 dark:text-rose-200" : "",
+                              )}
+                            >
+                              {p.description}
+                            </Link>
+                            {p.active === false && (
+                              <Badge
+                                variant="outline"
+                                className="border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold gap-1 text-[10px] px-1.5 py-0 inline-flex items-center shrink-0"
+                              >
+                                <Lock className="h-2.5 w-2.5" /> Inativo
+                              </Badge>
+                            )}
+                          </div>
                           <span className="ml-2 text-xs text-muted-foreground">
                             {p.categoryName}
                           </span>
@@ -1105,16 +1261,37 @@ function EstoquePage() {
                           </div>
                         </TableCell>
                         <TableCell className="num text-right font-semibold">
-                          {sugRounded > 0 ? formatQty(sugRounded, p.unit) : "—"}
+                          {p.active === false ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400"
+                              title="Produto inativo — compra travada"
+                            >
+                              <Lock className="h-3 w-3" /> Travado
+                            </span>
+                          ) : sugRounded > 0 ? (
+                            formatQty(sugRounded, p.unit)
+                          ) : (
+                            "—"
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <PlanInput
-                            value={buyQty(p)}
-                            placeholder={sugRounded > 0 ? String(sugRounded) : "0"}
-                            onChange={(val) => setPlanned(p.id, val)}
-                            roundUp={true}
-                            className="num ml-auto h-8 w-24 text-right"
-                          />
+                          {p.active === false ? (
+                            <div
+                              className="flex items-center justify-end gap-1 px-2 py-1 rounded bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold ml-auto w-fit"
+                              title="Produto inativo: compra bloqueada para evitar pedidos por engano"
+                            >
+                              <Lock className="h-3.5 w-3.5 text-rose-500" />
+                              <span className="text-[11px]">Trava Ativa</span>
+                            </div>
+                          ) : (
+                            <PlanInput
+                              value={buyQty(p)}
+                              placeholder={sugRounded > 0 ? String(sugRounded) : "0"}
+                              onChange={(val) => setPlanned(p.id, val)}
+                              roundUp={true}
+                              className="num ml-auto h-8 w-24 text-right"
+                            />
+                          )}
                         </TableCell>
                         <TableCell className="num text-right font-semibold">
                           <span
@@ -1129,14 +1306,44 @@ function EstoquePage() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <StatusBadge status={stockStatus(p)} />
+                          {p.active === false ? (
+                            <Badge
+                              variant="outline"
+                              className="border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold gap-1 text-xs"
+                            >
+                              <Lock className="h-3 w-3" /> Inativo (Bloqueado)
+                            </Badge>
+                          ) : (
+                            <StatusBadge status={stockStatus(p)} />
+                          )}
                         </TableCell>
                         <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">
                           {p.notes ?? ""}
                         </TableCell>
                         {!isCounter && canWrite && (
                           <TableCell>
-                            <div className="flex items-center">
+                            <div className="flex items-center gap-0.5">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleToggleActive(p, p.active === false)}
+                                title={
+                                  p.active === false
+                                    ? "Reativar produto (liberar compras)"
+                                    : "Desativar produto (travar compras)"
+                                }
+                                className={
+                                  p.active === false
+                                    ? "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400"
+                                    : "text-muted-foreground hover:text-foreground"
+                                }
+                              >
+                                {p.active === false ? (
+                                  <Unlock className="h-4 w-4" />
+                                ) : (
+                                  <Lock className="h-4 w-4" />
+                                )}
+                              </Button>
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -1144,12 +1351,13 @@ function EstoquePage() {
                                   setEditing(p);
                                   setDialogOpen(true);
                                 }}
+                                title="Editar produto"
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
-                                  <Button size="icon" variant="ghost">
+                                  <Button size="icon" variant="ghost" title="Apagar produto">
                                     <Trash2 className="h-4 w-4 text-critical" />
                                   </Button>
                                 </AlertDialogTrigger>

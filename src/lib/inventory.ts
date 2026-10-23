@@ -321,9 +321,11 @@ export function computeProduct(
 
   // Compra sugerida:
   // A quantidade que falta para suprir o consumo até a próxima segunda-feira e terminar perto de 0 (0, 1, 2, 3, no máximo 10)
+  // Caso o produto esteja inativo (bloqueado), a compra sugerida é travada em 0
+  const isInactive = p.active === false;
   const rawSuggestion = Math.max(0, targetDemand + targetBuffer - availableStock - incoming);
   const roundedRaw = round(rawSuggestion);
-  const suggestedPurchase = roundedRaw > 0 ? Math.ceil(roundedRaw) : 0;
+  const suggestedPurchase = isInactive ? 0 : roundedRaw > 0 ? Math.ceil(roundedRaw) : 0;
 
   // Projeções de estoque futuro na próxima 2ª feira (saldo residual que restará após todo o consumo do período):
   // - Sem compra: estoque disponível menos a demanda do período (pode ser negativo/déficit caso não compre)

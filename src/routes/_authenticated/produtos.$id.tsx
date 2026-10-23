@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Calendar, Pencil } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2, Lock, Pencil, Unlock } from "lucide-react";
+import { toast } from "sonner";
 import {
   CartesianGrid,
   Line,
@@ -25,7 +26,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useMovements, useProduct, useRules } from "@/lib/data";
+import {
+  toggleProductActive,
+  useInvalidateAll,
+  useMovements,
+  useProduct,
+  useRules,
+} from "@/lib/data";
 import {
   computeProduct,
   DAYS_OF_WEEK,
@@ -89,6 +96,24 @@ function ProductDetail() {
   const [isPostOperation] = usePostOperationMode();
   const { data: movements } = useMovements(id, 200);
   const [open, setOpen] = useState(false);
+  const invalidate = useInvalidateAll();
+
+  async function handleToggleActive() {
+    if (!product) return;
+    const nextActive = product.active === false;
+    try {
+      await toggleProductActive(product.id, nextActive);
+      invalidate();
+      refetch();
+      toast.success(
+        nextActive
+          ? `Produto ${product.description} reativado.`
+          : `Produto ${product.description} desativado. Trava de compra acionada!`,
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   const product = useMemo(() => {
     if (!rawProduct) return null;
@@ -161,6 +186,12 @@ function ProductDetail() {
     ["Categoria", product.categoryName],
     ["Fornecedor", product.supplierName],
     ["Unidade / embalagem", product.unit],
+    [
+      "Status no Sistema",
+      product.active !== false
+        ? "Ativo (Liberado para compras)"
+        : "Inativo (Trava de compra ativa)",
+    ],
     ["Estoque atual", formatQty(product.current_stock, product.unit)],
     ["Consumo médio semanal", formatQty(product.avg_weekly_consumption, product.unit)],
     [
@@ -172,7 +203,12 @@ function ProductDetail() {
     ["Estoque mínimo", formatQty(product.min_stock, product.unit)],
     ["Estoque de segurança", formatQty(product.safety_stock, product.unit)],
     ["Saldo 2ª previsto (sem compra)", formatQty(product.projectedStock, product.unit)],
-    ["Compra sugerida (para zerar na 2ª)", formatQty(product.suggestedPurchase, product.unit)],
+    [
+      "Compra sugerida (para zerar na 2ª)",
+      product.active === false
+        ? "Bloqueada (Item Inativo)"
+        : formatQty(product.suggestedPurchase, product.unit),
+    ],
     [
       "Estoque futuro na 2ª feira (com compra sugerida)",
       formatQty(product.futureStockWithSuggestion, product.unit),
@@ -191,17 +227,56 @@ function ProductDetail() {
         title={product.description}
         description={`Código ${product.code ?? "—"} · ${product.categoryName}`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {product.active === false ? (
+              <Badge
+                variant="outline"
+                className="border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold gap-1 text-xs py-1 px-2.5"
+              >
+                <Lock className="h-3.5 w-3.5" /> Inativo (Bloqueado)
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold gap-1 text-xs py-1 px-2.5"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" /> Ativo
+              </Badge>
+            )}
+
             <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center">
               <span className="text-xs text-muted-foreground mr-1">Status Atual:</span>
               <StatusBadge status={product.status} className="h-8 px-2.5 text-xs" />
               <span className="text-xs text-muted-foreground ml-2 mr-1">Status Futuro:</span>
               <StatusBadge status={product.futureStatus} className="h-8 px-2.5 text-xs" />
             </div>
+
             {!isCounter && canWrite && (
-              <Button onClick={() => setOpen(true)} className="ml-2">
-                <Pencil className="h-4 w-4" /> Editar
-              </Button>
+              <div className="flex items-center gap-2 ml-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleToggleActive}
+                  className={
+                    product.active === false
+                      ? "text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:text-emerald-300"
+                      : "text-rose-700 border-rose-300 hover:bg-rose-50 dark:text-rose-300"
+                  }
+                >
+                  {product.active === false ? (
+                    <>
+                      <Unlock className="h-4 w-4 mr-1.5" /> Reativar
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="h-4 w-4 mr-1.5" /> Desativar
+                    </>
+                  )}
+                </Button>
+                <Button onClick={() => setOpen(true)}>
+                  <Pencil className="h-4 w-4" /> Editar
+                </Button>
+              </div>
             )}
           </div>
         }

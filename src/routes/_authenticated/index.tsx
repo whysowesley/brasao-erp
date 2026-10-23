@@ -151,11 +151,11 @@ function Dashboard() {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [replenishmentViewMode, setReplenishmentViewMode] = useState<"table" | "cards">("table");
 
-  const critical = products?.filter((p) => p.status === "critico") ?? [];
-  const attention = products?.filter((p) => p.status === "atencao") ?? [];
-  const toBuy = products?.filter((p) => p.suggestedPurchase > 0) ?? [];
+  const critical = products?.filter((p) => p.active !== false && p.status === "critico") ?? [];
+  const attention = products?.filter((p) => p.active !== false && p.status === "atencao") ?? [];
+  const toBuy = products?.filter((p) => p.active !== false && p.suggestedPurchase > 0) ?? [];
   const openOrders = orders?.filter((o) => OPEN_ORDER_STATUSES.includes(o.status)) ?? [];
-  const supplierSummary = buildSupplierSummary(products);
+  const supplierSummary = buildSupplierSummary(products?.filter((p) => p.active !== false));
 
   const activeFilterLabel = useMemo(() => {
     switch (stockFilter) {
@@ -204,6 +204,7 @@ function Dashboard() {
     return products.filter((p) => {
       // 1. Escopo de reposição (apenas itens que precisam de compra/atenção/estoque <= 0, ou todos)
       if (onlyNeedsReplenishment) {
+        if (p.active === false) return false;
         const needsReplenish =
           (Number(p.suggestedPurchase) || 0) > 0 ||
           p.status === "critico" ||

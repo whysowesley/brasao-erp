@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CheckCircle2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,10 +12,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { InlineCreate } from "@/components/InlineCreate";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 import {
   Select,
@@ -61,6 +64,7 @@ type FormState = {
   coverage_weeks: string;
   lead_time_days: string;
   notes: string;
+  active: boolean;
 };
 
 type DailyFormState = {
@@ -99,6 +103,7 @@ const empty: FormState = {
   coverage_weeks: "",
   lead_time_days: "0",
   notes: "",
+  active: true,
 };
 
 const num = (v: string) => (v.trim() === "" ? 0 : Number(v.replace(",", ".")) || 0);
@@ -143,7 +148,7 @@ export function ProductDialog({
         safety_stock: num(form.safety_stock),
         lead_time_days: Math.round(num(form.lead_time_days)),
         notes: null,
-        active: true,
+        active: form.active,
         category_id: null,
         supplier_id: null,
         daily_consumption: {
@@ -197,6 +202,7 @@ export function ProductDialog({
         coverage_weeks: product.coverage_weeks?.toString() ?? "",
         lead_time_days: String(product.lead_time_days),
         notes: product.notes ?? "",
+        active: product.active !== false,
       });
 
       const mode = product.daily_consumption_mode ?? "constant";
@@ -358,11 +364,20 @@ export function ProductDialog({
           lead_time_days: Math.round(num(form.lead_time_days)),
           notes: form.notes.trim() || null,
           current_stock: num(form.current_stock),
+          active: form.active,
         },
         product ? { id: product.id, current_stock: Number(product.current_stock) } : undefined,
       );
 
-      toast.success(product ? "Produto atualizado." : "Produto cadastrado.");
+      toast.success(
+        product
+          ? form.active
+            ? "Produto atualizado com sucesso."
+            : "Produto atualizado como INATIVO (compras bloqueadas)."
+          : form.active
+            ? "Produto cadastrado com sucesso."
+            : "Produto cadastrado como INATIVO (compras bloqueadas).",
+      );
       invalidate();
       onOpenChange(false);
     } catch (e) {
@@ -381,6 +396,72 @@ export function ProductDialog({
             Defina o consumo diário por dia da semana ou use consumo constante padrão.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Card de Ativação / Inativação com Trava de Compra */}
+        <div
+          className={cn(
+            "rounded-lg border p-3.5 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs",
+            form.active
+              ? "border-emerald-500/30 bg-emerald-500/5 text-foreground"
+              : "border-rose-500/40 bg-rose-500/10 text-foreground dark:bg-rose-950/25",
+          )}
+        >
+          <div className="flex items-start sm:items-center gap-3">
+            <div
+              className={cn(
+                "p-2 rounded-full shrink-0 mt-0.5 sm:mt-0",
+                form.active
+                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                  : "bg-rose-500/20 text-rose-600 dark:text-rose-400",
+              )}
+            >
+              {form.active ? <CheckCircle2 className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-sm">
+                  {form.active ? "Produto Ativo" : "Produto Inativo (Trava Ativa)"}
+                </span>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[11px] font-semibold gap-1",
+                    form.active
+                      ? "border-emerald-500/40 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                      : "border-rose-500/40 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 font-bold",
+                  )}
+                >
+                  {form.active ? (
+                    "Liberado para Compras"
+                  ) : (
+                    <>
+                      <Lock className="h-3 w-3" /> Bloqueado para Compras
+                    </>
+                  )}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {form.active
+                  ? "Item ativo no estoque: habilitado para compras sugeridas e inclusão em novos pedidos."
+                  : "Trava ativada: este item NÃO será comprado nem sugerido para reposição, evitando pedidos por engano."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto bg-background/90 dark:bg-background/50 px-3 py-1.5 rounded-md border shadow-2xs">
+            <Label
+              htmlFor="product-active-toggle"
+              className="text-xs font-semibold cursor-pointer select-none"
+            >
+              {form.active ? "Ativado" : "Inativo"}
+            </Label>
+            <Switch
+              id="product-active-toggle"
+              checked={form.active}
+              onCheckedChange={(checked) => setForm((f) => ({ ...f, active: checked }))}
+            />
+          </div>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
