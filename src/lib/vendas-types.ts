@@ -310,7 +310,13 @@ export interface WeekProjectionGroup {
   endDate: string; // YYYY-MM-DD
   days: DayProjectionItem[];
   totalRealizado: number;
-  totalProjetado: number;
+  totalProjetado: number; // dias restantes a vencer
+  totalProjetadoSemana: number; // Benchmark total projetado para os 7 dias da semana (peso médio dos dias)
+  benchmarkDiasRealizados: number; // Benchmark apenas dos dias já realizados
+  diffRealizadoVsProjetado: number; // totalRealizado - totalProjetadoSemana
+  percentAtingidoSemana: number; // (totalRealizado / totalProjetadoSemana) * 100
+  diffRealizadoVsBenchmarkDiasPassados: number; // totalRealizado - benchmarkDiasRealizados (comparativo dos dias passados)
+  percentAtingidoDiasPassados: number; // (totalRealizado / benchmarkDiasRealizados) * 100
   totalPrevisto: number; // totalRealizado + totalProjetado
   daysWithSalesCount: number;
   daysProjectedCount: number;
@@ -334,6 +340,7 @@ export interface MonthSalesProjectionMetrics {
   daysRemainingCount: number;
   totalRealizado: number;
   totalProjetado: number;
+  totalBenchmarkMes: number; // Soma de benchmark de todos os dias do mês
   totalPrevistoMes: number; // totalRealizado + totalProjetado
   avgDiariaRealizada: number;
   avgDiariaProjetada: number;

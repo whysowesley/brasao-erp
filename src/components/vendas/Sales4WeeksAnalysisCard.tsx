@@ -24,6 +24,8 @@ import {
   Tooltip,
   CartesianGrid,
   Cell,
+  LabelList,
+  Legend,
 } from "recharts";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +43,28 @@ import {
 import { formatCurrency, getTodayDateString, useDay4WeeksAnalysis } from "@/lib/vendas";
 import { SalesIncidentDialog } from "./SalesIncidentDialog";
 
+function formatMinimalistCurrency(value: number): string {
+  if (value === undefined || value === null || isNaN(value)) return "R$ 0";
+  const num = Math.round(value * 100) / 100;
+  if (num === 0) return "R$ 0";
+  if (num >= 100000) {
+    return `R$ ${(num / 1000).toFixed(1)}k`;
+  }
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: num % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(num);
+}
+
+interface CustomLabelProps {
+  x?: number;
+  y?: number;
+  width?: number;
+  value?: number | string;
+}
+
 interface Sales4WeeksAnalysisCardProps {
   selectedDate: string;
   onDateChange: (date: string) => void;
@@ -53,6 +77,7 @@ export function Sales4WeeksAnalysisCard({
   onOpenSaleEntry,
 }: Sales4WeeksAnalysisCardProps) {
   const [incidentDialogOpen, setIncidentDialogOpen] = useState<boolean>(false);
+  const [channelViewMode, setChannelViewMode] = useState<"grafico" | "tabela" | "ambos">("ambos");
 
   const { data: analysis, isLoading, refetch } = useDay4WeeksAnalysis(selectedDate);
 
@@ -84,6 +109,14 @@ export function Sales4WeeksAnalysisCard({
       label: "Dia Selecionado",
     },
   ];
+
+  // Prepara dados em colunas para os canais de venda (Hoje vs Média)
+  const channelChartData = analysis.channelComparisons.map((c) => ({
+    name: c.label,
+    Hoje: c.currentAmount,
+    "Média 4 Sem": c.avgAmount,
+    color: c.color,
+  }));
 
   return (
     <div className="space-y-6">
@@ -279,16 +312,21 @@ export function Sales4WeeksAnalysisCard({
                   Média Histórica: <b>{formatCurrency(analysis.avgHistoricalAmount)}</b>
                 </span>
               </div>
-              <div className="h-[180px] w-full">
+              <div className="h-[215px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={comparisonChartData}
-                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    margin={{ top: 24, right: 10, left: -20, bottom: 0 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                     <YAxis
                       tickFormatter={(v) => `R$ ${v >= 1000 ? (v / 1000).toFixed(0) + "k" : v}`}
+                      domain={[
+                        0,
+                        (dataMax: number) =>
+                          Math.max(Math.ceil((dataMax * 1.22) / 100) * 100, 1000),
+                      ]}
                       tick={{ fontSize: 10 }}
                     />
                     <Tooltip
@@ -296,6 +334,26 @@ export function Sales4WeeksAnalysisCard({
                       contentStyle={{ fontSize: 12, borderRadius: 8 }}
                     />
                     <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                      <LabelList
+                        dataKey="amount"
+                        position="top"
+                        content={(props: CustomLabelProps) => {
+                          const { x = 0, y = 0, width = 0, value } = props;
+                          if (value === undefined || value === null) return null;
+                          const num = Number(value) || 0;
+                          return (
+                            <text
+                              x={x + width / 2}
+                              y={y - 5}
+                              fill="currentColor"
+                              className="fill-foreground font-mono font-bold text-[10.5px] select-none"
+                              textAnchor="middle"
+                            >
+                              {formatMinimalistCurrency(num)}
+                            </text>
+                          );
+                        }}
+                      />
                       {comparisonChartData.map((entry, index) => {
                         const isCurrent = entry.type === "current";
                         let fill = "#64748b";
@@ -396,106 +454,227 @@ export function Sales4WeeksAnalysisCard({
       {/* COMPARAÇÃO DETALHADA POR CANAL DE VENDA */}
       <Card className="border-border/80 shadow-xs">
         <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle className="text-base font-semibold tracking-tight">
-                Desempenho por Canal de Venda (Hoje vs Média 4 Semanas)
+                Desempenho por Canal de Venda ({analysis.dayOfWeek}: Hoje vs Média 4 Semanas)
               </CardTitle>
               <CardDescription className="text-xs">
-                Avalie qual canal puxou as vendas para cima ou para baixo nesta{" "}
-                {analysis.dayOfWeek.toLowerCase()}.
+                Valores em R$ colados acima de cada coluna para comparação imediata por canal.
               </CardDescription>
+            </div>
+
+            {/* Alternador de visualização */}
+            <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border self-start sm:self-auto">
+              <Button
+                variant={channelViewMode === "grafico" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setChannelViewMode("grafico")}
+                className="h-7 text-xs px-2.5 font-medium"
+              >
+                Gráfico
+              </Button>
+              <Button
+                variant={channelViewMode === "tabela" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setChannelViewMode("tabela")}
+                className="h-7 text-xs px-2.5 font-medium"
+              >
+                Tabela
+              </Button>
+              <Button
+                variant={channelViewMode === "ambos" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setChannelViewMode("ambos")}
+                className="h-7 text-xs px-2.5 font-medium"
+              >
+                Ambos
+              </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table className="min-w-[700px]">
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead>Canal</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Venda Hoje</TableHead>
-                  <TableHead className="text-right">Média 4 Semanas</TableHead>
-                  <TableHead className="text-right">Variação (R$)</TableHead>
-                  <TableHead className="text-right">Variação (%)</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {analysis.channelComparisons.map((item) => {
-                  const isAbove = item.status === "acima";
-                  const isBelow = item.status === "abaixo";
-                  const isAverage = item.status === "media";
+          {/* GRÁFICO DE COLUNAS POR CANAL COM VALORES EM R$ NO TOPO */}
+          {(channelViewMode === "grafico" || channelViewMode === "ambos") && (
+            <div className="p-4 pt-2 border-b border-border/60 bg-card">
+              <div className="text-[11px] font-semibold text-muted-foreground mb-3 flex items-center justify-between">
+                <span>
+                  Comparativo em Colunas: Venda do Dia vs Média Histórica de {analysis.dayOfWeek}s
+                </span>
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  Valores R$ no topo de cada coluna
+                </span>
+              </div>
+              <div className="h-[240px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={channelChartData}
+                    margin={{ top: 24, right: 15, left: -15, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 600 }} />
+                    <YAxis
+                      tickFormatter={(v) => `R$ ${v >= 1000 ? (v / 1000).toFixed(0) + "k" : v}`}
+                      domain={[
+                        0,
+                        (dataMax: number) => Math.max(Math.ceil((dataMax * 1.25) / 100) * 100, 500),
+                      ]}
+                      tick={{ fontSize: 10 }}
+                    />
+                    <Tooltip
+                      formatter={(val: number) => [formatCurrency(val), ""]}
+                      contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                    <Bar
+                      dataKey="Hoje"
+                      name={`Hoje (${analysis.formattedTargetDate.slice(0, 5)})`}
+                      fill="#0284c7"
+                      radius={[4, 4, 0, 0]}
+                    >
+                      <LabelList
+                        dataKey="Hoje"
+                        position="top"
+                        content={(props: CustomLabelProps) => {
+                          const { x = 0, y = 0, width = 0, value } = props;
+                          if (value === undefined || value === null) return null;
+                          const num = Number(value) || 0;
+                          return (
+                            <text
+                              x={x + width / 2}
+                              y={y - 5}
+                              fill="currentColor"
+                              className="fill-foreground font-mono font-bold text-[10px] select-none"
+                              textAnchor="middle"
+                            >
+                              {formatMinimalistCurrency(num)}
+                            </text>
+                          );
+                        }}
+                      />
+                    </Bar>
+                    <Bar
+                      dataKey="Média 4 Sem"
+                      name="Média 4 Semanas"
+                      fill="#94a3b8"
+                      radius={[4, 4, 0, 0]}
+                    >
+                      <LabelList
+                        dataKey="Média 4 Sem"
+                        position="top"
+                        content={(props: CustomLabelProps) => {
+                          const { x = 0, y = 0, width = 0, value } = props;
+                          if (value === undefined || value === null) return null;
+                          const num = Number(value) || 0;
+                          return (
+                            <text
+                              x={x + width / 2}
+                              y={y - 5}
+                              fill="currentColor"
+                              className="fill-muted-foreground font-mono font-semibold text-[9.5px] select-none"
+                              textAnchor="middle"
+                            >
+                              {formatMinimalistCurrency(num)}
+                            </text>
+                          );
+                        }}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
 
-                  return (
-                    <TableRow key={item.channel}>
-                      <TableCell className="font-semibold text-xs flex items-center gap-2">
-                        <span
-                          className="h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: item.color }}
-                        />
-                        <span>{item.label}</span>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {item.categoryLabel}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs font-bold text-foreground">
-                        {formatCurrency(item.currentAmount)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                        {formatCurrency(item.avgAmount)}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right font-mono text-xs font-semibold ${
-                          isAbove
-                            ? "text-emerald-600"
-                            : isBelow
-                              ? "text-rose-600"
-                              : "text-amber-700 dark:text-amber-400"
-                        }`}
-                      >
-                        {item.variationAmount > 0 ? "+" : ""}
-                        {formatCurrency(item.variationAmount)}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right font-mono text-xs font-bold ${
-                          isAbove
-                            ? "text-emerald-600"
-                            : isBelow
-                              ? "text-rose-600"
-                              : "text-amber-700 dark:text-amber-400"
-                        }`}
-                      >
-                        {item.avgAmount > 0
-                          ? `${item.variationPercent > 0 ? "+" : ""}${item.variationPercent.toFixed(1)}%`
-                          : "-"}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {item.status === "sem_historico" ? (
-                          <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                            Sem dados
-                          </Badge>
-                        ) : isAbove ? (
-                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-bold">
-                            🟢 Acima
-                          </Badge>
-                        ) : isBelow ? (
-                          <Badge className="bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950 dark:text-rose-300 text-[10px] font-bold">
-                            🔴 Abaixo
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 text-[10px] font-bold">
-                            🟡 Na Média
-                          </Badge>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+          {/* TABELA DETALHADA POR CANAL */}
+          {(channelViewMode === "tabela" || channelViewMode === "ambos") && (
+            <div className="overflow-x-auto">
+              <Table className="min-w-[700px]">
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead>Canal</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead className="text-right">Venda Hoje</TableHead>
+                    <TableHead className="text-right">Média 4 Semanas</TableHead>
+                    <TableHead className="text-right">Variação (R$)</TableHead>
+                    <TableHead className="text-right">Variação (%)</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {analysis.channelComparisons.map((item) => {
+                    const isAbove = item.status === "acima";
+                    const isBelow = item.status === "abaixo";
+
+                    return (
+                      <TableRow key={item.channel}>
+                        <TableCell className="font-semibold text-xs flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: item.color }}
+                          />
+                          <span>{item.label}</span>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {item.categoryLabel}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs font-bold text-foreground">
+                          {formatCurrency(item.currentAmount)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                          {formatCurrency(item.avgAmount)}
+                        </TableCell>
+                        <TableCell
+                          className={`text-right font-mono text-xs font-semibold ${
+                            isAbove
+                              ? "text-emerald-600"
+                              : isBelow
+                                ? "text-rose-600"
+                                : "text-amber-700 dark:text-amber-400"
+                          }`}
+                        >
+                          {item.variationAmount > 0 ? "+" : ""}
+                          {formatCurrency(item.variationAmount)}
+                        </TableCell>
+                        <TableCell
+                          className={`text-right font-mono text-xs font-bold ${
+                            isAbove
+                              ? "text-emerald-600"
+                              : isBelow
+                                ? "text-rose-600"
+                                : "text-amber-700 dark:text-amber-400"
+                          }`}
+                        >
+                          {item.avgAmount > 0
+                            ? `${item.variationPercent > 0 ? "+" : ""}${item.variationPercent.toFixed(1)}%`
+                            : "-"}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {item.status === "sem_historico" ? (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                              Sem dados
+                            </Badge>
+                          ) : isAbove ? (
+                            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-bold">
+                              🟢 Acima
+                            </Badge>
+                          ) : isBelow ? (
+                            <Badge className="bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950 dark:text-rose-300 text-[10px] font-bold">
+                              🔴 Abaixo
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 text-[10px] font-bold">
+                              🟡 Na Média
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 

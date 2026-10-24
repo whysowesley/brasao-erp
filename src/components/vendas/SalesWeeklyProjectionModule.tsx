@@ -282,14 +282,22 @@ export function SalesWeeklyProjectionModule({
               {formatCurrency(projection.totalProjetado)}
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-0 text-xs text-muted-foreground flex items-center justify-between">
-            <span>
-              {projection.daysRemainingCount}{" "}
-              {projection.daysRemainingCount === 1 ? "dia a vencer" : "dias a vencer"}
-            </span>
-            <span className="font-semibold text-foreground">
-              Média: {formatCurrency(projection.avgDiariaProjetada)}/dia
-            </span>
+          <CardContent className="pt-0 text-xs text-muted-foreground space-y-1">
+            <div className="flex items-center justify-between">
+              <span>
+                {projection.daysRemainingCount}{" "}
+                {projection.daysRemainingCount === 1 ? "dia a vencer" : "dias a vencer"}
+              </span>
+              <span className="font-semibold text-foreground">
+                Média: {formatCurrency(projection.avgDiariaProjetada)}/dia
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/50 text-blue-600 dark:text-blue-400">
+              <span>Benchmark total mês:</span>
+              <span className="font-mono font-semibold">
+                {formatCurrency(projection.totalBenchmarkMes)}
+              </span>
+            </div>
           </CardContent>
         </Card>
 
@@ -308,11 +316,19 @@ export function SalesWeeklyProjectionModule({
               {formatCurrency(projection.totalPrevistoMes)}
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-0 text-xs text-muted-foreground flex items-center justify-between">
-            <span>Realizado + Projeção</span>
-            <Badge className="bg-primary/15 text-primary border-primary/30 text-[10px] font-bold">
-              {percentCompleted}% atingido
-            </Badge>
+          <CardContent className="pt-0 text-xs text-muted-foreground space-y-1">
+            <div className="flex items-center justify-between">
+              <span>Realizado + Projeção</span>
+              <Badge className="bg-primary/15 text-primary border-primary/30 text-[10px] font-bold">
+                {percentCompleted}% atingido
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/50">
+              <span>Meta do mês (pesos):</span>
+              <span className="font-mono font-semibold text-foreground">
+                {formatCurrency(projection.totalBenchmarkMes)}
+              </span>
+            </div>
           </CardContent>
         </Card>
 
@@ -509,11 +525,142 @@ export function SalesWeeklyProjectionModule({
 
       {/* VISUALIZAÇÃO 1: TABELA POR SEMANAS COM HISTÓRICO DE PROJEÇÃO E OBSERVAÇÃO DE DIFERENÇA */}
       {viewMode === "tabela" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="space-y-6">
+          {/* PAINEL DE QUADRANTES SEMANAIS: FATURADO VS TOTAL PROJETADO */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-primary" />
+                  <span>Quadrantes Semanais: Faturado vs Projetado</span>
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  Compare o quanto foi faturado em cada quadrante contra a projeção calculada pelos
+                  pesos dos dias.
+                </p>
+              </div>
+            </div>
+
+            {/* Grid dos Quadrantes (Semana 1 a 5/6) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+              {projection.weeks.map((w) => {
+                const isFinished = w.isCompleted;
+                const diff = w.diffRealizadoVsProjetado;
+                const isPositive = diff >= 0;
+
+                return (
+                  <div
+                    key={w.weekNumber}
+                    onClick={() => toggleWeek(w.weekNumber)}
+                    className={`p-3.5 rounded-xl border bg-card shadow-xs transition-all cursor-pointer hover:border-primary/60 hover:shadow-sm flex flex-col justify-between ${
+                      w.isCurrentWeek
+                        ? "ring-2 ring-primary/40 border-primary/50 bg-primary/5"
+                        : "border-border/80"
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-extrabold text-xs text-foreground tracking-tight flex items-center gap-1.5">
+                          <span>Quadrante {w.weekNumber}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono font-normal">
+                            ({w.days[0]?.formattedDate} a {w.days[w.days.length - 1]?.formattedDate}
+                            )
+                          </span>
+                        </span>
+                        {w.isCurrentWeek ? (
+                          <Badge className="bg-primary text-primary-foreground text-[9px] px-1.5 py-0 font-bold">
+                            Semana Atual
+                          </Badge>
+                        ) : isFinished ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 text-[9px] px-1.5 py-0 font-bold">
+                            Fechada
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] text-muted-foreground px-1.5 py-0"
+                          >
+                            {w.daysWithSalesCount}/{w.days.length}d
+                          </Badge>
+                        )}
+                      </div>
+
+                      {/* VALORES PRINCIPAIS DO QUADRANTE: FATUROU VS PROJETADO */}
+                      <div className="pt-1.5 space-y-2 border-t border-border/60">
+                        <div>
+                          <span className="text-[10px] text-muted-foreground block font-medium">
+                            Faturou (Realizado):
+                          </span>
+                          <div className="text-lg font-extrabold text-emerald-700 dark:text-emerald-400 font-mono tracking-tight">
+                            {formatCurrency(w.totalRealizado)}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] text-muted-foreground block font-medium">
+                            Total Projetado da Semana:
+                          </span>
+                          <div className="text-sm font-bold text-blue-700 dark:text-blue-400 font-mono">
+                            {formatCurrency(w.totalProjetadoSemana)}
+                          </div>
+                          <span className="text-[9px] text-muted-foreground block">
+                            Meta baseada na média de peso de cada dia
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* COMPARATIVO & BARRA DE PROGRESSO */}
+                    <div className="pt-2 mt-2.5 border-t border-border/60 space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-muted-foreground font-medium">
+                          {isFinished ? "Resultado final:" : "Ritmo realizado:"}
+                        </span>
+                        <span
+                          className={`font-mono font-bold ${
+                            isPositive
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-rose-600 dark:text-rose-400"
+                          }`}
+                        >
+                          {isPositive ? "+" : ""}
+                          {formatCurrency(diff)} ({w.percentAtingidoSemana.toFixed(1)}%)
+                        </span>
+                      </div>
+
+                      {/* Barra de Progresso Realizado vs Projetado */}
+                      <div className="w-full bg-muted/80 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            w.percentAtingidoSemana >= 100
+                              ? "bg-emerald-500"
+                              : w.percentAtingidoSemana >= 70
+                                ? "bg-primary"
+                                : "bg-blue-500"
+                          }`}
+                          style={{
+                            width: `${Math.min(100, Math.max(0, w.percentAtingidoSemana))}%`,
+                          }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5">
+                        <span>Previsão Fechamento:</span>
+                        <span className="font-semibold text-foreground font-mono">
+                          {formatCurrency(w.totalPrevisto)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-border/60">
             <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-primary" />
-              <span>Detalhamento Semanal & Projeção Diária</span>
+              <span>Detalhamento Diário das Semanas</span>
             </h4>
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
@@ -617,25 +764,62 @@ export function SalesWeeklyProjectionModule({
                   </div>
 
                   {/* Totais do Quadrante Semanal */}
-                  <div className="flex items-center gap-3 sm:gap-6 text-xs pl-10 md:pl-0">
+                  <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs pl-10 md:pl-0">
                     <div>
-                      <span className="text-muted-foreground block text-[10px]">Realizado</span>
-                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                      <span className="text-muted-foreground block text-[10px] font-medium">
+                        Faturou (Realizado)
+                      </span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono text-sm block">
                         {formatCurrency(week.totalRealizado)}
                       </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block text-[10px]">Projetado</span>
-                      <span className="font-bold text-blue-600 dark:text-blue-400">
-                        {formatCurrency(week.totalProjetado)}
+                      <span className="text-[9px] text-muted-foreground block">
+                        {week.daysWithSalesCount} de {week.days.length} dias
                       </span>
                     </div>
+
+                    <div>
+                      <span className="text-muted-foreground block text-[10px] font-medium">
+                        Total Projetado
+                      </span>
+                      <span className="font-bold text-blue-600 dark:text-blue-400 font-mono text-sm block">
+                        {formatCurrency(week.totalProjetadoSemana)}
+                      </span>
+                      <span className="text-[9px] text-muted-foreground block">Meta da semana</span>
+                    </div>
+
+                    <div>
+                      <span className="text-muted-foreground block text-[10px] font-medium">
+                        Comparativo
+                      </span>
+                      <span
+                        className={`font-bold font-mono text-xs block ${
+                          week.diffRealizadoVsProjetado >= 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-rose-600 dark:text-rose-400"
+                        }`}
+                      >
+                        {week.diffRealizadoVsProjetado >= 0 ? "+" : ""}
+                        {formatCurrency(week.diffRealizadoVsProjetado)} (
+                        {week.percentAtingidoSemana.toFixed(1)}%)
+                      </span>
+                      <span className="text-[9px] text-muted-foreground block">
+                        {week.isCompleted
+                          ? "vs Meta Fechada"
+                          : `${week.percentAtingidoSemana.toFixed(0)}% da semana`}
+                      </span>
+                    </div>
+
                     <div className="border-l border-border/80 pl-3 sm:pl-6">
                       <span className="text-muted-foreground block text-[10px] font-semibold text-primary">
                         Soma da Semana
                       </span>
-                      <span className="font-extrabold text-sm text-foreground">
+                      <span className="font-extrabold text-sm text-foreground font-mono block">
                         {formatCurrency(week.totalPrevisto)}
+                      </span>
+                      <span className="text-[9px] text-muted-foreground block">
+                        {week.isCompleted
+                          ? "100% faturado"
+                          : `Realizado + ${week.daysProjectedCount}d proj.`}
                       </span>
                     </div>
                   </div>
@@ -807,6 +991,52 @@ export function SalesWeeklyProjectionModule({
                           );
                         })}
                       </TableBody>
+                      <TableFooter className="bg-muted/40 font-semibold text-xs border-t-2 border-border/80">
+                        <TableRow>
+                          <TableCell colSpan={2} className="font-bold text-foreground">
+                            TOTAL DA SEMANA ({week.days.length} DIAS)
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px] font-semibold">
+                              {week.daysWithSalesCount} de {week.days.length} lançados
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-extrabold font-mono text-emerald-700 dark:text-emerald-400">
+                            {formatCurrency(week.totalRealizado)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="font-bold font-mono text-blue-700 dark:text-blue-400 block">
+                              {formatCurrency(week.totalProjetadoSemana)}
+                            </span>
+                            <span
+                              className={`text-[10px] font-semibold block ${
+                                week.diffRealizadoVsProjetado >= 0
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-rose-600 dark:text-rose-400"
+                              }`}
+                            >
+                              {week.diffRealizadoVsProjetado >= 0 ? "+" : ""}
+                              {formatCurrency(week.diffRealizadoVsProjetado)} (
+                              {week.percentAtingidoSemana.toFixed(1)}%)
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right font-bold font-mono text-foreground">
+                            {formatCurrency(week.totalPrevisto)}
+                          </TableCell>
+                          <TableCell
+                            colSpan={2}
+                            className="text-center text-[10px] text-muted-foreground"
+                          >
+                            {week.isCompleted ? (
+                              <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+                                ✓ Semana 100% Concluída
+                              </span>
+                            ) : (
+                              <span>{week.daysProjectedCount} dias projetados a vencer</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      </TableFooter>
                     </Table>
                   </div>
                 )}

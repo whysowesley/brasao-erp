@@ -1375,9 +1375,35 @@ export function computeWeeklySalesProjection(
       const endDay = curWeekDays[curWeekDays.length - 1]!;
       const weekRealizado = curWeekDays.reduce((acc, d) => acc + d.actualAmount, 0);
       const weekProjetado = curWeekDays.reduce((acc, d) => acc + d.projectedAmount, 0);
+      const weekProjetadoSemana = curWeekDays.reduce((acc, d) => acc + d.projectionBenchmark, 0);
+
+      const realizedDays = curWeekDays.filter(
+        (d) => d.hasActualSales || (d.isPast && dateSalesMap.has(d.dateStr)),
+      );
+      const benchmarkDiasRealizados = realizedDays.reduce(
+        (acc, d) => acc + d.projectionBenchmark,
+        0,
+      );
+
+      const diffRealizadoVsProjetado =
+        Math.round((weekRealizado - weekProjetadoSemana) * 100) / 100;
+      const percentAtingidoSemana =
+        weekProjetadoSemana > 0 ? Math.round((weekRealizado / weekProjetadoSemana) * 1000) / 10 : 0;
+
+      const diffRealizadoVsBenchmarkDiasPassados =
+        Math.round((weekRealizado - benchmarkDiasRealizados) * 100) / 100;
+      const percentAtingidoDiasPassados =
+        benchmarkDiasRealizados > 0
+          ? Math.round((weekRealizado / benchmarkDiasRealizados) * 1000) / 10
+          : 0;
+
       const withSales = curWeekDays.filter((d) => d.hasActualSales).length;
       const projectedCount = curWeekDays.filter((d) => d.projectedAmount > 0).length;
       const atyCount = curWeekDays.filter((d) => d.isAtypical).length;
+      const isCompleted = curWeekDays.every(
+        (d) => d.hasActualSales || (d.isPast && dateSalesMap.has(d.dateStr)),
+      );
+      const isCurrentWeek = curWeekDays.some((d) => d.isToday);
 
       weeks.push({
         weekNumber: curWeekNum,
@@ -1387,12 +1413,18 @@ export function computeWeeklySalesProjection(
         days: [...curWeekDays],
         totalRealizado: Math.round(weekRealizado * 100) / 100,
         totalProjetado: Math.round(weekProjetado * 100) / 100,
+        totalProjetadoSemana: Math.round(weekProjetadoSemana * 100) / 100,
+        benchmarkDiasRealizados: Math.round(benchmarkDiasRealizados * 100) / 100,
+        diffRealizadoVsProjetado,
+        percentAtingidoSemana,
+        diffRealizadoVsBenchmarkDiasPassados,
+        percentAtingidoDiasPassados,
         totalPrevisto: Math.round((weekRealizado + weekProjetado) * 100) / 100,
         daysWithSalesCount: withSales,
         daysProjectedCount: projectedCount,
         atypicalDaysCount: atyCount,
-        isCompleted: curWeekDays.every((d) => d.hasActualSales),
-        isCurrentWeek: curWeekDays.some((d) => d.isToday),
+        isCompleted,
+        isCurrentWeek,
         weightPercentOfMonth: 0,
         comparisons: [],
         diffVsPreviousWeek: null,
@@ -1406,6 +1438,8 @@ export function computeWeeklySalesProjection(
     }
   }
 
+  const totalBenchmarkMes =
+    Math.round(days.reduce((acc, d) => acc + d.projectionBenchmark, 0) * 100) / 100;
   const totalPrevistoMes = Math.round((totalRealizado + totalProjetado) * 100) / 100;
   const avgDiariaRealizada =
     daysPassedCount > 0 ? Math.round((totalRealizado / daysPassedCount) * 100) / 100 : 0;
@@ -1454,17 +1488,43 @@ export function computeWeeklySalesProjection(
     }
 
     // Avaliação de Saúde:
-    // Prioriza variação em relação à semana anterior se houver, ou em relação à média semanal
-    const refDiff = w.diffVsPreviousWeek ?? w.diffVsAverageWeeks ?? 0;
-    if (refDiff >= 3) {
-      w.healthStatus = "saudavel";
-      w.healthLabel = `Saudável (+${refDiff > 0 ? "+" : ""}${refDiff.toFixed(1)}%)`;
-    } else if (refDiff <= -5) {
-      w.healthStatus = "alerta";
-      w.healthLabel = `Atenção: Abaixo (${refDiff.toFixed(1)}%)`;
+    // Se a semana está concluída, avalia se atingiu a meta total projetada para a semana
+    if (w.isCompleted) {
+      if (w.percentAtingidoSemana >= 102) {
+        w.healthStatus = "saudavel";
+        w.healthLabel = `Meta Superada (${w.percentAtingidoSemana.toFixed(1)}%)`;
+      } else if (w.percentAtingidoSemana <= 95) {
+        w.healthStatus = "alerta";
+        w.healthLabel = `Abaixo da Meta (${w.percentAtingidoSemana.toFixed(1)}%)`;
+      } else {
+        w.healthStatus = "estavel";
+        w.healthLabel = `Na Meta (${w.percentAtingidoSemana.toFixed(1)}%)`;
+      }
+    } else if (w.isCurrentWeek && w.daysWithSalesCount > 0) {
+      // Se em andamento na semana atual, avalia o ritmo dos dias já decorridos
+      if (w.percentAtingidoDiasPassados >= 103) {
+        w.healthStatus = "saudavel";
+        w.healthLabel = `Ritmo Acima (${w.percentAtingidoDiasPassados.toFixed(1)}%)`;
+      } else if (w.percentAtingidoDiasPassados <= 92) {
+        w.healthStatus = "alerta";
+        w.healthLabel = `Ritmo em Alerta (${w.percentAtingidoDiasPassados.toFixed(1)}%)`;
+      } else {
+        w.healthStatus = "estavel";
+        w.healthLabel = `Ritmo Estável (${w.percentAtingidoDiasPassados.toFixed(1)}%)`;
+      }
     } else {
-      w.healthStatus = "estavel";
-      w.healthLabel = `Estável / Na Média (${refDiff >= 0 ? "+" : ""}${refDiff.toFixed(1)}%)`;
+      // Comparativo vs semana anterior / média
+      const refDiff = w.diffVsPreviousWeek ?? w.diffVsAverageWeeks ?? 0;
+      if (refDiff >= 3) {
+        w.healthStatus = "saudavel";
+        w.healthLabel = `Saudável (+${refDiff > 0 ? "+" : ""}${refDiff.toFixed(1)}%)`;
+      } else if (refDiff <= -5) {
+        w.healthStatus = "alerta";
+        w.healthLabel = `Atenção: Abaixo (${refDiff.toFixed(1)}%)`;
+      } else {
+        w.healthStatus = "estavel";
+        w.healthLabel = `Estável / Na Média (${refDiff >= 0 ? "+" : ""}${refDiff.toFixed(1)}%)`;
+      }
     }
   }
 
@@ -1495,6 +1555,7 @@ export function computeWeeklySalesProjection(
     daysRemainingCount,
     totalRealizado: Math.round(totalRealizado * 100) / 100,
     totalProjetado: Math.round(totalProjetado * 100) / 100,
+    totalBenchmarkMes,
     totalPrevistoMes,
     avgDiariaRealizada,
     avgDiariaProjetada,
